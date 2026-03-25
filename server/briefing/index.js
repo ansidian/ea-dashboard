@@ -36,9 +36,47 @@ async function loadUserConfig(userId) {
   return { accounts, settings };
 }
 
-// Shared: fetch all raw data sources in parallel
-async function fetchAllData(userId, accounts, settings) {
-  const hoursBack = settings.email_lookback_hours || 16;
+// Compute hours since the last ready briefing (for dynamic email lookback)
+async function hoursSinceLastBriefing(userId) {
+  const result = await db.execute({
+    sql: `SELECT generated_at FROM ea_briefings
+          WHERE user_id = ? AND status = 'ready'
+          ORDER BY generated_at DESC LIMIT 1`,
+    args: [userId],
+  });
+  if (!result.rows.length) return null;
+  const lastTime = new Date(result.rows[0].generated_at + "Z").getTime();
+  return (Date.now() - lastTime) / 3600000;
+}
+
+// Fetch non-email data sources (calendar, weather, CTM)
+async function fetchLiveData(userId, accounts, settings) {
+  const gmailAccounts = accounts.filter((a) => a.type === "gmail");
+  const calendarAccounts = gmailAccounts.filter((a) => a.calendar_enabled);
+
+  const [calendar, weather, ctmDeadlines] = await Promise.all([
+    fetchCalendar(calendarAccounts).catch((err) => {
+      console.error("Calendar fetch failed:", err.message);
+      return [];
+    }),
+    fetchWeather(
+      settings.weather_lat || 34.1442,
+      settings.weather_lng || -117.9981,
+    ).catch((err) => {
+      console.error("Weather fetch failed:", err.message);
+      return { temp: 0, high: 0, low: 0, summary: "Weather unavailable", hourly: [] };
+    }),
+    fetchCTMDeadlines(userId).catch((err) => {
+      console.error("CTM events fetch failed:", err.message);
+      return [];
+    }),
+  ]);
+
+  return { calendar, weather, ctmDeadlines };
+}
+
+// Fetch emails from all accounts
+async function fetchAllEmails(accounts, settings, hoursBack) {
   const gmailAccounts = accounts.filter((a) => a.type === "gmail");
   const icloudAccounts = accounts.filter((a) => a.type === "icloud");
 
@@ -58,26 +96,8 @@ async function fetchAllData(userId, accounts, settings) {
     }),
   ];
 
-  const [emailArrays, calendar, weather, ctmDeadlines] = await Promise.all([
-    Promise.all(emailPromises),
-    fetchCalendar(gmailAccounts).catch((err) => {
-      console.error("Calendar fetch failed:", err.message);
-      return [];
-    }),
-    fetchWeather(
-      settings.weather_lat || 34.1442,
-      settings.weather_lng || -117.9981,
-    ).catch((err) => {
-      console.error("Weather fetch failed:", err.message);
-      return { temp: 0, high: 0, low: 0, summary: "Weather unavailable", hourly: [] };
-    }),
-    fetchCTMDeadlines(userId).catch((err) => {
-      console.error("CTM events fetch failed:", err.message);
-      return [];
-    }),
-  ]);
-
-  return { emails: emailArrays.flat(), calendar, weather, ctmDeadlines };
+  const emailArrays = await Promise.all(emailPromises);
+  return emailArrays.flat();
 }
 
 function nowPacific() {
@@ -120,11 +140,18 @@ export async function generateBriefing(userId) {
 
   try {
     const { accounts, settings } = await loadUserConfig(userId);
-    const { emails, calendar, weather, ctmDeadlines } = await fetchAllData(
-      userId,
-      accounts,
-      settings,
-    );
+
+    // Dynamic lookback: cover time since last briefing, minimum 16h floor
+    const sinceLastHours = await hoursSinceLastBriefing(userId);
+    const minLookback = settings.email_lookback_hours || 16;
+    const hoursBack = sinceLastHours != null
+      ? Math.max(Math.ceil(sinceLastHours) + 1, minLookback)
+      : minLookback;
+
+    const [{ calendar, weather, ctmDeadlines }, emails] = await Promise.all([
+      fetchLiveData(userId, accounts, settings),
+      fetchAllEmails(accounts, settings, hoursBack),
+    ]);
 
     const briefingJson = await callHaiku({ emails, calendar, weather, ctmDeadlines });
 
@@ -150,17 +177,12 @@ export async function generateBriefing(userId) {
   }
 }
 
-// Quick refresh: fetch raw data only, patch into the latest existing briefing
-// Preserves AI insights, email triage, and summaries from the last Haiku call
+// Quick refresh: update calendar, weather, CTM only — emails left to full generation
 export async function quickRefresh(userId) {
   const { accounts, settings } = await loadUserConfig(userId);
-  const { emails, calendar, weather, ctmDeadlines } = await fetchAllData(
-    userId,
-    accounts,
-    settings,
-  );
+  const { calendar, weather, ctmDeadlines } = await fetchLiveData(userId, accounts, settings);
 
-  // Load the latest ready briefing to preserve AI fields
+  // Load the latest ready briefing to patch into
   const latestResult = await db.execute({
     sql: `SELECT id, briefing_json FROM ea_briefings
           WHERE user_id = ? AND status = 'ready'
@@ -172,7 +194,6 @@ export async function quickRefresh(userId) {
   if (latestResult.rows.length) {
     briefing = JSON.parse(latestResult.rows[0].briefing_json);
   } else {
-    // No existing briefing — create a shell (AI fields will be empty)
     briefing = {
       aiInsights: [],
       emails: { summary: "", accounts: [] },
@@ -180,7 +201,7 @@ export async function quickRefresh(userId) {
     };
   }
 
-  // Overwrite raw data fields, keep AI-generated fields intact
+  // Overwrite live data fields, keep emails and AI fields untouched
   briefing.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
   briefing.calendar = calendar;
   briefing.ctm = {
@@ -188,68 +209,6 @@ export async function quickRefresh(userId) {
     stats: computeCTMStats(ctmDeadlines),
   };
   briefing.dataUpdatedAt = new Date().toISOString();
-  // aiGeneratedAt stays unchanged — it's from the last full generation
-
-  // Build a lightweight raw emails list for the frontend
-  // (account grouping without Haiku's triage/bill detection)
-  const accountMap = new Map();
-  for (const email of emails) {
-    const key = email.account_id;
-    if (!accountMap.has(key)) {
-      accountMap.set(key, {
-        name: email.account_label,
-        icon: email.account_id.startsWith("icloud") ? "🍎" : "📧",
-        color: email.account_color || "#818cf8",
-        unread: 0,
-        important: [],
-        noise_count: 0,
-      });
-    }
-    const acc = accountMap.get(key);
-    acc.unread++;
-    acc.important.push({
-      id: email.uid,
-      from: email.from,
-      fromEmail: email.from_email || email.from,
-      subject: email.subject,
-      preview: email.body_preview,
-      action: "",
-      urgency: "medium",
-      date: email.date,
-      hasBill: false,
-      extractedBill: null,
-    });
-  }
-
-  // Merge: keep existing AI-triaged emails if present, but update raw counts
-  // If the existing briefing has AI-triaged accounts, preserve those and just update counts
-  if (briefing.emails?.accounts?.length) {
-    for (const existingAcc of briefing.emails.accounts) {
-      const freshData = accountMap.get(
-        // Match by name since AI output uses account name
-        [...accountMap.entries()].find(
-          ([, v]) => v.name === existingAcc.name,
-        )?.[0],
-      );
-      if (freshData) {
-        existingAcc.unread = freshData.unread;
-        accountMap.delete(
-          [...accountMap.entries()].find(
-            ([, v]) => v.name === existingAcc.name,
-          )?.[0],
-        );
-      }
-    }
-    // Append any new accounts that weren't in the AI briefing
-    for (const [, acc] of accountMap) {
-      briefing.emails.accounts.push(acc);
-    }
-  } else {
-    briefing.emails = {
-      summary: `${emails.length} emails across ${accountMap.size} accounts.`,
-      accounts: [...accountMap.values()],
-    };
-  }
 
   // Update the existing briefing row in-place
   if (latestResult.rows.length) {
@@ -259,7 +218,6 @@ export async function quickRefresh(userId) {
     });
     return { id: latestResult.rows[0].id, briefingJson: briefing, refreshType: "quick" };
   } else {
-    // No existing briefing — insert as new
     const insertResult = await db.execute({
       sql: `INSERT INTO ea_briefings (user_id, status, briefing_json) VALUES (?, 'ready', ?)`,
       args: [userId, JSON.stringify(briefing)],
