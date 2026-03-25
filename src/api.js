@@ -80,6 +80,10 @@ export async function addICloudAccount(email, appPassword) {
   });
 }
 
+export async function geocodeLocation(query) {
+  return apiFetch(`/api/ea/geocode?q=${encodeURIComponent(query)}`);
+}
+
 export async function removeAccount(accountId) {
   return apiFetch(`/api/ea/accounts/${accountId}`, { method: 'DELETE' });
 }

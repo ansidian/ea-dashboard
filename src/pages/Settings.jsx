@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   getAccounts, getSettings, updateSettings,
   getGmailAuthUrl, addICloudAccount, removeAccount,
-  testActualBudget,
+  testActualBudget, geocodeLocation,
 } from "../api";
 
 function Card({ title, children }) {
@@ -22,7 +22,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [icloudForm, setIcloudForm] = useState({ email: "", password: "", show: false });
   const [actualForm, setActualForm] = useState({ serverUrl: "", password: "", syncId: "" });
-  const [weatherForm, setWeatherForm] = useState({ location: "", lat: "", lng: "" });
+  const [weatherForm, setWeatherForm] = useState({ location: "", lat: "", lng: "", geocoding: false, results: null });
   const [testStatus, setTestStatus] = useState(null);
 
   useEffect(() => {
@@ -69,6 +69,25 @@ export default function Settings() {
     if (!confirm("Remove this account?")) return;
     await removeAccount(id);
     setAccounts(accounts.filter(a => a.id !== id));
+  }
+
+  async function handleGeocode() {
+    if (!weatherForm.location) return;
+    setWeatherForm(f => ({ ...f, geocoding: true, results: null }));
+    try {
+      const results = await geocodeLocation(weatherForm.location);
+      if (results.length === 1) {
+        // Single result — auto-select
+        setWeatherForm(f => ({
+          ...f, geocoding: false, results: null,
+          location: results[0].name, lat: results[0].lat.toString(), lng: results[0].lng.toString(),
+        }));
+      } else {
+        setWeatherForm(f => ({ ...f, geocoding: false, results }));
+      }
+    } catch {
+      setWeatherForm(f => ({ ...f, geocoding: false }));
+    }
   }
 
   async function handleSaveSettings() {
@@ -188,19 +207,39 @@ export default function Settings() {
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div>
             <label className="label">City Name</label>
-            <input type="text" placeholder="El Monte, CA" value={weatherForm.location} onChange={e => setWeatherForm(f => ({ ...f, location: e.target.value }))} className="input" />
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <label className="label">Latitude</label>
-              <input type="text" placeholder="34.0686" value={weatherForm.lat} onChange={e => setWeatherForm(f => ({ ...f, lat: e.target.value }))} className="input" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label className="label">Longitude</label>
-              <input type="text" placeholder="-118.0276" value={weatherForm.lng} onChange={e => setWeatherForm(f => ({ ...f, lng: e.target.value }))} className="input" />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input type="text" placeholder="El Monte, CA" value={weatherForm.location}
+                onChange={e => setWeatherForm(f => ({ ...f, location: e.target.value }))}
+                onKeyDown={e => { if (e.key === "Enter") handleGeocode(); }}
+                className="input" style={{ flex: 1 }} />
+              <button onClick={handleGeocode} disabled={weatherForm.geocoding || !weatherForm.location} className="btn-secondary" style={{ whiteSpace: "nowrap" }}>
+                {weatherForm.geocoding ? "Looking up..." : "Look up"}
+              </button>
             </div>
           </div>
-          <p style={{ fontSize: 11, color: "#475569", margin: 0 }}>Find coordinates at <a href="https://www.latlong.net/" target="_blank" rel="noopener noreferrer" style={{ color: "#818cf8" }}>latlong.net</a></p>
+          {weatherForm.results && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {weatherForm.results.map((r, i) => (
+                <button key={i} onClick={() => setWeatherForm(f => ({
+                  ...f, location: r.name, lat: r.lat.toString(), lng: r.lng.toString(), results: null,
+                }))} style={{
+                  background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+                  borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#e2e8f0",
+                  cursor: "pointer", textAlign: "left", transition: "background 0.15s",
+                }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
+                >
+                  {r.name} <span style={{ color: "#64748b", fontSize: 11 }}>({r.lat.toFixed(4)}, {r.lng.toFixed(4)})</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {weatherForm.lat && weatherForm.lng && (
+            <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>
+              Coordinates: {weatherForm.lat}, {weatherForm.lng}
+            </p>
+          )}
         </div>
       </Card>
 
