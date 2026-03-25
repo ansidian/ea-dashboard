@@ -37,7 +37,16 @@ function getCurrentHourInTimezone(tz) {
   return parseInt(timeStr, 10);
 }
 
+// Cache weather for 30 minutes — Open-Meteo free tier is 10k req/day
+let weatherCache = { data: null, ts: 0, key: "" };
+const CACHE_TTL = 30 * 60 * 1000; // 30 min
+
 export async function fetchWeather(lat, lng) {
+  const cacheKey = `${lat},${lng}`;
+  if (weatherCache.key === cacheKey && Date.now() - weatherCache.ts < CACHE_TTL && weatherCache.data) {
+    return weatherCache.data;
+  }
+
   const url = new URL("https://api.open-meteo.com/v1/forecast");
   url.searchParams.set("latitude", lat);
   url.searchParams.set("longitude", lng);
@@ -49,6 +58,11 @@ export async function fetchWeather(lat, lng) {
 
   const res = await fetch(url);
   if (!res.ok) {
+    // If rate-limited and we have cached data, return stale cache
+    if (res.status === 429 && weatherCache.data) {
+      console.warn("Weather API rate-limited, returning cached data");
+      return weatherCache.data;
+    }
     const text = await res.text();
     throw new Error(`Open-Meteo error: ${res.status} ${text}`);
   }
@@ -75,13 +89,16 @@ export async function fetchWeather(lat, lng) {
   const currentCode = data.hourly.weather_code?.[currentHourIndex] ?? data.hourly.weathercode?.[currentHourIndex] ?? 0;
   const description = WMO_DESCRIPTIONS[currentCode] || "Clear";
 
-  return {
+  const result = {
     temp: Math.round(data.hourly.temperature_2m[currentHourIndex]),
     high: Math.round(data.daily.temperature_2m_max[0]),
     low: Math.round(data.daily.temperature_2m_min[0]),
     summary: `${description}. High of ${Math.round(data.daily.temperature_2m_max[0])}°F, low of ${Math.round(data.daily.temperature_2m_min[0])}°F.`,
     hourly,
   };
+
+  weatherCache = { data: result, ts: Date.now(), key: cacheKey };
+  return result;
 }
 
 // Geocode a city name to lat/lng using Open-Meteo's geocoding API
