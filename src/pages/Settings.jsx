@@ -86,11 +86,15 @@ export default function Settings() {
   async function handleSaveSettings() {
     setSaving(true);
     try {
-      await updateSettings({
+      const payload = {
         actual_budget_url: actualForm.serverUrl,
-        actual_budget_password: actualForm.password,
         actual_budget_sync_id: actualForm.syncId,
-      });
+      };
+      // Only send password if user typed a new one
+      if (actualForm.password) {
+        payload.actual_budget_password = actualForm.password;
+      }
+      await updateSettings(payload);
     } catch (err) {
       alert("Failed to save: " + err.message);
     } finally {
