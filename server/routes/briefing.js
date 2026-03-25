@@ -6,11 +6,33 @@ import { fetchEmailBody as fetchGmailBody } from "../briefing/gmail.js";
 import { fetchEmailBody as fetchIcloudBody } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, testConnection as testActual } from "../briefing/actual.js";
+import { generateMockBriefing, generateMockHistory } from "../db/dev-fixture.js";
 
 const router = Router();
 router.use(requireAuth);
 
 const GENERATION_COOLDOWN_MINUTES = 10;
+
+// Merge current account display preferences (label, color, icon) into a briefing object.
+// This ensures user changes are reflected immediately without regenerating.
+async function mergeAccountPrefs(briefing, userId) {
+  if (!briefing?.emails?.accounts?.length) return briefing;
+  const result = await db.execute({
+    sql: "SELECT id, email, label, color, icon FROM ea_accounts WHERE user_id = ?",
+    args: [userId],
+  });
+  const byEmail = new Map(result.rows.map(a => [a.email, a]));
+  const byLabel = new Map(result.rows.map(a => [a.label, a]));
+  for (const acc of briefing.emails.accounts) {
+    const dbAcc = byLabel.get(acc.name) || byEmail.get(acc.name);
+    if (dbAcc) {
+      acc.name = dbAcc.label;
+      acc.color = dbAcc.color || acc.color;
+      acc.icon = dbAcc.icon || acc.icon;
+    }
+  }
+  return briefing;
+}
 
 router.post("/generate", async (req, res) => {
   const userId = process.env.EA_USER_ID;
@@ -61,6 +83,7 @@ router.post("/refresh", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const result = await quickRefresh(userId);
+    result.briefingJson = await mergeAccountPrefs(result.briefingJson, userId);
     res.json(result);
   } catch (err) {
     console.error("Error refreshing briefing:", err);
@@ -79,13 +102,20 @@ router.get("/latest", async (req, res) => {
       args: [userId],
     });
 
-    if (!result.rows.length) return res.json({ briefing: null });
+    if (!result.rows.length) {
+      // In dev, return a dynamic mock briefing so the UI is always usable
+      if (process.env.NODE_ENV !== "production") {
+        return res.json({ id: 0, status: "ready", briefing: generateMockBriefing(), generated_at: new Date().toISOString(), generation_time_ms: 0 });
+      }
+      return res.json({ briefing: null });
+    }
 
     const row = result.rows[0];
+    const briefing = await mergeAccountPrefs(JSON.parse(row.briefing_json), userId);
     res.json({
       id: row.id,
       status: row.status,
-      briefing: JSON.parse(row.briefing_json),
+      briefing,
       generated_at: row.generated_at,
       generation_time_ms: row.generation_time_ms,
     });
@@ -104,6 +134,9 @@ router.get("/history", async (req, res) => {
             ORDER BY generated_at DESC LIMIT 20`,
       args: [userId],
     });
+    if (!result.rows.length && process.env.NODE_ENV !== "production") {
+      return res.json(generateMockHistory());
+    }
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching briefing history:", err);
@@ -166,10 +199,20 @@ router.get("/:id", async (req, res) => {
             FROM ea_briefings WHERE id = ? AND user_id = ? AND status = 'ready'`,
       args: [id, userId],
     });
-    if (!result.rows.length) return res.status(404).json({ message: "Briefing not found" });
+    if (!result.rows.length) {
+      if (process.env.NODE_ENV !== "production") {
+        const mockHistory = generateMockHistory();
+        const match = mockHistory.find(h => h.id === Number(id));
+        if (match) {
+          return res.json({ id: match.id, status: "ready", briefing: generateMockBriefing(), generated_at: match.generated_at, generation_time_ms: match.generation_time_ms });
+        }
+      }
+      return res.status(404).json({ message: "Briefing not found" });
+    }
     const row = result.rows[0];
+    const briefing = await mergeAccountPrefs(JSON.parse(row.briefing_json), userId);
     res.json({
-      id: row.id, status: row.status, briefing: JSON.parse(row.briefing_json),
+      id: row.id, status: row.status, briefing,
       generated_at: row.generated_at, generation_time_ms: row.generation_time_ms,
     });
   } catch (err) {
