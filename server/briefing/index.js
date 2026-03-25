@@ -129,7 +129,32 @@ function computeCTMStats(deadlines) {
   return { pending: deadlines.length, dueToday, dueThisWeek, totalPoints };
 }
 
-// Full generation: fetch data + Haiku AI analysis
+// Load previously triaged email IDs from the last ready briefing
+async function loadPreviousTriage(userId) {
+  const result = await db.execute({
+    sql: `SELECT briefing_json FROM ea_briefings
+          WHERE user_id = ? AND status = 'ready' AND briefing_json LIKE '%aiGeneratedAt%'
+          ORDER BY generated_at DESC LIMIT 1`,
+    args: [userId],
+  });
+  if (!result.rows.length) return { triagedIds: new Set(), prevBriefing: null };
+
+  const prev = JSON.parse(result.rows[0].briefing_json);
+  const triagedIds = new Set();
+  for (const acct of prev.emails?.accounts || []) {
+    for (const email of acct.important || []) {
+      if (email.id) triagedIds.add(email.id);
+    }
+  }
+  return { triagedIds, prevBriefing: prev };
+}
+
+// Check if calendar data has meaningfully changed (CTM doesn't go to Haiku)
+function hasCalendarChanged(prev, currentCalendar) {
+  return JSON.stringify(prev.calendar || []) !== JSON.stringify(currentCalendar || []);
+}
+
+// Full generation: fetch data + Haiku AI analysis (with delta optimization)
 export async function generateBriefing(userId) {
   const insertResult = await db.execute({
     sql: `INSERT INTO ea_briefings (user_id, status) VALUES (?, 'generating')`,
@@ -148,12 +173,74 @@ export async function generateBriefing(userId) {
       ? Math.max(Math.ceil(sinceLastHours) + 1, minLookback)
       : minLookback;
 
-    const [{ calendar, weather, ctmDeadlines }, emails] = await Promise.all([
+    const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing }] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
+      loadPreviousTriage(userId),
     ]);
 
-    const briefingJson = await callHaiku({ emails, calendar, weather, ctmDeadlines });
+    // Optimization #2: Skip if nothing new
+    const newEmails = emails.filter(e => !triagedIds.has(e.id));
+    const calendarChanged = prevBriefing ? hasCalendarChanged(prevBriefing, calendar) : true;
+
+    if (newEmails.length === 0 && !calendarChanged && prevBriefing) {
+      console.log("[EA] No new emails or data changes — cloning previous briefing with fresh weather");
+      const cloned = { ...prevBriefing };
+      cloned.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
+      cloned.dataUpdatedAt = new Date().toISOString();
+      cloned.generatedAt = nowPacific();
+      // Keep previous aiGeneratedAt to indicate AI didn't re-run
+      cloned.skippedAI = true;
+
+      const elapsed = Date.now() - startTime;
+      await db.execute({
+        sql: `UPDATE ea_briefings SET status = 'ready', briefing_json = ?, generation_time_ms = ? WHERE id = ?`,
+        args: [JSON.stringify(cloned), elapsed, briefingId],
+      });
+      return { id: briefingId, briefingJson: cloned, skippedAI: true };
+    }
+
+    // Optimization #1: Delta-only generation — only send new emails to Haiku,
+    // merge results with previous triage
+    let briefingJson;
+    if (newEmails.length > 0 && newEmails.length < emails.length && prevBriefing) {
+      console.log(`[EA] Delta generation: ${newEmails.length} new emails (${emails.length - newEmails.length} previously triaged)`);
+      // Send only new emails to Haiku
+      briefingJson = await callHaiku({ emails: newEmails, calendar, weather, ctmDeadlines });
+
+      // Merge: keep previous triage for old emails, add new triage
+      const newTriagedByAccount = {};
+      for (const acct of briefingJson.emails?.accounts || []) {
+        newTriagedByAccount[acct.name] = acct;
+      }
+
+      // Rebuild accounts: previous important emails + newly triaged
+      for (const prevAcct of prevBriefing.emails?.accounts || []) {
+        const newAcct = newTriagedByAccount[prevAcct.name];
+        if (newAcct) {
+          // Merge: old emails that still exist + new ones
+          const existingEmailIds = new Set(newAcct.important.map(e => e.id));
+          const keptOld = prevAcct.important.filter(e => !existingEmailIds.has(e.id) && emails.some(fe => fe.id === e.id));
+          newAcct.important = [...keptOld, ...newAcct.important];
+          newAcct.unread = newAcct.important.length;
+          newAcct.noise_count = (prevAcct.noise_count || 0) + (newAcct.noise_count || 0);
+        } else {
+          // Account had no new emails — carry forward previous triage
+          const stillRelevant = prevAcct.important.filter(e => emails.some(fe => fe.id === e.id));
+          if (stillRelevant.length > 0 || prevAcct.noise_count > 0) {
+            briefingJson.emails.accounts.push({
+              ...prevAcct,
+              important: stillRelevant,
+              unread: stillRelevant.length,
+            });
+          }
+        }
+      }
+    } else {
+      // Full generation: all emails are new or no previous triage
+      console.log(`[EA] Full generation: ${emails.length} emails`);
+      briefingJson = await callHaiku({ emails, calendar, weather, ctmDeadlines });
+    }
 
     briefingJson.generatedAt = nowPacific();
     briefingJson.dataUpdatedAt = new Date().toISOString();
