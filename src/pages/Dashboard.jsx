@@ -339,6 +339,18 @@ export default function Dashboard() {
 
   if (loading) return <LoadingSkeleton />;
   if (error && !briefing) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+  if (!briefing) return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: 24 }}>
+      <div style={{ fontSize: 48 }}>☀️</div>
+      <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: "#f8fafc", margin: 0 }}>No briefings yet</h1>
+      <p style={{ fontSize: 14, color: "#64748b", margin: 0, textAlign: "center", maxWidth: 400 }}>Connect your email accounts in Settings, then generate your first briefing.</p>
+      <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+        <button onClick={handleFullGeneration} style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Generate First Briefing</button>
+        <a href="/ea-dashboard/settings" style={{ background: "rgba(255,255,255,0.06)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 500, textDecoration: "none", display: "inline-block" }}>Settings</a>
+      </div>
+      {generating && <div style={{ marginTop: 16 }}><RefreshBanner /></div>}
+    </div>
+  );
 
   const d = briefing;
   const billEmails = d.emails.accounts.flatMap(acc => acc.important.filter(e => e.hasBill).map(e => ({ ...e, accountColor: acc.color })));
