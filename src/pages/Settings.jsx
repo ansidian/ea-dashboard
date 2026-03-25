@@ -49,11 +49,11 @@ export default function Settings() {
       .then(([acc, sett]) => {
         setAccounts(acc.accounts || acc);
         setSettings(sett);
-        if (sett.actual_budget) {
+        if (sett.actual_budget_url || sett.actual_budget_sync_id) {
           setActualForm({
-            serverUrl: sett.actual_budget.server_url || "",
-            password: sett.actual_budget.password || "",
-            syncId: sett.actual_budget.sync_id || "",
+            serverUrl: sett.actual_budget_url || "",
+            password: "",  // password is never returned from backend
+            syncId: sett.actual_budget_sync_id || "",
           });
         }
       })
@@ -87,12 +87,9 @@ export default function Settings() {
     setSaving(true);
     try {
       await updateSettings({
-        ...settings,
-        actual_budget: {
-          server_url: actualForm.serverUrl,
-          password: actualForm.password,
-          sync_id: actualForm.syncId,
-        },
+        actual_budget_url: actualForm.serverUrl,
+        actual_budget_password: actualForm.password,
+        actual_budget_sync_id: actualForm.syncId,
       });
     } catch (err) {
       alert("Failed to save: " + err.message);
