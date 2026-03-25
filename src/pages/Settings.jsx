@@ -6,31 +6,10 @@ import {
   testActualBudget,
 } from "../api";
 
-const inputStyle = {
-  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#e2e8f0",
-  width: "100%", boxSizing: "border-box", outline: "none", fontFamily: "'DM Sans', sans-serif",
-};
-
-const btnPrimary = {
-  background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff",
-  border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 13,
-  fontWeight: 600, cursor: "pointer",
-};
-
-const btnSecondary = {
-  background: "rgba(255,255,255,0.06)", color: "#94a3b8",
-  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
-  padding: "10px 20px", fontSize: 13, fontWeight: 500, cursor: "pointer",
-};
-
 function Card({ title, children }) {
   return (
-    <div style={{
-      background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
-      borderRadius: 14, padding: "20px 24px", marginBottom: 20,
-    }}>
-      <h3 style={{ fontSize: 14, fontWeight: 600, color: "#f1f5f9", margin: "0 0 16px 0" }}>{title}</h3>
+    <div className="card">
+      <h3 className="card-title">{title}</h3>
       {children}
     </div>
   );
@@ -61,7 +40,7 @@ export default function Settings() {
         if (sett.actual_budget_url || sett.actual_budget_sync_id) {
           setActualForm({
             serverUrl: sett.actual_budget_url || "",
-            password: "",  // password is never returned from backend
+            password: "",
             syncId: sett.actual_budget_sync_id || "",
           });
         }
@@ -123,17 +102,15 @@ export default function Settings() {
     return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ width: 20, height: 20, border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", color: "#e2e8f0", fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", padding: 24, maxWidth: 700, margin: "0 auto" }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet" />
+    <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", color: "#e2e8f0", fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", padding: 24, maxWidth: 900, margin: "0 auto" }}>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
-        <Link to="/" style={{ color: "#94a3b8", textDecoration: "none", display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: "7px 14px" }}>
+        <Link to="/" className="btn-header" style={{ textDecoration: "none" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
           Dashboard
         </Link>
@@ -151,7 +128,7 @@ export default function Settings() {
                   <div style={{ fontSize: 13, fontWeight: 500, color: "#e2e8f0" }}>{acc.name || acc.email}</div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>{acc.type}</div>
                 </div>
-                <button onClick={() => handleRemoveAccount(acc.id)} style={{ ...btnSecondary, padding: "6px 12px", fontSize: 11, color: "#ef4444" }}>Remove</button>
+                <button onClick={() => handleRemoveAccount(acc.id)} className="btn-danger">Remove</button>
               </div>
             ))}
           </div>
@@ -159,16 +136,16 @@ export default function Settings() {
           <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>No accounts connected yet.</p>
         )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={handleAddGmail} style={btnPrimary}>Add Gmail</button>
-          <button onClick={() => setIcloudForm(f => ({ ...f, show: !f.show }))} style={btnSecondary}>
+          <button onClick={handleAddGmail} className="btn-primary">Add Gmail</button>
+          <button onClick={() => setIcloudForm(f => ({ ...f, show: !f.show }))} className="btn-secondary">
             {icloudForm.show ? "Cancel" : "Add iCloud"}
           </button>
         </div>
         {icloudForm.show && (
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-            <input type="email" placeholder="iCloud email" value={icloudForm.email} onChange={e => setIcloudForm(f => ({ ...f, email: e.target.value }))} style={inputStyle} />
-            <input type="password" placeholder="App-specific password" value={icloudForm.password} onChange={e => setIcloudForm(f => ({ ...f, password: e.target.value }))} style={inputStyle} />
-            <button onClick={handleAddICloud} style={{ ...btnPrimary, alignSelf: "flex-start" }}>Connect iCloud</button>
+            <input type="email" placeholder="iCloud email" value={icloudForm.email} onChange={e => setIcloudForm(f => ({ ...f, email: e.target.value }))} className="input" />
+            <input type="password" placeholder="App-specific password" value={icloudForm.password} onChange={e => setIcloudForm(f => ({ ...f, password: e.target.value }))} className="input" />
+            <button onClick={handleAddICloud} className="btn-primary" style={{ alignSelf: "flex-start" }}>Connect iCloud</button>
           </div>
         )}
       </Card>
@@ -210,17 +187,17 @@ export default function Settings() {
       <Card title="Weather Location">
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div>
-            <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>City Name</label>
-            <input type="text" placeholder="El Monte, CA" value={weatherForm.location} onChange={e => setWeatherForm(f => ({ ...f, location: e.target.value }))} style={inputStyle} />
+            <label className="label">City Name</label>
+            <input type="text" placeholder="El Monte, CA" value={weatherForm.location} onChange={e => setWeatherForm(f => ({ ...f, location: e.target.value }))} className="input" />
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>Latitude</label>
-              <input type="text" placeholder="34.0686" value={weatherForm.lat} onChange={e => setWeatherForm(f => ({ ...f, lat: e.target.value }))} style={inputStyle} />
+              <label className="label">Latitude</label>
+              <input type="text" placeholder="34.0686" value={weatherForm.lat} onChange={e => setWeatherForm(f => ({ ...f, lat: e.target.value }))} className="input" />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>Longitude</label>
-              <input type="text" placeholder="-118.0276" value={weatherForm.lng} onChange={e => setWeatherForm(f => ({ ...f, lng: e.target.value }))} style={inputStyle} />
+              <label className="label">Longitude</label>
+              <input type="text" placeholder="-118.0276" value={weatherForm.lng} onChange={e => setWeatherForm(f => ({ ...f, lng: e.target.value }))} className="input" />
             </div>
           </div>
           <p style={{ fontSize: 11, color: "#475569", margin: 0 }}>Find coordinates at <a href="https://www.latlong.net/" target="_blank" rel="noopener noreferrer" style={{ color: "#818cf8" }}>latlong.net</a></p>
@@ -231,19 +208,19 @@ export default function Settings() {
       <Card title="Actual Budget">
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div>
-            <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>Server URL</label>
-            <input type="url" placeholder="https://actual.yourdomain.com" value={actualForm.serverUrl} onChange={e => setActualForm(f => ({ ...f, serverUrl: e.target.value }))} style={inputStyle} />
+            <label className="label">Server URL</label>
+            <input type="url" placeholder="https://actual.yourdomain.com" value={actualForm.serverUrl} onChange={e => setActualForm(f => ({ ...f, serverUrl: e.target.value }))} className="input" />
           </div>
           <div>
-            <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>Password</label>
-            <input type="password" placeholder="Actual Budget password" value={actualForm.password} onChange={e => setActualForm(f => ({ ...f, password: e.target.value }))} style={inputStyle} />
+            <label className="label">Password</label>
+            <input type="password" placeholder="Actual Budget password" value={actualForm.password} onChange={e => setActualForm(f => ({ ...f, password: e.target.value }))} className="input" />
           </div>
           <div>
-            <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>Sync ID</label>
-            <input type="text" placeholder="Budget sync ID" value={actualForm.syncId} onChange={e => setActualForm(f => ({ ...f, syncId: e.target.value }))} style={inputStyle} />
+            <label className="label">Sync ID</label>
+            <input type="text" placeholder="Budget sync ID" value={actualForm.syncId} onChange={e => setActualForm(f => ({ ...f, syncId: e.target.value }))} className="input" />
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-            <button onClick={handleSaveSettings} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+            <button onClick={handleSaveSettings} disabled={saving} className="btn-primary">
               {saving ? "Saving..." : "Save"}
             </button>
             <button onClick={async () => {
@@ -254,12 +231,14 @@ export default function Settings() {
               } catch {
                 setTestStatus("fail");
               }
-            }} disabled={testStatus === "testing"} style={{ ...btnSecondary, opacity: testStatus === "testing" ? 0.6 : 1 }}>
+            }} disabled={testStatus === "testing"} className="btn-secondary">
               {testStatus === "testing" ? "Testing..." : "Test Connection"}
             </button>
-            {testStatus && <span style={{ fontSize: 12, color: testStatus === "testing" ? "#94a3b8" : testStatus === "ok" ? "#34d399" : "#ef4444", alignSelf: "center" }}>
-              {testStatus === "testing" ? "Testing..." : testStatus === "ok" ? "Connected!" : "Failed"}
-            </span>}
+            {testStatus && testStatus !== "testing" && (
+              <span style={{ fontSize: 12, color: testStatus === "ok" ? "#34d399" : "#ef4444" }}>
+                {testStatus === "ok" ? "Connected!" : "Failed"}
+              </span>
+            )}
           </div>
         </div>
       </Card>

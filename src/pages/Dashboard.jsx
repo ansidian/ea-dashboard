@@ -94,7 +94,6 @@ function CTMCard({ task, expanded, onToggle }) {
           )}
         </div>
       </div>
-      <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
     </div>
   );
 }
@@ -133,7 +132,6 @@ function BillBadge({ bill }) {
         {state === "sent" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg><span style={{ fontSize: 12, color: "#34d399", fontWeight: 600 }}>Added to Actual Budget</span></div>}
         {state === "error" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8 }}><span style={{ fontSize: 12, color: "#fca5a5" }}>Failed to send.</span><button onClick={() => setState("idle")} style={{ fontSize: 12, color: "#818cf8", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}>Retry</button></div>}
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -158,7 +156,6 @@ function EmailDetail({ email, onBack, accountColor }) {
 
   return (
     <div style={{ animation: "slideIn 0.25s ease-out" }}>
-      <style>{`@keyframes slideIn { from { opacity:0; transform:translateX(12px); } to { opacity:1; transform:translateX(0); } }`}</style>
       <button onClick={onBack} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: "7px 14px", color: "#94a3b8", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 16, fontWeight: 500 }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>Back to inbox
       </button>
@@ -179,8 +176,7 @@ function EmailDetail({ email, onBack, accountColor }) {
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "20px 0" }}>
               <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
               <span style={{ fontSize: 13, color: "#64748b" }}>Loading email...</span>
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            </div>
+                    </div>
           ) : isHtml ? (
             <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(body) }} style={{ fontSize: 13.5, lineHeight: 1.7, color: "#94a3b8" }} />
           ) : (

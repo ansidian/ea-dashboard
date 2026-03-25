@@ -108,9 +108,6 @@ export default function BriefingHistoryPanel({ activeId, onSelect, onClose }) {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        .history-panel::-webkit-scrollbar { width: 4px; }
-        .history-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-        .history-panel::-webkit-scrollbar-track { background: transparent; }
       `}</style>
 
       {/* Header */}

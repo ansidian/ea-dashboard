@@ -27,10 +27,6 @@ export default function RefreshBanner() {
           Pulling emails, calendar, deadlines
         </div>
       </div>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
     </div>
   );
 }
