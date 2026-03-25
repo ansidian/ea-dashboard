@@ -1,89 +1,44 @@
-const API_BASE = import.meta.env.VITE_CTM_API_URL;
-const API_KEY = import.meta.env.VITE_EA_API_KEY;
-
 async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(path, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': API_KEY,
+      "Content-Type": "application/json",
       ...options.headers,
     },
   });
+
+  if (res.status === 401) {
+    window.location.href = "/login";
+    throw new Error("Not authenticated");
+  }
 
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
 
-export async function getLatestBriefing() {
-  return apiFetch('/api/briefing/latest');
-}
+// Auth
+export const checkAuth = () => apiFetch("/api/auth/check");
+export const login = (password) => apiFetch("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) });
+export const logout = () => apiFetch("/api/auth/logout", { method: "POST" });
 
-export async function triggerGeneration() {
-  return apiFetch('/api/briefing/generate', { method: 'POST' });
-}
+// Briefings
+export const getLatestBriefing = () => apiFetch("/api/briefing/latest");
+export const triggerGeneration = () => apiFetch("/api/briefing/generate", { method: "POST" });
+export const quickRefresh = () => apiFetch("/api/briefing/refresh", { method: "POST" });
+export const pollStatus = (id) => apiFetch(`/api/briefing/status/${id}`);
+export const getBriefingHistory = () => apiFetch("/api/briefing/history");
+export const getBriefingById = (id) => apiFetch(`/api/briefing/${id}`);
+export const getEmailBody = (uid) => apiFetch(`/api/briefing/email/${uid}`);
 
-export async function quickRefresh() {
-  return apiFetch('/api/briefing/refresh', { method: 'POST' });
-}
+// Actual Budget
+export const sendToActualBudget = (bill) => apiFetch("/api/briefing/actual/send", { method: "POST", body: JSON.stringify(bill) });
+export const testActualBudget = () => apiFetch("/api/briefing/actual/test", { method: "POST" });
 
-export async function pollStatus(briefingId) {
-  return apiFetch(`/api/briefing/status/${briefingId}`);
-}
-
-export async function getBriefingHistory() {
-  return apiFetch('/api/briefing/history');
-}
-
-export async function getBriefingById(id) {
-  return apiFetch(`/api/briefing/${id}`);
-}
-
-export async function getEmailBody(uid) {
-  return apiFetch(`/api/briefing/email/${uid}`);
-}
-
-export async function testActualBudget() {
-  return apiFetch('/api/briefing/actual/test', { method: 'POST' });
-}
-
-export async function sendToActualBudget(billData) {
-  return apiFetch('/api/briefing/actual/send', {
-    method: 'POST',
-    body: JSON.stringify(billData),
-  });
-}
-
-export async function getAccounts() {
-  return apiFetch('/api/ea/accounts');
-}
-
-export async function getSettings() {
-  return apiFetch('/api/ea/settings');
-}
-
-export async function updateSettings(settings) {
-  return apiFetch('/api/ea/settings', {
-    method: 'PUT',
-    body: JSON.stringify(settings),
-  });
-}
-
-export async function getGmailAuthUrl() {
-  return apiFetch('/api/ea/accounts/gmail/auth');
-}
-
-export async function addICloudAccount(email, appPassword) {
-  return apiFetch('/api/ea/accounts/icloud', {
-    method: 'POST',
-    body: JSON.stringify({ email, app_password: appPassword }),
-  });
-}
-
-export async function geocodeLocation(query) {
-  return apiFetch(`/api/ea/geocode?q=${encodeURIComponent(query)}`);
-}
-
-export async function removeAccount(accountId) {
-  return apiFetch(`/api/ea/accounts/${accountId}`, { method: 'DELETE' });
-}
+// Accounts & Settings
+export const getAccounts = () => apiFetch("/api/ea/accounts");
+export const getGmailAuthUrl = () => apiFetch("/api/ea/accounts/gmail/auth");
+export const addICloudAccount = (email, password) => apiFetch("/api/ea/accounts/icloud", { method: "POST", body: JSON.stringify({ email, password }) });
+export const removeAccount = (id) => apiFetch(`/api/ea/accounts/${id}`, { method: "DELETE" });
+export const getSettings = () => apiFetch("/api/ea/settings");
+export const updateSettings = (data) => apiFetch("/api/ea/settings", { method: "PUT", body: JSON.stringify(data) });
+export const geocodeLocation = (q) => apiFetch(`/api/ea/geocode?q=${encodeURIComponent(q)}`);

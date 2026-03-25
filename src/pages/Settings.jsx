@@ -24,6 +24,7 @@ export default function Settings() {
   const [actualForm, setActualForm] = useState({ serverUrl: "", password: "", syncId: "" });
   const [weatherForm, setWeatherForm] = useState({ location: "", lat: "", lng: "", geocoding: false, results: null });
   const [testStatus, setTestStatus] = useState(null);
+  const [saveMsg, setSaveMsg] = useState(null);
 
   useEffect(() => {
     Promise.all([getAccounts(), getSettings()])
@@ -77,16 +78,32 @@ export default function Settings() {
     try {
       const results = await geocodeLocation(weatherForm.location);
       if (results.length === 1) {
-        // Single result — auto-select
-        setWeatherForm(f => ({
-          ...f, geocoding: false, results: null,
-          location: results[0].name, lat: results[0].lat.toString(), lng: results[0].lng.toString(),
-        }));
+        await selectLocation(results[0]);
       } else {
         setWeatherForm(f => ({ ...f, geocoding: false, results }));
       }
     } catch {
       setWeatherForm(f => ({ ...f, geocoding: false }));
+    }
+  }
+
+  async function selectLocation(loc) {
+    setWeatherForm({
+      location: loc.name, lat: loc.lat.toString(), lng: loc.lng.toString(),
+      geocoding: false, results: null,
+    });
+    // Auto-save immediately
+    try {
+      await updateSettings({
+        weather_location: loc.name,
+        weather_lat: loc.lat,
+        weather_lng: loc.lng,
+      });
+      setSaveMsg("Location saved!");
+      setTimeout(() => setSaveMsg(null), 3000);
+    } catch {
+      setSaveMsg("Failed to save location");
+      setTimeout(() => setSaveMsg(null), 3000);
     }
   }
 
@@ -110,8 +127,11 @@ export default function Settings() {
         payload.weather_lng = parseFloat(weatherForm.lng);
       }
       await updateSettings(payload);
+      setSaveMsg("Settings saved!");
+      setTimeout(() => setSaveMsg(null), 3000);
     } catch (err) {
-      alert("Failed to save: " + err.message);
+      setSaveMsg("Failed to save: " + err.message);
+      setTimeout(() => setSaveMsg(null), 5000);
     } finally {
       setSaving(false);
     }
@@ -220,9 +240,7 @@ export default function Settings() {
           {weatherForm.results && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {weatherForm.results.map((r, i) => (
-                <button key={i} onClick={() => setWeatherForm(f => ({
-                  ...f, location: r.name, lat: r.lat.toString(), lng: r.lng.toString(), results: null,
-                }))} style={{
+                <button key={i} onClick={() => selectLocation(r)} style={{
                   background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
                   borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#e2e8f0",
                   cursor: "pointer", textAlign: "left", transition: "background 0.15s",
@@ -259,9 +277,6 @@ export default function Settings() {
             <input type="text" placeholder="Budget sync ID" value={actualForm.syncId} onChange={e => setActualForm(f => ({ ...f, syncId: e.target.value }))} className="input" />
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
-            <button onClick={handleSaveSettings} disabled={saving} className="btn-primary">
-              {saving ? "Saving..." : "Save"}
-            </button>
             <button onClick={async () => {
               setTestStatus("testing");
               try {
@@ -281,6 +296,22 @@ export default function Settings() {
           </div>
         </div>
       </Card>
+
+      {/* Global Save */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 0" }}>
+        <button onClick={handleSaveSettings} disabled={saving} className="btn-primary">
+          {saving ? "Saving..." : "Save All Settings"}
+        </button>
+        {saveMsg && (
+          <span style={{
+            fontSize: 12, fontWeight: 500,
+            color: saveMsg.includes("Failed") ? "#ef4444" : "#34d399",
+            animation: "fadeIn 0.2s ease",
+          }}>
+            {saveMsg}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
