@@ -341,14 +341,6 @@ export default function Dashboard() {
   if (error && !briefing) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
   if (!briefing) return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: 24 }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet" />
-      <style>{`
-        .btn-primary { background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
-        .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(99,102,241,0.3); }
-        .btn-primary:active { transform: translateY(0); }
-        .btn-secondary { background: rgba(255,255,255,0.06); color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; text-decoration: none; display: inline-block; transition: all 0.2s ease; }
-        .btn-secondary:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; border-color: rgba(255,255,255,0.2); }
-      `}</style>
       <div style={{ fontSize: 48 }}>☀️</div>
       <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: "#f8fafc", margin: 0 }}>No briefings yet</h1>
       <p style={{ fontSize: 14, color: "#64748b", margin: 0, textAlign: "center", maxWidth: 400 }}>Connect your email accounts in Settings, then generate your first briefing.</p>
@@ -372,19 +364,6 @@ export default function Dashboard() {
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", color: "#e2e8f0", fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", padding: "24px", maxWidth: 900, margin: "0 auto" }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet" />
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-        .btn-header { transition: all 0.2s ease; }
-        .btn-header:hover { background: rgba(255,255,255,0.08) !important; color: #e2e8f0 !important; border-color: rgba(255,255,255,0.15) !important; }
-        .btn-header:active { transform: scale(0.97); }
-        .btn-primary { background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
-        .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(99,102,241,0.3); }
-        .btn-primary:active { transform: translateY(0); }
-        .btn-secondary { background: rgba(255,255,255,0.06); color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 500; text-decoration: none; display: inline-block; transition: all 0.2s ease; }
-        .btn-secondary:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; border-color: rgba(255,255,255,0.2); }
-      `}</style>
 
       {generating && <RefreshBanner />}
 
