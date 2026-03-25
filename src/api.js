@@ -38,6 +38,7 @@ export const testActualBudget = () => apiFetch("/api/briefing/actual/test", { me
 export const getAccounts = () => apiFetch("/api/ea/accounts");
 export const getGmailAuthUrl = () => apiFetch("/api/ea/accounts/gmail/auth");
 export const addICloudAccount = (email, password) => apiFetch("/api/ea/accounts/icloud", { method: "POST", body: JSON.stringify({ email, password }) });
+export const updateAccount = (id, data) => apiFetch(`/api/ea/accounts/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 export const removeAccount = (id) => apiFetch(`/api/ea/accounts/${id}`, { method: "DELETE" });
 export const getSettings = () => apiFetch("/api/ea/settings");
 export const updateSettings = (data) => apiFetch("/api/ea/settings", { method: "PUT", body: JSON.stringify(data) });
