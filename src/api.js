@@ -30,8 +30,20 @@ export async function triggerGeneration() {
   return apiFetch('/api/briefing/generate', { method: 'POST' });
 }
 
+export async function quickRefresh() {
+  return apiFetch('/api/briefing/refresh', { method: 'POST' });
+}
+
 export async function pollStatus(briefingId) {
   return apiFetch(`/api/briefing/status/${briefingId}`);
+}
+
+export async function getBriefingHistory() {
+  return apiFetch('/api/briefing/history');
+}
+
+export async function getBriefingById(id) {
+  return apiFetch(`/api/briefing/${id}`);
 }
 
 export async function getEmailBody(uid) {

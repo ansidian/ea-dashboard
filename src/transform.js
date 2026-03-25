@@ -5,34 +5,45 @@ const WEATHER_ICONS = {
 };
 
 export function transformBriefing(raw) {
+  if (!raw) return null;
   const b = typeof raw === 'string' ? JSON.parse(raw) : raw;
 
+  // Handle both camelCase (from Haiku prompt) and snake_case (from older format)
+  const aiInsights = b.aiInsights || b.ai_insights || [];
+  const deadlines = b.deadlines || [];
+  const ctmDeadlines = b.ctm?.upcoming || b.ctm_deadlines || [];
+  const ctmStats = b.ctm?.stats || computeCTMStats(ctmDeadlines);
+  const emailSummary = b.emails?.summary || b.email_summary || "";
+  const emailAccounts = b.emails?.accounts || [];
+
   return {
-    generatedAt: formatGeneratedAt(b.generated_at),
+    generatedAt: b.generatedAt || formatGeneratedAt(b.generated_at),
+    dataUpdatedAt: b.dataUpdatedAt || null,
+    aiGeneratedAt: b.aiGeneratedAt || null,
     weather: {
       ...b.weather,
-      hourly: b.weather.hourly.map(h => ({
+      hourly: (b.weather?.hourly || []).map(h => ({
         ...h,
         icon: WEATHER_ICONS[h.icon] || h.icon,
       })),
     },
-    aiInsights: b.ai_insights,
-    calendar: b.calendar,
+    aiInsights,
+    calendar: b.calendar || [],
     ctm: {
-      upcoming: b.ctm_deadlines,
-      stats: computeCTMStats(b.ctm_deadlines),
+      upcoming: ctmDeadlines,
+      stats: ctmStats,
     },
-    deadlines: b.deadlines,
+    deadlines,
     emails: {
-      summary: b.email_summary,
-      accounts: b.emails.accounts.map(acc => ({
+      summary: emailSummary,
+      accounts: emailAccounts.map(acc => ({
         ...acc,
-        important: acc.important.map(email => ({
+        important: (acc.important || []).map(email => ({
           ...email,
-          id: email.uid,
-          fromEmail: email.from_email,
-          hasBill: email.has_bill,
-          extractedBill: email.extracted_bill,
+          id: email.id || email.uid,
+          fromEmail: email.fromEmail || email.from_email,
+          hasBill: email.hasBill ?? email.has_bill ?? false,
+          extractedBill: email.extractedBill || email.extracted_bill || null,
         })),
       })),
     },
@@ -51,6 +62,7 @@ function computeCTMStats(deadlines) {
 }
 
 function formatGeneratedAt(isoString) {
+  if (!isoString) return "";
   const d = new Date(isoString);
   const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
