@@ -151,8 +151,14 @@ router.get("/settings", async (req, res) => {
       await db.execute({ sql: "INSERT INTO ea_settings (user_id) VALUES (?)", args: [userId] });
       result = await db.execute({ sql: "SELECT * FROM ea_settings WHERE user_id = ?", args: [userId] });
     }
-    const { actual_budget_password_encrypted, ...safe } = result.rows[0];
+    const { actual_budget_password_encrypted, schedules_json, ...safe } = result.rows[0];
     safe.actual_budget_configured = !!actual_budget_password_encrypted;
+    safe.schedules = schedules_json
+      ? JSON.parse(schedules_json)
+      : [
+          { label: "Morning Briefing", time: "08:00", enabled: false },
+          { label: "Evening Briefing", time: "20:00", enabled: false },
+        ];
     res.json(safe);
   } catch (err) {
     console.error("Error fetching EA settings:", err);
