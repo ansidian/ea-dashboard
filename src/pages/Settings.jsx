@@ -43,6 +43,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [icloudForm, setIcloudForm] = useState({ email: "", password: "", show: false });
   const [actualForm, setActualForm] = useState({ serverUrl: "", password: "", syncId: "" });
+  const [weatherForm, setWeatherForm] = useState({ location: "", lat: "", lng: "" });
   const [testStatus, setTestStatus] = useState(null);
 
   useEffect(() => {
@@ -50,6 +51,13 @@ export default function Settings() {
       .then(([acc, sett]) => {
         setAccounts(acc.accounts || acc);
         setSettings(sett);
+        if (sett.weather_location) {
+          setWeatherForm({
+            location: sett.weather_location || "",
+            lat: sett.weather_lat?.toString() || "",
+            lng: sett.weather_lng?.toString() || "",
+          });
+        }
         if (sett.actual_budget_url || sett.actual_budget_sync_id) {
           setActualForm({
             serverUrl: sett.actual_budget_url || "",
@@ -91,9 +99,17 @@ export default function Settings() {
         actual_budget_url: actualForm.serverUrl,
         actual_budget_sync_id: actualForm.syncId,
       };
-      // Only send password if user typed a new one
       if (actualForm.password) {
         payload.actual_budget_password = actualForm.password;
+      }
+      if (weatherForm.location) {
+        payload.weather_location = weatherForm.location;
+      }
+      if (weatherForm.lat) {
+        payload.weather_lat = parseFloat(weatherForm.lat);
+      }
+      if (weatherForm.lng) {
+        payload.weather_lng = parseFloat(weatherForm.lng);
       }
       await updateSettings(payload);
     } catch (err) {
@@ -188,6 +204,27 @@ export default function Settings() {
         ) : (
           <p style={{ fontSize: 13, color: "#64748b" }}>Schedule configuration will appear once your backend is connected.</p>
         )}
+      </Card>
+
+      {/* Weather Location */}
+      <Card title="Weather Location">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>City Name</label>
+            <input type="text" placeholder="El Monte, CA" value={weatherForm.location} onChange={e => setWeatherForm(f => ({ ...f, location: e.target.value }))} style={inputStyle} />
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>Latitude</label>
+              <input type="text" placeholder="34.0686" value={weatherForm.lat} onChange={e => setWeatherForm(f => ({ ...f, lat: e.target.value }))} style={inputStyle} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, color: "#64748b", display: "block", marginBottom: 4 }}>Longitude</label>
+              <input type="text" placeholder="-118.0276" value={weatherForm.lng} onChange={e => setWeatherForm(f => ({ ...f, lng: e.target.value }))} style={inputStyle} />
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: "#475569", margin: 0 }}>Find coordinates at <a href="https://www.latlong.net/" target="_blank" rel="noopener noreferrer" style={{ color: "#818cf8" }}>latlong.net</a></p>
+        </div>
       </Card>
 
       {/* Actual Budget */}
