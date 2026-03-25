@@ -16,10 +16,11 @@ router.get("/accounts/gmail/callback", async (req, res) => {
   try {
     const [userId, label] = accountId.split(":");
     const result = await handleCallback(code, accountId, userId);
-    if (label) {
-      await db.execute({ sql: "UPDATE ea_accounts SET label = ? WHERE id = ?", args: [label, accountId] });
+    if (label && label !== "Gmail") {
+      await db.execute({ sql: "UPDATE ea_accounts SET label = ? WHERE id = ?", args: [label, result.accountId] });
     }
-    res.redirect(`/settings?account_connected=${result.email}`);
+    const baseUrl = process.env.NODE_ENV === "production" ? "" : "http://localhost:5173";
+    res.redirect(`${baseUrl}/settings?account_connected=${result.email}`);
   } catch (err) {
     console.error("Gmail OAuth callback error:", err);
     res.status(500).send(`OAuth failed: ${err.message}`);
@@ -33,7 +34,7 @@ router.get("/accounts", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const result = await db.execute({
-      sql: "SELECT id, type, email, label, color, created_at FROM ea_accounts WHERE user_id = ?",
+      sql: "SELECT id, type, email, label, color, icon, calendar_enabled, created_at FROM ea_accounts WHERE user_id = ?",
       args: [userId],
     });
     res.json(result.rows);
@@ -88,6 +89,32 @@ router.post("/accounts/test/:id", async (req, res) => {
   } catch (err) {
     console.error("Error testing account:", err);
     res.status(400).json({ message: err.message });
+  }
+});
+
+router.patch("/accounts/:id", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { id } = req.params;
+  const { calendar_enabled, label, color, icon } = req.body;
+  try {
+    const updates = [];
+    const args = [];
+    if (calendar_enabled !== undefined) { updates.push("calendar_enabled = ?"); args.push(calendar_enabled ? 1 : 0); }
+    if (label !== undefined) { updates.push("label = ?"); args.push(label); }
+    if (color !== undefined) { updates.push("color = ?"); args.push(color); }
+    if (icon !== undefined) { updates.push("icon = ?"); args.push(icon || null); }
+    if (updates.length) {
+      updates.push("updated_at = datetime('now')");
+      args.push(id, userId);
+      await db.execute({
+        sql: `UPDATE ea_accounts SET ${updates.join(", ")} WHERE id = ? AND user_id = ?`,
+        args,
+      });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error updating account:", err);
+    res.status(500).json({ message: "Failed to update account" });
   }
 });
 
