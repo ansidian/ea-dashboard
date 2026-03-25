@@ -15,6 +15,7 @@ jobs:
         env:
           VITE_CTM_API_URL: ${{ secrets.CTM_API_URL }}
           VITE_EA_API_KEY: ${{ secrets.EA_API_KEY }}
+      - run: cp dist/index.html dist/404.html
       - uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
