@@ -353,11 +353,13 @@ export default function Dashboard() {
   );
 
   const d = briefing;
-  const billEmails = d.emails.accounts.flatMap(acc => acc.important.filter(e => e.hasBill).map(e => ({ ...e, accountColor: acc.color })));
+  const emailAccounts = d.emails?.accounts || [];
+  const billEmails = emailAccounts.flatMap(acc => (acc.important || []).filter(e => e.hasBill).map(e => ({ ...e, accountColor: acc.color })));
   const totalBills = billEmails.reduce((sum, e) => sum + (e.extractedBill?.amount || 0), 0);
+  const currentAccount = emailAccounts[activeAccount] || { important: [], name: "", icon: "", color: "#818cf8", unread: 0 };
 
   const classesSummary = {};
-  d.ctm.upcoming.forEach(t => {
+  (d.ctm?.upcoming || []).forEach(t => {
     if (!classesSummary[t.class_name]) classesSummary[t.class_name] = { color: t.class_color, tasks: [] };
     classesSummary[t.class_name].tasks.push(t);
   });
@@ -592,7 +594,7 @@ export default function Dashboard() {
             {billEmails.map((email, i) => {
               const typeInfo = typeLabels[email.extractedBill.type];
               return (
-                <div key={i} onClick={() => { const accIdx = d.emails.accounts.findIndex(a => a.color === email.accountColor); setActiveAccount(accIdx); setSelectedEmail(email); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8, cursor: "pointer", transition: "background 0.15s ease" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}>
+                <div key={i} onClick={() => { const accIdx = emailAccounts.findIndex(a => a.color === email.accountColor); setActiveAccount(accIdx); setSelectedEmail(email); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8, cursor: "pointer", transition: "background 0.15s ease" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}>
                   <div style={{ width: 3, height: 24, borderRadius: 2, background: email.accountColor }} />
                   <span style={{ fontSize: 13, fontWeight: 500, color: "#e2e8f0", flex: 1 }}>{email.extractedBill.payee}</span>
                   <span style={{ fontSize: 10, fontWeight: 600, color: typeInfo.color, background: typeInfo.color + "15", padding: "2px 7px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{typeInfo.label}</span>
@@ -653,9 +655,9 @@ export default function Dashboard() {
 
       {/* Email Overview */}
       <Section title="Email Overview" delay={700} loaded={loaded}>
-        <p style={{ fontSize: 13.5, color: "#94a3b8", margin: "0 0 16px 0" }}>{d.emails.summary}</p>
+        <p style={{ fontSize: 13.5, color: "#94a3b8", margin: "0 0 16px 0" }}>{d.emails?.summary || "No email accounts connected."}</p>
         <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-          {d.emails.accounts.map((acc, i) => (
+          {emailAccounts.map((acc, i) => (
             <button key={i} onClick={() => { setActiveAccount(i); setSelectedEmail(null); }} style={{ background: activeAccount === i ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.03)", border: `1px solid ${activeAccount === i ? acc.color + "66" : "rgba(255,255,255,0.06)"}`, borderRadius: 10, padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "all 0.2s ease", color: activeAccount === i ? "#f1f5f9" : "#94a3b8" }}>
               <span style={{ fontSize: 15 }}>{acc.icon}</span>
               <span style={{ fontSize: 12.5, fontWeight: 500 }}>{acc.name}</span>
@@ -664,10 +666,10 @@ export default function Dashboard() {
           ))}
         </div>
         {selectedEmail ? (
-          <EmailDetail email={selectedEmail} onBack={() => setSelectedEmail(null)} accountColor={d.emails.accounts[activeAccount].color} />
+          <EmailDetail email={selectedEmail} onBack={() => setSelectedEmail(null)} accountColor={currentAccount.color} />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {d.emails.accounts[activeAccount].important.map((email, i) => {
+            {currentAccount.important.map((email, i) => {
               const s = urgencyStyles[email.urgency];
               return (
                 <div key={i} onClick={() => setSelectedEmail(email)} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "14px 16px", cursor: "pointer", transition: "all 0.15s ease" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}>
