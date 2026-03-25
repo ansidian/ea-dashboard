@@ -45,7 +45,7 @@ export async function fetchWeather(lat, lng) {
   url.searchParams.set("daily", "temperature_2m_max,temperature_2m_min");
   url.searchParams.set("temperature_unit", "fahrenheit");
   url.searchParams.set("timezone", "America/Los_Angeles");
-  url.searchParams.set("forecast_days", "1");
+  url.searchParams.set("forecast_days", "2");
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -60,9 +60,10 @@ export async function fetchWeather(lat, lng) {
 
   const currentHourIndex = getCurrentHourInTimezone("America/Los_Angeles");
 
-  // Build hourly array — every 2 hours from current hour through end of day
+  // Build hourly array — every 2 hours from current hour, wrapping into tomorrow
   const hourly = [];
-  for (let i = currentHourIndex; i < 24 && hourly.length < 8; i += 2) {
+  for (let i = currentHourIndex; hourly.length < 8; i += 2) {
+    if (i >= data.hourly.time.length) break;
     const code = data.hourly.weather_code?.[i] ?? data.hourly.weathercode?.[i];
     hourly.push({
       time: formatHour(data.hourly.time[i]),
