@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   getAccounts, getSettings, updateSettings,
   getGmailAuthUrl, addICloudAccount, removeAccount,
+  testActualBudget,
 } from "../api";
 
 const inputStyle = {
@@ -208,8 +209,16 @@ export default function Settings() {
             <button onClick={handleSaveSettings} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }}>
               {saving ? "Saving..." : "Save"}
             </button>
-            <button onClick={() => setTestStatus("testing")} style={btnSecondary}>
-              Test Connection
+            <button onClick={async () => {
+              setTestStatus("testing");
+              try {
+                const result = await testActualBudget();
+                setTestStatus(result.success ? "ok" : "fail");
+              } catch {
+                setTestStatus("fail");
+              }
+            }} disabled={testStatus === "testing"} style={{ ...btnSecondary, opacity: testStatus === "testing" ? 0.6 : 1 }}>
+              {testStatus === "testing" ? "Testing..." : "Test Connection"}
             </button>
             {testStatus && <span style={{ fontSize: 12, color: testStatus === "testing" ? "#94a3b8" : testStatus === "ok" ? "#34d399" : "#ef4444", alignSelf: "center" }}>
               {testStatus === "testing" ? "Testing..." : testStatus === "ok" ? "Connected!" : "Failed"}

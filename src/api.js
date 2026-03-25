@@ -43,6 +43,10 @@ export async function getEmailBody(uid) {
   return apiFetch(`/api/briefing/email/${uid}`);
 }
 
+export async function testActualBudget() {
+  return apiFetch('/api/briefing/actual/test', { method: 'POST' });
+}
+
 export async function sendToActualBudget(billData) {
   return apiFetch('/api/briefing/actual/send', {
     method: 'POST',
