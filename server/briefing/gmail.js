@@ -3,7 +3,9 @@ import { encrypt, decrypt } from "./encryption.js";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
+const GOOGLE_REDIRECT_URI = process.env.NODE_ENV === "production"
+  ? process.env.GOOGLE_REDIRECT_URI
+  : `http://localhost:${process.env.PORT || 3001}/api/ea/accounts/gmail/callback`;
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -58,6 +60,9 @@ export async function handleCallback(code, accountId, userId) {
   const profile = await profileRes.json();
   const email = profile.emailAddress;
 
+  // Use email-based ID so multiple Gmail accounts each get their own row
+  const emailBasedId = `gmail-${email}`;
+
   await db.execute({
     sql: `INSERT INTO ea_accounts (id, user_id, type, email, label, credentials_encrypted)
           VALUES (?, ?, 'gmail', ?, ?, ?)
@@ -66,7 +71,7 @@ export async function handleCallback(code, accountId, userId) {
             email = excluded.email,
             updated_at = datetime('now')`,
     args: [
-      accountId,
+      emailBasedId,
       userId,
       email,
       email, // label defaults to email, user can rename later
@@ -74,7 +79,7 @@ export async function handleCallback(code, accountId, userId) {
     ],
   });
 
-  return { email, accountId };
+  return { email, accountId: emailBasedId };
 }
 
 async function getValidToken(account) {
@@ -152,6 +157,7 @@ export async function fetchEmails(account, hoursBack) {
       account_label: account.label,
       account_email: account.email,
       account_color: account.color,
+      account_icon: account.icon || "📧",
       from: getHeader("From"),
       subject: getHeader("Subject"),
       body_preview: msg.snippet || "",
@@ -236,46 +242,25 @@ async function fetchMessagesIndividually(token, messageIds) {
 
 export async function fetchEmailBody(account, messageId) {
   const token = await getValidToken(account);
+
+  // Fetch raw RFC 2822 message and parse with mailparser for reliable decoding
   const res = await fetch(
-    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
+    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=raw`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) throw new Error(`Gmail fetch body failed: ${res.status}`);
   const msg = await res.json();
 
-  const headers = msg.payload?.headers || [];
-  const getHeader = (name) =>
-    headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ||
-    "";
-
-  const htmlBody = extractBody(msg.payload, "text/html");
-  const textBody = extractBody(msg.payload, "text/plain");
+  const { simpleParser } = await import("mailparser");
+  const rawBuffer = Buffer.from(msg.raw, "base64url");
+  const parsed = await simpleParser(rawBuffer);
 
   return {
-    html_body: htmlBody || textBody || "",
-    subject: getHeader("Subject"),
-    from: getHeader("From"),
-    date: getHeader("Date"),
+    html_body: parsed.html || parsed.textAsHtml || parsed.text || "",
+    subject: parsed.subject || "",
+    from: parsed.from?.text || "",
+    date: parsed.date ? parsed.date.toISOString() : "",
   };
-}
-
-function extractBody(payload, mimeType) {
-  if (!payload) return null;
-
-  // Direct body
-  if (payload.mimeType === mimeType && payload.body?.data) {
-    return Buffer.from(payload.body.data, "base64url").toString("utf8");
-  }
-
-  // Recurse into parts
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      const found = extractBody(part, mimeType);
-      if (found) return found;
-    }
-  }
-
-  return null;
 }
 
 // --- Connection test ---
