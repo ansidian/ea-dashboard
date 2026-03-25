@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   getAccounts, getSettings, updateSettings,
-  getGmailAuthUrl, addICloudAccount, removeAccount,
+  getGmailAuthUrl, addICloudAccount, removeAccount, updateAccount,
   testActualBudget, geocodeLocation,
 } from "../api";
 
@@ -15,6 +15,105 @@ function Card({ title, children }) {
   );
 }
 
+const EMOJI_OPTIONS = ["📧", "🍎", "💼", "🏫", "🎓", "🏠", "💰", "🛒", "🔔", "🎮", "🎵", "📱", "🖥️", "🔧", "⭐", "🚀"];
+const COLOR_OPTIONS = ["#818cf8", "#6366f1", "#a78bfa", "#f472b6", "#fb923c", "#fbbf24", "#34d399", "#22d3ee", "#ef4444", "#64748b"];
+
+function AccountRow({ acc, accounts, setAccounts, onRemove }) {
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState(acc.label || acc.email);
+  const [color, setColor] = useState(acc.color || "#818cf8");
+  const [icon, setIcon] = useState(acc.icon || (acc.type === "icloud" ? "🍎" : "📧"));
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    await updateAccount(acc.id, { label, color, icon });
+    setAccounts(accounts.map(a => a.id === acc.id ? { ...a, label, color, icon } : a));
+    setSaving(false);
+    setEditing(false);
+  }
+
+  return (
+    <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}>
+        <span style={{ fontSize: 16, cursor: "pointer" }} onClick={() => setEditing(!editing)} title="Edit">{icon}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+            <div style={{ fontSize: 13, fontWeight: 500, color: "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+          </div>
+          <div style={{ fontSize: 11, color: "#64748b" }}>{acc.email} · {acc.type}</div>
+        </div>
+        <button onClick={() => setEditing(!editing)} className="btn-header" style={{ fontSize: 11 }}>
+          {editing ? "Cancel" : "Edit"}
+        </button>
+        {acc.type === "gmail" && (
+          <button
+            onClick={async () => {
+              const newVal = !acc.calendar_enabled;
+              await updateAccount(acc.id, { calendar_enabled: newVal });
+              setAccounts(accounts.map(a => a.id === acc.id ? { ...a, calendar_enabled: newVal ? 1 : 0 } : a));
+            }}
+            title={acc.calendar_enabled ? "Calendar sync enabled" : "Calendar sync disabled"}
+            style={{
+              background: acc.calendar_enabled ? "rgba(99,102,241,0.1)" : "rgba(255,255,255,0.04)",
+              border: `1px solid ${acc.calendar_enabled ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.08)"}`,
+              borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer",
+              color: acc.calendar_enabled ? "#a5b4fc" : "#64748b",
+              display: "flex", alignItems: "center", gap: 4, transition: "all 0.2s ease",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            {acc.calendar_enabled ? "Calendar on" : "Calendar off"}
+          </button>
+        )}
+        <button onClick={() => onRemove(acc.id)} className="btn-danger">Remove</button>
+      </div>
+      {editing && (
+        <div style={{ padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)", display: "flex", flexDirection: "column", gap: 12, animation: "fadeIn 0.15s ease" }}>
+          <div>
+            <label className="label">Display Name</label>
+            <input className="input" value={label} onChange={e => setLabel(e.target.value)} placeholder={acc.email} />
+          </div>
+          <div>
+            <label className="label">Icon</label>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {EMOJI_OPTIONS.map(e => (
+                <button key={e} onClick={() => setIcon(e)} style={{
+                  fontSize: 18, padding: "4px 6px", borderRadius: 6, cursor: "pointer", border: "1px solid",
+                  background: icon === e ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.03)",
+                  borderColor: icon === e ? "rgba(99,102,241,0.4)" : "rgba(255,255,255,0.06)",
+                  transition: "all 0.15s ease",
+                }}>{e}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="label">Color</label>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {COLOR_OPTIONS.map(c => (
+                <button key={c} onClick={() => setColor(c)} style={{
+                  width: 22, height: 22, borderRadius: "50%", background: c, cursor: "pointer",
+                  border: color === c ? "2px solid #fff" : "2px solid transparent",
+                  boxShadow: color === c ? `0 0 0 2px ${c}` : "none",
+                  transition: "all 0.15s ease",
+                }} />
+              ))}
+              <input type="color" value={color} onChange={e => setColor(e.target.value)}
+                style={{ width: 22, height: 22, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent" }}
+                title="Custom color"
+              />
+            </div>
+          </div>
+          <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ alignSelf: "flex-start", padding: "6px 16px", fontSize: 12 }}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const [accounts, setAccounts] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -23,6 +122,7 @@ export default function Settings() {
   const [icloudForm, setIcloudForm] = useState({ email: "", password: "", show: false });
   const [actualForm, setActualForm] = useState({ serverUrl: "", password: "", syncId: "" });
   const [weatherForm, setWeatherForm] = useState({ location: "", lat: "", lng: "", geocoding: false, results: null });
+  const [lookbackHours, setLookbackHours] = useState(16);
   const [testStatus, setTestStatus] = useState(null);
   const [saveMsg, setSaveMsg] = useState(null);
 
@@ -38,6 +138,7 @@ export default function Settings() {
             lng: sett.weather_lng?.toString() || "",
           });
         }
+        if (sett.email_lookback_hours) setLookbackHours(sett.email_lookback_hours);
         if (sett.actual_budget_url || sett.actual_budget_sync_id) {
           setActualForm({
             serverUrl: sett.actual_budget_url || "",
@@ -99,6 +200,7 @@ export default function Settings() {
         weather_lat: loc.lat,
         weather_lng: loc.lng,
       });
+      sessionStorage.setItem("ea_settings_changed", "1");
       setSaveMsg("Location saved!");
       setTimeout(() => setSaveMsg(null), 3000);
     } catch {
@@ -111,6 +213,7 @@ export default function Settings() {
     setSaving(true);
     try {
       const payload = {
+        email_lookback_hours: lookbackHours,
         actual_budget_url: actualForm.serverUrl,
         actual_budget_sync_id: actualForm.syncId,
       };
@@ -127,6 +230,7 @@ export default function Settings() {
         payload.weather_lng = parseFloat(weatherForm.lng);
       }
       await updateSettings(payload);
+      sessionStorage.setItem("ea_settings_changed", "1");
       setSaveMsg("Settings saved!");
       setTimeout(() => setSaveMsg(null), 3000);
     } catch (err) {
@@ -161,14 +265,7 @@ export default function Settings() {
         {accounts.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
             {accounts.map(acc => (
-              <div key={acc.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" }}>
-                <span style={{ fontSize: 16 }}>{acc.icon || "📧"}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#e2e8f0" }}>{acc.name || acc.email}</div>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>{acc.type}</div>
-                </div>
-                <button onClick={() => handleRemoveAccount(acc.id)} className="btn-danger">Remove</button>
-              </div>
+              <AccountRow key={acc.id} acc={acc} accounts={accounts} setAccounts={setAccounts} onRemove={handleRemoveAccount} />
             ))}
           </div>
         ) : (
@@ -187,6 +284,22 @@ export default function Settings() {
             <button onClick={handleAddICloud} className="btn-primary" style={{ alignSelf: "flex-start" }}>Connect iCloud</button>
           </div>
         )}
+      </Card>
+
+      {/* Email Lookback */}
+      <Card title="Email Lookback">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <label className="label" style={{ margin: 0, whiteSpace: "nowrap" }}>Fetch emails from the last</label>
+          <input
+            type="number" min="1" max="72" value={lookbackHours}
+            onChange={e => setLookbackHours(Math.max(1, Math.min(72, parseInt(e.target.value) || 16)))}
+            className="input" style={{ width: 70, textAlign: "center" }}
+          />
+          <span style={{ fontSize: 13, color: "#94a3b8" }}>hours</span>
+        </div>
+        <p style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>
+          Controls how far back to look for emails during briefing generation. Default: 16 hours.
+        </p>
       </Card>
 
       {/* Schedules */}
