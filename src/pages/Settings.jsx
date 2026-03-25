@@ -59,7 +59,7 @@ export default function Settings() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [getToken]);
+  }, []);
 
   async function handleAddGmail() {
     const { url } = await getGmailAuthUrl();
