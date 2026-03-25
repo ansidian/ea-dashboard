@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "@clerk/clerk-react";
 import { Link } from "react-router-dom";
 import {
   getAccounts, getSettings, updateSettings,
-  getGmailAuthUrl, addICloudAccount, removeAccount, setTokenGetter,
+  getGmailAuthUrl, addICloudAccount, removeAccount,
 } from "../api";
 
 const inputStyle = {
@@ -37,7 +36,6 @@ function Card({ title, children }) {
 }
 
 export default function Settings() {
-  const { getToken } = useAuth();
   const [accounts, setAccounts] = useState([]);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +45,6 @@ export default function Settings() {
   const [testStatus, setTestStatus] = useState(null);
 
   useEffect(() => {
-    setTokenGetter(() => getToken());
     Promise.all([getAccounts(), getSettings()])
       .then(([acc, sett]) => {
         setAccounts(acc.accounts || acc);

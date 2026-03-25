@@ -1,19 +1,12 @@
 const API_BASE = import.meta.env.VITE_CTM_API_URL;
-
-let _getToken = null;
-
-export function setTokenGetter(fn) {
-  _getToken = fn;
-}
+const API_KEY = import.meta.env.VITE_EA_API_KEY;
 
 async function apiFetch(path, options = {}) {
-  const token = _getToken ? await _getToken() : null;
-
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      'x-api-key': API_KEY,
       ...options.headers,
     },
   });

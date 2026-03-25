@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "@clerk/clerk-react";
-import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, getEmailBody, sendToActualBudget, setTokenGetter } from "../api";
+import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, getEmailBody, sendToActualBudget } from "../api";
 import { transformBriefing } from "../transform";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import ErrorState from "../components/ErrorState";
@@ -222,7 +221,6 @@ function formatShortTime(isoString) {
 }
 
 export default function Dashboard() {
-  const { getToken } = useAuth();
   const [briefing, setBriefing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false); // quick refresh in progress
@@ -241,7 +239,6 @@ export default function Dashboard() {
   const holdTimerRef = { current: null };
 
   useEffect(() => {
-    setTokenGetter(() => getToken());
     getLatestBriefing()
       .then(res => {
         const transformed = transformBriefing(res.briefing);
@@ -253,7 +250,7 @@ export default function Dashboard() {
         setLoading(false);
         setTimeout(() => setLoaded(true), 100);
       });
-  }, [getToken]);
+  }, []);
 
   // Quick refresh: tap — raw data only, no Haiku
   async function handleQuickRefresh() {
