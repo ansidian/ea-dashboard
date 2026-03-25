@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   getAccounts, getSettings, updateSettings,
@@ -119,6 +119,10 @@ export default function Settings() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingTimeIdx, setEditingTimeIdx] = useState(null);
+  const frozenOrderRef = useRef(null);
+  const schedContainerRef = useRef(null);
+  const schedRectsRef = useRef({});
   const [icloudForm, setIcloudForm] = useState({ email: "", password: "", show: false });
   const [actualForm, setActualForm] = useState({ serverUrl: "", password: "", syncId: "" });
   const [weatherForm, setWeatherForm] = useState({ location: "", lat: "", lng: "", geocoding: false, results: null });
@@ -304,35 +308,112 @@ export default function Settings() {
 
       {/* Schedules */}
       <Card title="Briefing Schedules">
-        {settings?.schedules ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {settings.schedules.map((sched, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#e2e8f0" }}>{sched.name}</div>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>{sched.time}</div>
-                </div>
-                <button onClick={() => {
-                  const updated = { ...settings };
-                  updated.schedules[i].enabled = !updated.schedules[i].enabled;
-                  setSettings({ ...updated });
-                }} style={{
-                  width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
-                  background: sched.enabled ? "#6366f1" : "rgba(255,255,255,0.1)",
-                  position: "relative", transition: "background 0.2s",
-                }}>
-                  <div style={{
-                    width: 16, height: 16, borderRadius: "50%", background: "#fff",
-                    position: "absolute", top: 3, transition: "left 0.2s",
-                    left: sched.enabled ? 21 : 3,
-                  }} />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ fontSize: 13, color: "#64748b" }}>Schedule configuration will appear once your backend is connected.</p>
-        )}
+        <div ref={schedContainerRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {(() => {
+            const items = [...(settings?.schedules || [])].map((s, i) => ({ ...s, _oi: i }));
+            const sorted = items.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+            if (editingTimeIdx !== null) {
+              // Freeze: render in the order captured when editing started
+              if (!frozenOrderRef.current) frozenOrderRef.current = sorted.map(s => s._oi);
+              return frozenOrderRef.current.map(oi => items.find(s => s._oi === oi)).filter(Boolean);
+            }
+            frozenOrderRef.current = null;
+            return sorted;
+          })().map((sched) => {
+            const oi = sched._oi;
+            return (
+            <div key={oi} data-sched-idx={oi} ref={el => {
+              if (!el) return;
+              const prev = schedRectsRef.current[oi];
+              // Only animate when not entering edit mode (i.e. on blur/re-sort)
+              if (prev !== undefined && editingTimeIdx === null) {
+                const curr = el.getBoundingClientRect().top;
+                const dy = prev - curr;
+                if (Math.abs(dy) > 1) {
+                  el.style.transition = "none";
+                  el.style.transform = `translateY(${dy}px)`;
+                  requestAnimationFrame(() => {
+                    el.style.transition = "transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)";
+                    el.style.transform = "";
+                  });
+                }
+              }
+              schedRectsRef.current[oi] = el.getBoundingClientRect().top;
+            }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" }}>
+              <input
+                type="text" value={sched.label || ""} placeholder="Label"
+                onChange={e => {
+                  const updated = [...settings.schedules];
+                  updated[oi] = { ...updated[oi], label: e.target.value };
+                  setSettings(s => ({ ...s, schedules: updated }));
+                }}
+                onBlur={() => updateSettings({ schedules_json: settings.schedules })}
+                style={{ flex: 1, fontSize: 13, fontWeight: 500, color: "#e2e8f0", background: "transparent", border: "none", outline: "none", padding: 0 }}
+              />
+              <input
+                type="time" value={sched.time || "08:00"}
+                onFocus={() => setEditingTimeIdx(oi)}
+                onBlur={() => {
+                  // Snapshot positions before re-sort
+                  if (schedContainerRef.current) {
+                    schedContainerRef.current.querySelectorAll("[data-sched-idx]").forEach(el => {
+                      schedRectsRef.current[el.dataset.schedIdx] = el.getBoundingClientRect().top;
+                    });
+                  }
+                  updateSettings({ schedules_json: settings.schedules });
+                  setEditingTimeIdx(null);
+                }}
+                onChange={e => {
+                  const updated = [...settings.schedules];
+                  updated[oi] = { ...updated[oi], time: e.target.value };
+                  setSettings(s => ({ ...s, schedules: updated }));
+                }}
+                style={{ fontSize: 12, color: "#94a3b8", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, padding: "4px 8px", colorScheme: "dark" }}
+              />
+              <button onClick={async () => {
+                const updated = [...settings.schedules];
+                updated[oi] = { ...updated[oi], enabled: !updated[oi].enabled };
+                setSettings(s => ({ ...s, schedules: updated }));
+                await updateSettings({ schedules_json: updated });
+              }} style={{
+                width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
+                background: sched.enabled ? "#6366f1" : "rgba(255,255,255,0.1)",
+                position: "relative", transition: "background 0.2s",
+              }}>
+                <div style={{
+                  width: 16, height: 16, borderRadius: "50%", background: "#fff",
+                  position: "absolute", top: 3, transition: "left 0.2s",
+                  left: sched.enabled ? 21 : 3,
+                }} />
+              </button>
+              <button onClick={async () => {
+                if (schedContainerRef.current) {
+                  schedContainerRef.current.querySelectorAll("[data-sched-idx]").forEach(el => {
+                    schedRectsRef.current[el.dataset.schedIdx] = el.getBoundingClientRect().top;
+                  });
+                }
+                const updated = settings.schedules.filter((_, j) => j !== oi);
+                setSettings(s => ({ ...s, schedules: updated }));
+                await updateSettings({ schedules_json: updated });
+              }} style={{
+                background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 16, padding: "0 4px",
+                opacity: 0.6, transition: "opacity 0.2s",
+              }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0.6}>×</button>
+            </div>
+            );
+          })}
+          <button onClick={async () => {
+            const updated = [...(settings?.schedules || []), { label: "New Schedule", time: "08:00", enabled: false }];
+            setSettings(s => ({ ...s, schedules: updated }));
+            await updateSettings({ schedules_json: updated });
+          }} style={{
+            background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 8,
+            padding: "8px 14px", color: "#64748b", fontSize: 12, cursor: "pointer", transition: "all 0.2s",
+          }} onMouseEnter={e => { e.target.style.borderColor = "rgba(255,255,255,0.2)"; e.target.style.color = "#94a3b8"; }}
+             onMouseLeave={e => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; e.target.style.color = "#64748b"; }}>
+            + Add Schedule
+          </button>
+        </div>
       </Card>
 
       {/* Weather Location */}
