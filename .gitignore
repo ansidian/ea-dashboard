@@ -12,7 +12,9 @@ dist
 .env
 server/db/*.db
 morning-briefing.jsx
+.claude/
 .playwright-mcp
+My-Finances-*/
 dist-ssr
 *.local
 
