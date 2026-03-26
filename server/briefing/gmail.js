@@ -118,6 +118,33 @@ async function getValidToken(account) {
   return credentials.access_token;
 }
 
+// Extract dollar amounts from text for bill detection
+function extractAmounts(text) {
+  const matches = text.match(/\$\d[\d,]*\.\d{2}/g);
+  if (!matches || matches.length === 0) return "";
+  const unique = [...new Set(matches)].slice(0, 10);
+  return ` [amounts: ${unique.join(", ")}]`;
+}
+
+// Decode body text from Gmail API full-format message parts
+function extractBodyText(payload) {
+  if (!payload) return "";
+  const parts = [];
+
+  function walk(part) {
+    if (part.body?.data && part.mimeType?.startsWith("text/")) {
+      try {
+        parts.push(Buffer.from(part.body.data, "base64url").toString("utf8"));
+      } catch { /* skip malformed */ }
+    }
+    if (part.parts) part.parts.forEach(walk);
+  }
+
+  walk(payload);
+  // Strip HTML tags, collapse whitespace
+  return parts.join(" ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
 // --- Email fetch ---
 
 export async function fetchEmails(account, hoursBack) {
@@ -151,6 +178,9 @@ export async function fetchEmails(account, hoursBack) {
       headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ||
       "";
 
+    const snippet = msg.snippet || "";
+    const amounts = extractAmounts(extractBodyText(msg.payload));
+
     return {
       uid: msg.id,
       account_id: account.id,
@@ -160,7 +190,7 @@ export async function fetchEmails(account, hoursBack) {
       account_icon: account.icon || "📧",
       from: getHeader("From"),
       subject: getHeader("Subject"),
-      body_preview: msg.snippet || "",
+      body_preview: snippet + amounts,
       date: getHeader("Date"),
     };
   });
@@ -171,7 +201,7 @@ async function batchGetMessages(token, messageIds) {
   const boundary = "batch_briefing_" + Date.now();
   const parts = messageIds.map(
     (id) =>
-      `--${boundary}\r\nContent-Type: application/http\r\n\r\nGET /gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date HTTP/1.1\r\n`,
+      `--${boundary}\r\nContent-Type: application/http\r\n\r\nGET /gmail/v1/users/me/messages/${id}?format=full HTTP/1.1\r\n`,
   );
   const body = parts.join("\r\n") + `\r\n--${boundary}--`;
 
@@ -241,7 +271,7 @@ export async function fetchMessagesIndividually(token, messageIds) {
     const settled = await Promise.allSettled(
       chunk.map((id) =>
         fetch(
-          `https://www.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+          `https://www.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
           { headers: { Authorization: `Bearer ${token}` } },
         ).then((res) => (res.ok ? res.json() : Promise.reject(res.status))),
       ),

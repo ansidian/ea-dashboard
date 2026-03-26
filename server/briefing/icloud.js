@@ -105,6 +105,13 @@ export async function fetchEmails(account, password, hoursBack) {
   return emails;
 }
 
+function extractAmounts(text) {
+  const matches = text.match(/\$\d[\d,]*\.\d{2}/g);
+  if (!matches || matches.length === 0) return "";
+  const unique = [...new Set(matches)].slice(0, 10);
+  return ` [amounts: ${unique.join(", ")}]`;
+}
+
 function extractPreview(source) {
   if (!source) return "";
   const text = source.toString("utf8");
@@ -112,7 +119,8 @@ function extractPreview(source) {
   if (bodyStart === -1) return "";
   const body = text.slice(bodyStart + 4);
   const clean = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  return clean.slice(0, 600);
+  const amounts = extractAmounts(clean);
+  return clean.slice(0, 600) + amounts;
 }
 
 export async function fetchEmailBody(email, password, uid) {
