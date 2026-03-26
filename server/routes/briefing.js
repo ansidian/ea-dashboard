@@ -180,6 +180,49 @@ router.get("/email/:uid", async (req, res) => {
   }
 });
 
+router.post("/dismiss/:emailId", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const emailId = req.params.emailId;
+  try {
+    // Persist dismiss for future generations
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO ea_dismissed_emails (user_id, email_id) VALUES (?, ?)",
+      args: [userId, emailId],
+    });
+
+    // Also remove from the latest stored briefing so refreshes don't bring it back
+    const latest = await db.execute({
+      sql: `SELECT id, briefing_json FROM ea_briefings
+            WHERE user_id = ? AND status = 'ready'
+            ORDER BY generated_at DESC LIMIT 1`,
+      args: [userId],
+    });
+    if (latest.rows.length) {
+      const briefing = JSON.parse(latest.rows[0].briefing_json);
+      let changed = false;
+      for (const acct of briefing.emails?.accounts || []) {
+        const before = acct.important.length;
+        acct.important = acct.important.filter(e => e.id !== emailId);
+        if (acct.important.length !== before) {
+          acct.unread = acct.important.length;
+          changed = true;
+        }
+      }
+      if (changed) {
+        await db.execute({
+          sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+          args: [JSON.stringify(briefing), latest.rows[0].id],
+        });
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error dismissing email:", err);
+    res.status(500).json({ message: "Failed to dismiss email" });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const { id } = req.params;

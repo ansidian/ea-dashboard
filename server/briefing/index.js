@@ -183,15 +183,27 @@ function fixEmailAccounts(briefingJson, inputEmails) {
   }));
 }
 
-// Load previously triaged email IDs from the last ready briefing
-async function loadPreviousTriage(userId) {
+// Load dismissed email IDs for this user
+async function loadDismissedIds(userId) {
   const result = await db.execute({
-    sql: `SELECT briefing_json FROM ea_briefings
-          WHERE user_id = ? AND status = 'ready' AND briefing_json LIKE '%aiGeneratedAt%'
-          ORDER BY generated_at DESC LIMIT 1`,
+    sql: "SELECT email_id FROM ea_dismissed_emails WHERE user_id = ?",
     args: [userId],
   });
-  if (!result.rows.length) return { triagedIds: new Set(), prevBriefing: null };
+  return new Set(result.rows.map(r => r.email_id));
+}
+
+// Load previously triaged email IDs from the last ready briefing
+async function loadPreviousTriage(userId) {
+  const [result, dismissedIds] = await Promise.all([
+    db.execute({
+      sql: `SELECT briefing_json FROM ea_briefings
+            WHERE user_id = ? AND status = 'ready' AND briefing_json LIKE '%aiGeneratedAt%'
+            ORDER BY generated_at DESC LIMIT 1`,
+      args: [userId],
+    }),
+    loadDismissedIds(userId),
+  ]);
+  if (!result.rows.length) return { triagedIds: new Set(), prevBriefing: null, dismissedIds };
 
   const prev = JSON.parse(result.rows[0].briefing_json);
   const triagedIds = new Set();
@@ -200,7 +212,7 @@ async function loadPreviousTriage(userId) {
       if (email.id) triagedIds.add(email.id);
     }
   }
-  return { triagedIds, prevBriefing: prev };
+  return { triagedIds, prevBriefing: prev, dismissedIds };
 }
 
 // Check if calendar data has meaningfully changed (CTM doesn't go to Haiku)
@@ -227,24 +239,25 @@ export async function generateBriefing(userId) {
   try {
     const { accounts, settings } = await loadUserConfig(userId);
 
-    // Dynamic lookback: cover time since last briefing, minimum 16h floor
+    // Dynamic lookback: cover time since last briefing, minimum 16h floor, hard cap at 24h
     const sinceLastHours = await hoursSinceLastBriefing(userId);
     const minLookback = settings.email_lookback_hours || 16;
+    const maxLookback = 24;
     const hoursBack = sinceLastHours != null
-      ? Math.max(Math.ceil(sinceLastHours) + 1, minLookback)
+      ? Math.min(Math.max(Math.ceil(sinceLastHours) + 1, minLookback), maxLookback)
       : minLookback;
 
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing }] = await Promise.all([
+    const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing, dismissedIds }] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
     ]);
 
-    // Optimization #2: Skip if nothing new
-    const newEmails = emails.filter(e => !triagedIds.has(e.id));
+    // Optimization #2: Skip if nothing new (also exclude dismissed emails)
+    const newEmails = emails.filter(e => !triagedIds.has(e.id) && !dismissedIds.has(e.id));
     const calendarChanged = prevBriefing ? hasCalendarChanged(prevBriefing, calendar) : true;
 
     await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${newEmails.length} new · Analyzing...`);
@@ -255,6 +268,13 @@ export async function generateBriefing(userId) {
       const cloned = { ...prevBriefing };
       cloned.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
       cloned.ctm = { upcoming: ctmDeadlines, stats: computeCTMStats(ctmDeadlines) };
+      // Increment seenCount and filter dismissed/expired emails on clone
+      for (const acct of cloned.emails?.accounts || []) {
+        acct.important = acct.important
+          .filter(e => !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
+          .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
+        acct.unread = acct.important.length;
+      }
       fixEmailAccounts(cloned, emails);
       cloned.dataUpdatedAt = new Date().toISOString();
       cloned.generatedAt = nowPacific();
@@ -283,6 +303,8 @@ export async function generateBriefing(userId) {
       // Merge: keep previous triage for old emails, add new triage
       const newTriagedByAccount = {};
       for (const acct of briefingJson.emails?.accounts || []) {
+        // Tag newly triaged emails with seenCount 1
+        acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
         newTriagedByAccount[acct.name] = acct;
       }
 
@@ -290,15 +312,19 @@ export async function generateBriefing(userId) {
       for (const prevAcct of prevBriefing.emails?.accounts || []) {
         const newAcct = newTriagedByAccount[prevAcct.name];
         if (newAcct) {
-          // Merge: old emails that still exist + new ones
+          // Merge: old emails that still exist + new ones (filter dismissed/expired, increment seenCount)
           const existingEmailIds = new Set(newAcct.important.map(e => e.id));
-          const keptOld = prevAcct.important.filter(e => !existingEmailIds.has(e.id) && emails.some(fe => fe.id === e.id));
+          const keptOld = prevAcct.important
+            .filter(e => !existingEmailIds.has(e.id) && emails.some(fe => fe.id === e.id) && !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
+            .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
           newAcct.important = [...keptOld, ...newAcct.important];
           newAcct.unread = newAcct.important.length;
           newAcct.noise_count = (prevAcct.noise_count || 0) + (newAcct.noise_count || 0);
         } else {
-          // Account had no new emails — carry forward previous triage
-          const stillRelevant = prevAcct.important.filter(e => emails.some(fe => fe.id === e.id));
+          // Account had no new emails — carry forward previous triage (filter dismissed/expired, increment seenCount)
+          const stillRelevant = prevAcct.important
+            .filter(e => emails.some(fe => fe.id === e.id) && !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
+            .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
           if (stillRelevant.length > 0 || prevAcct.noise_count > 0) {
             briefingJson.emails.accounts.push({
               ...prevAcct,
@@ -314,6 +340,10 @@ export async function generateBriefing(userId) {
       console.log(`[EA] Full generation: ${emails.length} emails`);
       const ctmStats = computeCTMStats(ctmDeadlines);
       briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests });
+      // Tag all emails with seenCount 1
+      for (const acct of briefingJson.emails?.accounts || []) {
+        acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
+      }
     }
 
     await updateProgress(briefingId, "Finalizing briefing...");

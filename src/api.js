@@ -30,6 +30,7 @@ export const checkInProgress = () => apiFetch("/api/briefing/in-progress");
 export const getBriefingHistory = () => apiFetch("/api/briefing/history");
 export const getBriefingById = (id) => apiFetch(`/api/briefing/${id}`);
 export const getEmailBody = (uid) => apiFetch(`/api/briefing/email/${uid}`);
+export const dismissEmail = (emailId) => apiFetch(`/api/briefing/dismiss/${encodeURIComponent(emailId)}`, { method: "POST" });
 
 // Actual Budget
 export const sendToActualBudget = (bill) => apiFetch("/api/briefing/actual/send", { method: "POST", body: JSON.stringify(bill) });
