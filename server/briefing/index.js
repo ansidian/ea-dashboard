@@ -132,8 +132,36 @@ function computeCTMStats(deadlines) {
 
 // Fix email accounts: re-group triaged emails by their original account_label,
 // correct unread counts, and ensure no emails land in the wrong account.
-export function fixEmailAccounts(briefingJson, inputEmails) {
-  if (!briefingJson.emails?.accounts?.length || !inputEmails?.length) return;
+// dbAccounts (optional): all configured ea_accounts rows — seeds tabs for accounts with 0 emails.
+export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
+  if (!briefingJson.emails) briefingJson.emails = { summary: "", accounts: [] };
+  if (!briefingJson.emails.accounts) briefingJson.emails.accounts = [];
+
+  // Seed grouped map with every configured email account so 0-email accounts keep their tab
+  const grouped = new Map();
+  if (dbAccounts) {
+    for (const a of dbAccounts) {
+      if (a.type !== "gmail" && a.type !== "icloud") continue;
+      const label = a.label;
+      if (!label || grouped.has(label)) continue;
+      grouped.set(label, {
+        name: label,
+        icon: a.icon || (a.type === "icloud" ? "🍎" : "📧"),
+        color: a.color || "#6366f1",
+        important: [],
+        noise_count: 0,
+      });
+    }
+  }
+
+  if (!inputEmails?.length) {
+    // No emails fetched — keep seeded empty accounts
+    briefingJson.emails.accounts = [...grouped.values()].map((acct) => ({
+      ...acct,
+      unread: 0,
+    }));
+    return;
+  }
 
   // Build lookup: email uid/id → original account info
   const emailLookup = new Map();
@@ -155,8 +183,7 @@ export function fixEmailAccounts(briefingJson, inputEmails) {
     }
   }
 
-  // Re-group by correct account label
-  const grouped = new Map();
+  // Re-group by correct account label (into the pre-seeded map)
   for (const { email, accountLabel } of allTriaged) {
     if (!grouped.has(accountLabel)) {
       const original = inputEmails.find((e) => e.account_label === accountLabel);
@@ -350,7 +377,7 @@ export async function generateBriefing(userId) {
           .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
         acct.unread = acct.important.length;
       }
-      fixEmailAccounts(cloned, emails);
+      fixEmailAccounts(cloned, emails, accounts);
       cloned.dataUpdatedAt = new Date().toISOString();
       cloned.generatedAt = nowPacific();
       // Keep previous aiGeneratedAt to indicate AI didn't re-run
@@ -404,7 +431,7 @@ export async function generateBriefing(userId) {
 
     // Fix email account grouping: re-assign emails to correct accounts based on
     // the original account_label from the fetched data (Claude sometimes misgroups)
-    fixEmailAccounts(briefingJson, emails);
+    fixEmailAccounts(briefingJson, emails, accounts);
 
     // Set server-fetched weather (Claude no longer returns this)
     briefingJson.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
