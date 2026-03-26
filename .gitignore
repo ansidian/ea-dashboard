@@ -13,6 +13,7 @@ dist
 server/db/*.db
 morning-briefing.jsx
 .claude/
+CLAUDE.md
 .playwright-mcp
 My-Finances-*/
 dist-ssr
