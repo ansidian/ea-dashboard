@@ -225,15 +225,30 @@ function parseBatchResponse(responseText) {
   return messages;
 }
 
-async function fetchMessagesIndividually(token, messageIds) {
+export function chunkArray(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
+export async function fetchMessagesIndividually(token, messageIds) {
+  const ids = messageIds.slice(0, 50); // cap at 50 to avoid rate limits
+  const chunks = chunkArray(ids, 10);
   const results = [];
-  for (const id of messageIds.slice(0, 50)) {
-    // cap at 50 to avoid rate limits
-    const res = await fetch(
-      `https://www.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
-      { headers: { Authorization: `Bearer ${token}` } },
+  for (const chunk of chunks) {
+    const settled = await Promise.allSettled(
+      chunk.map((id) =>
+        fetch(
+          `https://www.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        ).then((res) => (res.ok ? res.json() : Promise.reject(res.status))),
+      ),
     );
-    if (res.ok) results.push(await res.json());
+    for (const s of settled) {
+      if (s.status === "fulfilled") results.push(s.value);
+    }
   }
   return results;
 }
