@@ -23,7 +23,7 @@
 - [x] **REL-01**: Claude JSON response parsing validates against expected schema shape after parse; logs failures
 - [ ] **REL-02**: Email regrouping logic (`fixEmailAccounts`) includes invariant check: email count in = email count out
 - [ ] **REL-03**: Delta briefing merge includes invariant check: no silent email loss or duplication
-- [ ] **REL-04**: Duplicate schedule logic in `actual.js` consolidated into shared helper function
+- [x] **REL-04**: Duplicate schedule logic in `actual.js` consolidated into shared helper function
 
 ### Architecture
 
@@ -78,7 +78,7 @@
 | REL-01 | Phase 2 | Complete |
 | REL-02 | Phase 2 | Pending |
 | REL-03 | Phase 2 | Pending |
-| REL-04 | Phase 2 | Pending |
+| REL-04 | Phase 2 | Complete |
 | ARCH-01 | Phase 4 | Pending |
 | ARCH-02 | Phase 4 | Pending |
 | TEST-01 | Phase 1 | Complete |

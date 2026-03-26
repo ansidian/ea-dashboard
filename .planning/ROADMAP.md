@@ -51,7 +51,7 @@ Plans:
 - [x] 02-01-PLAN.md — Claude parseResponse schema validation and tests (TDD)
 - [ ] 02-02-PLAN.md — Email regrouping invariant check and tests (TDD)
 - [ ] 02-03-PLAN.md — Delta merge extraction, invariant check, and tests (TDD)
-- [ ] 02-04-PLAN.md — Schedule logic deduplication in actual.js
+- [x] 02-04-PLAN.md — Schedule logic deduplication in actual.js
 
 ### Phase 3: Actual Budget Performance
 **Goal**: Actual Budget API access is safe from concurrency issues and metadata loads are fast
