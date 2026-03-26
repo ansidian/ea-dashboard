@@ -73,11 +73,16 @@ Plans:
 **Requirements**: ARCH-01, ARCH-02
 **Success Criteria** (what must be TRUE):
   1. BillBadge, CTMCard, SearchableDropdown, and EmailIframe exist as separate files in src/components/
-  2. Extracted components use CSS classes from src/index.css instead of inline styles
+  2. Extracted components use CSS classes from per-component CSS files instead of inline styles
   3. Dashboard.jsx is measurably smaller (target: under 1600 lines)
   4. All existing dashboard functionality works identically after extraction (no visual or behavioral regressions)
-**Plans**: TBD
+**Plans:** 3 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 04-01-PLAN.md — Extract metadata module, SearchableDropdown, and CTMCard with per-component CSS
+- [ ] 04-02-PLAN.md — Extract BillBadge, EmailIframe, and EmailBody with per-component CSS
+- [ ] 04-03-PLAN.md — Wire Dashboard.jsx imports, remove extracted code, smoke test
 
 ## Progress
 
@@ -90,4 +95,4 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | 1. Test Foundation & Security | 0/2 | Planned | - |
 | 2. Reliability & Test Coverage | 3/4 | In Progress|  |
 | 3. Actual Budget Performance | 2/2 | Complete   | 2026-03-26 |
-| 4. Component Extraction | 0/? | Not started | - |
+| 4. Component Extraction | 0/3 | Planned | - |

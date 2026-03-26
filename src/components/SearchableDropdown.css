@@ -1,0 +1,90 @@
+.searchable-dropdown-root { position: relative; }
+
+.searchable-dropdown-trigger {
+  width: 100%;
+  text-align: left;
+  font-size: 13px;
+  color: #e2e8f0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.searchable-dropdown-trigger:hover { border-color: rgba(99,102,241,0.4); }
+
+.searchable-dropdown-trigger-label { font-weight: 500; }
+
+.searchable-dropdown-trigger-arrow { color: #64748b; font-size: 10px; }
+
+.searchable-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+
+.searchable-dropdown-search-wrap {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.searchable-dropdown-input {
+  width: 100%;
+  font-size: 12px;
+  color: #e2e8f0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 5px 8px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.searchable-dropdown-input:focus { border-color: rgba(99,102,241,0.4); }
+
+.searchable-dropdown-list { max-height: 180px; overflow-y: auto; }
+
+.searchable-dropdown-create {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #818cf8;
+  background: rgba(129,140,248,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease;
+}
+
+.searchable-dropdown-create:hover { background: rgba(129,140,248,0.12); }
+
+.searchable-dropdown-empty { padding: 8px 12px; font-size: 12px; color: #64748b; }
+
+.searchable-dropdown-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #e2e8f0;
+  transition: background 0.15s ease;
+}
+
+.searchable-dropdown-item:hover { background: rgba(255,255,255,0.05); }
+
+.searchable-dropdown-item--selected { color: #818cf8; background: rgba(129,140,248,0.1); }
+
+.searchable-dropdown-item--selected:hover { background: rgba(129,140,248,0.1); }
+
+.searchable-dropdown-create-icon { font-size: 14px; }
