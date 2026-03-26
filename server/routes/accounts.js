@@ -7,6 +7,7 @@ import { getAuthUrl, handleCallback, testConnection as testGmail } from "../brie
 import { testConnection as testIcloud } from "../briefing/icloud.js";
 import { geocodeLocation } from "../briefing/weather.js";
 import { listModels } from "../briefing/claude.js";
+import { initScheduler } from "../briefing/scheduler.js";
 
 const router = Router();
 
@@ -232,6 +233,12 @@ router.put("/settings", async (req, res) => {
       args.push(userId);
       await db.execute({ sql: `UPDATE ea_settings SET ${updates.join(", ")} WHERE user_id = ?`, args });
     }
+
+    // Hot-reload cron jobs when schedules change (no server restart needed)
+    if (schedules_json !== undefined) {
+      initScheduler().catch(err => console.error("[EA Scheduler] Re-init failed:", err.message));
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error("Error updating EA settings:", err);
