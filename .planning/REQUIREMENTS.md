@@ -27,8 +27,8 @@
 
 ### Architecture
 
-- [ ] **ARCH-01**: Worst Dashboard.jsx sub-components extracted to `src/components/` (BillBadge, CTMCard, SearchableDropdown, EmailIframe at minimum)
-- [ ] **ARCH-02**: Extracted components use CSS classes instead of inline styles; styles added to `src/index.css`
+- [x] **ARCH-01**: Worst Dashboard.jsx sub-components extracted to `src/components/` (BillBadge, CTMCard, SearchableDropdown, EmailIframe at minimum)
+- [x] **ARCH-02**: Extracted components use CSS classes instead of inline styles; styles in per-component CSS files (e.g. `CTMCard.css`, `BillBadge.css`)
 
 ### Testing
 
@@ -79,8 +79,8 @@
 | REL-02 | Phase 2 | Complete |
 | REL-03 | Phase 2 | Complete |
 | REL-04 | Phase 2 | Complete |
-| ARCH-01 | Phase 4 | Pending |
-| ARCH-02 | Phase 4 | Pending |
+| ARCH-01 | Phase 4 | Complete |
+| ARCH-02 | Phase 4 | Complete |
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 2 | Complete |
