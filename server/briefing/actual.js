@@ -139,13 +139,81 @@ async function resolvePayee(payeeName) {
   return match ? match.id : await actualApi.createPayee({ name: payeeName });
 }
 
+// --- Shared schedule helpers ---
+
+function buildDateCondition(oldConditions, newDueDate) {
+  const dateCond = oldConditions.find(c => c.field === "date");
+  if (dateCond && typeof dateCond.value === "object" && dateCond.value?.frequency) {
+    if (dateCond.value.interval > 1) {
+      return dateCond; // Keep complex recurrence as-is
+    }
+    return { op: dateCond.op, field: "date", value: { ...dateCond.value, start: newDueDate } };
+  }
+  return { op: "is", field: "date", value: newDueDate };
+}
+
+async function findExistingSchedule(payeeId, accountId, amount, name) {
+  if (payeeId) {
+    const schedules = await getSchedulesWithConditions();
+    const existing = findScheduleByPayee(schedules, payeeId, accountId, Math.abs(amount));
+    if (existing) return existing.id;
+  }
+  if (name) {
+    const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
+    const byName = allSchedules.find(s => s.name === name);
+    if (byName) return byName.id;
+  }
+  return null;
+}
+
+async function updateExistingSchedule(existingId, newDueDate, amount, extraConditions = []) {
+  const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
+  const existing = allSchedules.find(s => s.id === existingId);
+  const oldConditions = existing?.conditions || [];
+
+  const newConditions = [
+    buildDateCondition(oldConditions, newDueDate),
+    { op: "is", field: "amount", value: amount },
+    ...extraConditions,
+  ];
+
+  // Preserve non-date, non-amount conditions that aren't in extraConditions
+  const extraFields = new Set(extraConditions.map(c => c.field));
+  for (const c of oldConditions) {
+    if (c.field !== "date" && c.field !== "amount" && !extraFields.has(c.field)) {
+      newConditions.push(c);
+    }
+  }
+
+  await actualApi.internal.send("schedule/update", {
+    schedule: { id: existingId, completed: false },
+    conditions: newConditions,
+  });
+  return existing?.name;
+}
+
+async function createOrReuseSchedule(name, dueDate, amount, conditions) {
+  const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
+  const byName = allSchedules.find(s => s.name === name);
+  if (byName) {
+    await actualApi.internal.send("schedule/update", {
+      schedule: { id: byName.id, completed: false },
+      conditions,
+    });
+    return { reused: true, name };
+  }
+  const id = await actualApi.createSchedule({ name, date: dueDate, amount });
+  await actualApi.internal.send("schedule/update", { schedule: { id, name }, conditions });
+  return { reused: false, name };
+}
+
 async function upsertSchedule(billData, targetAccountId) {
   const amountCents = -Math.round(billData.amount * 100);
   const isIncome = billData.type === "income";
   const signedAmount = isIncome ? Math.abs(amountCents) : amountCents;
   const name = billData.payee;
 
-  // If date is today or past, create a posted transaction instead
+  // Past-date: create posted transaction instead
   const today = new Date().toISOString().slice(0, 10);
   if (billData.due_date <= today) {
     const txn = { date: billData.due_date, amount: signedAmount, cleared: false };
@@ -157,73 +225,22 @@ async function upsertSchedule(billData, targetAccountId) {
   }
 
   const payeeId = await resolvePayee(billData.payee);
-
-  // Try to find existing schedule by payee, then by name
-  let existingId = null;
-  if (payeeId) {
-    const schedules = await getSchedulesWithConditions();
-    const existing = findScheduleByPayee(schedules, payeeId, targetAccountId, Math.abs(amountCents));
-    if (existing) existingId = existing.id;
-  }
-  if (!existingId && name) {
-    const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
-    const byName = allSchedules.find(s => s.name === name);
-    if (byName) existingId = byName.id;
-  }
+  const existingId = await findExistingSchedule(payeeId, targetAccountId, amountCents, name);
 
   if (existingId) {
-    // Update existing schedule — rebuild conditions preserving recurrence
-    const schedules = await getSchedulesWithConditions({ includeCompleted: true });
-    const existing = schedules.find(s => s.id === existingId);
-    const oldConditions = existing?.conditions || [];
-
-    const newConditions = [];
-    const dateCond = oldConditions.find(c => c.field === 'date');
-    if (dateCond && typeof dateCond.value === 'object' && dateCond.value?.frequency) {
-      if (dateCond.value.interval > 1) {
-        newConditions.push(dateCond);
-      } else {
-        newConditions.push({ op: dateCond.op, field: 'date', value: { ...dateCond.value, start: billData.due_date } });
-      }
-    } else {
-      newConditions.push({ op: 'is', field: 'date', value: billData.due_date });
-    }
-
-    newConditions.push({ op: 'is', field: 'amount', value: signedAmount });
-
-    for (const c of oldConditions) {
-      if (c.field !== 'date' && c.field !== 'amount') newConditions.push(c);
-    }
-
-    await actualApi.internal.send('schedule/update', {
-      schedule: { id: existingId, completed: false },
-      conditions: newConditions,
-    });
-    return { success: true, message: `Updated schedule "${existing?.name || name}"` };
+    const existingName = await updateExistingSchedule(existingId, billData.due_date, signedAmount);
+    return { success: true, message: `Updated schedule "${existingName || name}"` };
   }
 
-  // Create new one-time schedule
   const conditions = [
-    { op: 'is', field: 'date', value: billData.due_date },
-    { op: 'is', field: 'amount', value: signedAmount },
+    { op: "is", field: "date", value: billData.due_date },
+    { op: "is", field: "amount", value: signedAmount },
   ];
-  if (payeeId) conditions.push({ op: 'is', field: 'payee', value: payeeId });
-  if (targetAccountId) conditions.push({ op: 'is', field: 'account', value: targetAccountId });
+  if (payeeId) conditions.push({ op: "is", field: "payee", value: payeeId });
+  if (targetAccountId) conditions.push({ op: "is", field: "account", value: targetAccountId });
 
-  // Pre-check for name collision (including completed)
-  const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
-  const byName = allSchedules.find(s => s.name === name);
-  if (byName) {
-    await actualApi.internal.send('schedule/update', {
-      schedule: { id: byName.id, completed: false },
-      conditions,
-    });
-    return { success: true, message: `Updated existing schedule "${name}"` };
-  }
-
-  const id = await actualApi.createSchedule({ name, date: billData.due_date, amount: signedAmount });
-  await actualApi.internal.send('schedule/update', { schedule: { id, name }, conditions });
-  return { success: true, message: `Schedule "${name}" created` };
+  const result = await createOrReuseSchedule(name, billData.due_date, signedAmount, conditions);
+  return { success: true, message: result.reused ? `Updated existing schedule "${name}"` : `Schedule "${name}" created` };
 }
 
 async function upsertTransferSchedule(billData) {
@@ -236,7 +253,7 @@ async function upsertTransferSchedule(billData) {
     throw new Error(`No transfer payee found for account ${billData.from_account_id}`);
   }
 
-  // If date is today or past, create a posted transfer transaction
+  // Past-date: create posted transfer transaction
   const today = new Date().toISOString().slice(0, 10);
   if (billData.due_date <= today) {
     await actualApi.addTransactions(billData.to_account_id, [{
@@ -249,66 +266,26 @@ async function upsertTransferSchedule(billData) {
   }
 
   const name = billData.payee;
-  const conditions = [
-    { op: 'is', field: 'date', value: billData.due_date },
-    { op: 'is', field: 'amount', value: amountCents },
-    { op: 'is', field: 'payee', value: transferPayee.id },
-    { op: 'is', field: 'account', value: billData.to_account_id },
+  const extraConditions = [
+    { op: "is", field: "payee", value: transferPayee.id },
+    { op: "is", field: "account", value: billData.to_account_id },
   ];
 
-  // Try to find existing schedule by transfer payee, then by name
-  let existingId = null;
-  const schedules = await getSchedulesWithConditions();
-  const existing = findScheduleByPayee(schedules, transferPayee.id, billData.to_account_id, amountCents);
-  if (existing) existingId = existing.id;
-
-  if (!existingId && name) {
-    const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
-    const byName = allSchedules.find(s => s.name === name);
-    if (byName) existingId = byName.id;
-  }
+  const existingId = await findExistingSchedule(transferPayee.id, billData.to_account_id, amountCents, name);
 
   if (existingId) {
-    const existingSched = [...schedules, ...(await getSchedulesWithConditions({ includeCompleted: true }))].find(s => s.id === existingId);
-    const oldConditions = existingSched?.conditions || [];
-
-    const newConditions = [];
-    const dateCond = oldConditions.find(c => c.field === 'date');
-    if (dateCond && typeof dateCond.value === 'object' && dateCond.value?.frequency) {
-      if (dateCond.value.interval > 1) {
-        newConditions.push(dateCond);
-      } else {
-        newConditions.push({ op: dateCond.op, field: 'date', value: { ...dateCond.value, start: billData.due_date } });
-      }
-    } else {
-      newConditions.push({ op: 'is', field: 'date', value: billData.due_date });
-    }
-
-    newConditions.push({ op: 'is', field: 'amount', value: amountCents });
-    newConditions.push({ op: 'is', field: 'payee', value: transferPayee.id });
-    newConditions.push({ op: 'is', field: 'account', value: billData.to_account_id });
-
-    await actualApi.internal.send('schedule/update', {
-      schedule: { id: existingId, completed: false },
-      conditions: newConditions,
-    });
-    return { success: true, message: `Updated transfer schedule "${existingSched?.name || name}"` };
+    const existingName = await updateExistingSchedule(existingId, billData.due_date, amountCents, extraConditions);
+    return { success: true, message: `Updated transfer schedule "${existingName || name}"` };
   }
 
-  // Create new transfer schedule
-  const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
-  const byName = allSchedules.find(s => s.name === name);
-  if (byName) {
-    await actualApi.internal.send('schedule/update', {
-      schedule: { id: byName.id, completed: false },
-      conditions,
-    });
-    return { success: true, message: `Updated existing transfer schedule "${name}"` };
-  }
+  const conditions = [
+    { op: "is", field: "date", value: billData.due_date },
+    { op: "is", field: "amount", value: amountCents },
+    ...extraConditions,
+  ];
 
-  const id = await actualApi.createSchedule({ name, date: billData.due_date, amount: amountCents });
-  await actualApi.internal.send('schedule/update', { schedule: { id, name }, conditions });
-  return { success: true, message: `Transfer schedule "${name}" created` };
+  const result = await createOrReuseSchedule(name, billData.due_date, amountCents, conditions);
+  return { success: true, message: result.reused ? `Updated existing transfer schedule "${name}"` : `Transfer schedule "${name}" created` };
 }
 
 export async function sendBill(billData, userId) {
