@@ -156,19 +156,52 @@ export async function listModels() {
     .sort((a, b) => (b.created || "").localeCompare(a.created || ""));
 }
 
-function parseResponse(rawText) {
+// Per D-04: top-level shape only — validate keys exist with correct types
+const REQUIRED_SHAPE = {
+  aiInsights: "array",
+  emails: "object",
+  deadlines: "array",
+};
+
+function validateBriefingShape(parsed) {
+  const missing = [];
+  const wrongType = [];
+  for (const [key, expectedType] of Object.entries(REQUIRED_SHAPE)) {
+    if (!(key in parsed)) {
+      missing.push(key);
+    } else if (expectedType === "array" && !Array.isArray(parsed[key])) {
+      wrongType.push(`${key} (expected array, got ${typeof parsed[key]})`);
+    } else if (expectedType === "object" && (typeof parsed[key] !== "object" || Array.isArray(parsed[key]) || parsed[key] === null)) {
+      wrongType.push(`${key} (expected object, got ${Array.isArray(parsed[key]) ? "array" : typeof parsed[key]})`);
+    }
+  }
+  if (missing.length || wrongType.length) {
+    const parts = [];
+    if (missing.length) parts.push(`missing: ${missing.join(", ")}`);
+    if (wrongType.length) parts.push(`wrong type: ${wrongType.join(", ")}`);
+    throw new Error(`Claude response has invalid shape — ${parts.join("; ")}`);
+  }
+}
+
+export function parseResponse(rawText) {
   let cleaned = rawText.trim();
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
   }
 
   try {
-    return JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
+    validateBriefingShape(parsed);
+    return parsed;
   } catch (firstErr) {
+    // Re-throw shape validation errors immediately — they're not parse errors
+    if (firstErr.message.startsWith("Claude response has invalid shape")) throw firstErr;
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
       try {
-        return JSON.parse(match[0]);
+        const parsed = JSON.parse(match[0]);
+        validateBriefingShape(parsed);
+        return parsed;
       } catch {
         // fall through
       }
