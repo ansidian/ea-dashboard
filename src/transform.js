@@ -33,6 +33,7 @@ export function transformBriefing(raw) {
       upcoming: ctmDeadlines,
       stats: ctmStats,
     },
+    model: b.model || null,
     deadlines,
     emails: {
       summary: emailSummary,
@@ -54,7 +55,7 @@ function computeCTMStats(deadlines) {
   const today = new Date().toISOString().split('T')[0];
   const weekOut = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
   return {
-    pending: deadlines.length,
+    incomplete: deadlines.length,
     dueToday: deadlines.filter(d => d.due_date === today).length,
     dueThisWeek: deadlines.filter(d => d.due_date <= weekOut).length,
     totalPoints: deadlines.reduce((sum, d) => sum + (d.points_possible || 0), 0),

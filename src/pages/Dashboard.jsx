@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, getEmailBody, sendToActualBudget } from "../api";
+import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getEmailBody, sendToActualBudget, getActualAccounts, getSettings } from "../api";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -45,6 +45,19 @@ function getDaysUntil(dateStr) {
   if (diff === 1) return "Tomorrow";
   if (diff < 0) return `${Math.abs(diff)}d overdue`;
   return `${diff} days`;
+}
+
+function formatRelativeDate(dateStr) {
+  if (!dateStr) return dateStr;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = parseDueDate(dateStr);
+  const diff = Math.floor((due - today) / (1000 * 60 * 60 * 24));
+  if (diff < 0) return `Overdue (${Math.abs(diff)}d)`;
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff < 6) return due.toLocaleDateString("en-US", { weekday: "long" });
+  return due.toLocaleDateString("en-US", { month: "long", day: "numeric" });
 }
 
 function getDueUrgency(dateStr) {
@@ -121,18 +134,158 @@ function CTMCard({ task, expanded, onToggle }) {
   );
 }
 
-function BillBadge({ bill }) {
-  const [state, setState] = useState("idle");
+// Shared Actual Budget accounts cache — fetched once across all BillBadge instances
+let _accountsCache = null;
+let _accountsFetching = false;
+let _accountsListeners = [];
+
+function ensureAccountsLoaded(setAccounts) {
+  if (_accountsCache) { setAccounts(_accountsCache); return; }
+  _accountsListeners.push(setAccounts);
+  if (_accountsFetching) return;
+  _accountsFetching = true;
+  getActualAccounts()
+    .then(list => { _accountsCache = list; _accountsListeners.forEach(fn => fn(list)); })
+    .catch(() => { _accountsListeners.forEach(fn => fn([])); })
+    .finally(() => { _accountsFetching = false; _accountsListeners = []; });
+}
+
+function SearchableDropdown({ options, value, onChange, placeholder = "Select..." }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef(null);
+  const inputRef = useRef(null);
+
+  const selected = options.find(o => o.id === value);
+  const filtered = search
+    ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setSearch(""); } };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (open && inputRef.current) inputRef.current.focus();
+  }, [open]);
+
+  // Auto-select first match on type
+  useEffect(() => {
+    if (search && filtered.length > 0) onChange(filtered[0].id);
+  }, [search]);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+      <button
+        onClick={() => { setOpen(!open); setSearch(""); }}
+        style={{
+          width: "100%", textAlign: "left", fontSize: 13, color: "#e2e8f0",
+          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(99,102,241,0.2)",
+          borderRadius: 6, padding: "6px 10px", cursor: "pointer", display: "flex",
+          justifyContent: "space-between", alignItems: "center",
+          transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(99,102,241,0.4)"; }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.borderColor = "rgba(99,102,241,0.2)"; }}
+      >
+        <span style={{ fontWeight: 500 }}>{selected?.name || placeholder}</span>
+        <span style={{ color: "#64748b", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+          background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)", overflow: "hidden",
+        }}>
+          <div style={{ padding: "6px 8px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <input
+              ref={inputRef}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search..."
+              style={{
+                width: "100%", fontSize: 12, color: "#e2e8f0", background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.08)", borderRadius: 5, padding: "5px 8px",
+                outline: "none",
+              }}
+              onFocus={e => { e.target.style.borderColor = "rgba(99,102,241,0.4)"; }}
+              onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.08)"; }}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (filtered.length) { onChange(filtered[0].id); } setOpen(false); setSearch(""); } else if (e.key === "Escape") { e.stopPropagation(); setOpen(false); setSearch(""); } }}
+            />
+          </div>
+          <div style={{ maxHeight: 180, overflowY: "auto" }}>
+            {filtered.length === 0 && (
+              <div style={{ padding: "8px 12px", fontSize: 12, color: "#64748b" }}>No matches</div>
+            )}
+            {filtered.map(o => (
+              <div
+                key={o.id}
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+                onClick={e => { e.stopPropagation(); onChange(o.id); setOpen(false); setSearch(""); }}
+                style={{
+                  padding: "8px 12px", fontSize: 13, cursor: "pointer",
+                  color: o.id === value ? "#818cf8" : "#e2e8f0",
+                  background: o.id === value ? "rgba(129,140,248,0.1)" : "transparent",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={e => { if (o.id !== value) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                onMouseLeave={e => { if (o.id !== value) e.currentTarget.style.background = o.id === value ? "rgba(129,140,248,0.1)" : "transparent"; }}
+              >
+                {o.name}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatModelName(model) {
+  if (!model) return "Claude";
+  // Extract family and version: "claude-sonnet-4-6" → "Sonnet 4.6"
+  const match = model.match(/(opus|sonnet|haiku)-(\d+)-?(\d+)?/i);
+  if (match) {
+    const family = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+    const version = match[3] ? `${match[2]}.${match[3]}` : match[2];
+    return `${family} ${version}`;
+  }
+  return "Claude";
+}
+
+function BillBadge({ bill, model }) {
+  const modelDisplayName = formatModelName(model);
+  const [state, setState] = useState("idle"); // idle | sending | sent | error
+  const [editPayee, setEditPayee] = useState(bill.payee || "");
+  const [editAmount, setEditAmount] = useState(bill.amount != null ? String(bill.amount) : "");
+  const [editDue, setEditDue] = useState(bill.due_date || "");
+  const [accounts, setAccounts] = useState(_accountsCache || []);
+  const [editAccount, setEditAccount] = useState("");
   const typeInfo = typeLabels[bill.type] || typeLabels.expense;
-  const handleClick = (e) => { e.stopPropagation(); if (state === "idle") setState("confirm"); };
-  const handleConfirm = (e) => {
+
+  useEffect(() => { ensureAccountsLoaded(setAccounts); }, []);
+
+  const handleSend = (e) => {
     e.stopPropagation();
     setState("sending");
-    sendToActualBudget(bill)
+    const edited = { ...bill, payee: editPayee, amount: parseFloat(editAmount) || 0, due_date: editDue, account_id: editAccount || undefined };
+    sendToActualBudget(edited)
       .then(() => setState("sent"))
       .catch(() => setState("error"));
   };
-  const handleCancel = (e) => { e.stopPropagation(); setState("idle"); };
+
+  const inputStyle = {
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(99,102,241,0.2)",
+    borderRadius: 6, padding: "6px 10px", fontSize: 13, fontWeight: 500,
+    color: "#e2e8f0", outline: "none", width: "100%", transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+  };
+  const focusStyle = (e) => { e.target.style.borderColor = "rgba(99,102,241,0.5)"; e.target.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.1)"; };
+  const blurStyle = (e) => { e.target.style.borderColor = "rgba(99,102,241,0.2)"; e.target.style.boxShadow = "none"; };
+
+  const canSend = editPayee.trim() && editAmount.trim() && editDue && editAccount;
 
   return (
     <div onClick={(e) => e.stopPropagation()} style={{
@@ -141,20 +294,49 @@ function BillBadge({ bill }) {
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", color: typeInfo.color, background: typeInfo.color + "18", padding: "3px 8px", borderRadius: 5 }}>{typeInfo.icon} {typeInfo.label}</span>
-        <span style={{ fontSize: 11, color: "#94a3b8" }}>detected by Haiku</span>
+        <span style={{ fontSize: 11, color: "#94a3b8" }}>detected by {modelDisplayName}</span>
       </div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 20, marginTop: 10 }}>
-        <div><div style={{ fontSize: 11, color: "#64748b", marginBottom: 2 }}>Payee</div><div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>{bill.payee}</div></div>
-        <div><div style={{ fontSize: 11, color: "#64748b", marginBottom: 2 }}>Amount</div><div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>${bill.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div></div>
-        <div><div style={{ fontSize: 11, color: "#64748b", marginBottom: 2 }}>Due</div><div style={{ fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>{new Date(bill.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div></div>
-      </div>
-      <div style={{ marginTop: 12 }}>
-        {state === "idle" && <button onClick={handleClick} style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Send to Actual Budget</button>}
-        {state === "confirm" && <div style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 8, padding: 12 }}><div style={{ fontSize: 12, color: "#c7d2fe", marginBottom: 10, lineHeight: 1.5 }}>{bill.type === "transfer" ? `Schedule payment: $${bill.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} from Checking → ${bill.payee} on ${new Date(bill.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}?` : `Add ${typeInfo.label.toLowerCase()}: $${bill.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })} to ${bill.payee} due ${new Date(bill.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}?`}</div><div style={{ display: "flex", gap: 8 }}><button onClick={handleConfirm} style={{ flex: 1, background: "#6366f1", color: "#fff", border: "none", borderRadius: 6, padding: "8px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Confirm</button><button onClick={handleCancel} style={{ flex: 1, background: "rgba(255,255,255,0.06)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: "8px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancel</button></div></div>}
-        {state === "sending" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 16px", background: "rgba(99,102,241,0.1)", borderRadius: 8 }}><div style={{ width: 14, height: 14, border: "2px solid rgba(99,102,241,0.3)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /><span style={{ fontSize: 12, color: "#a5b4fc" }}>Syncing with Actual Budget…</span></div>}
-        {state === "sent" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg><span style={{ fontSize: 12, color: "#34d399", fontWeight: 600 }}>Added to Actual Budget</span></div>}
-        {state === "error" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8 }}><span style={{ fontSize: 12, color: "#fca5a5" }}>Failed to send.</span><button onClick={() => setState("idle")} style={{ fontSize: 12, color: "#818cf8", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}>Retry</button></div>}
-      </div>
+
+      {(state === "idle" || state === "error") && (
+        <>
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <div style={{ flex: 2 }}>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Payee</div>
+              <input value={editPayee} onChange={e => setEditPayee(e.target.value)} placeholder="e.g. Da Vien" style={inputStyle}
+                onFocus={focusStyle} onBlur={blurStyle}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Amount</div>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: "#64748b", pointerEvents: "none" }}>$</span>
+                <input type="number" step="0.01" value={editAmount} onChange={e => setEditAmount(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 22 }}
+                  onFocus={focusStyle} onBlur={blurStyle}
+                />
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Due</div>
+              <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)} style={{ ...inputStyle, colorScheme: "dark" }}
+                onFocus={focusStyle} onBlur={blurStyle}
+              />
+            </div>
+          </div>
+          {accounts.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Account</div>
+              <SearchableDropdown options={accounts} value={editAccount} onChange={setEditAccount} placeholder="Select account..." />
+            </div>
+          )}
+          <div style={{ marginTop: 10 }}>
+            {state === "error" && <div style={{ fontSize: 11, color: "#fca5a5", marginBottom: 6 }}>Failed to send — check fields and try again.</div>}
+            <button onClick={handleSend} disabled={!canSend} className="bill-send-btn" style={{ background: canSend ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "rgba(99,102,241,0.2)", color: canSend ? "#fff" : "#64748b", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 600, cursor: canSend ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center", transition: "all 0.2s ease" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Send to Actual Budget</button>
+          </div>
+        </>
+      )}
+
+      {state === "sending" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 16px", marginTop: 10, background: "rgba(99,102,241,0.1)", borderRadius: 8 }}><div style={{ width: 14, height: 14, border: "2px solid rgba(99,102,241,0.3)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /><span style={{ fontSize: 12, color: "#a5b4fc" }}>Syncing with Actual Budget…</span></div>}
+      {state === "sent" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", marginTop: 10, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg><span style={{ fontSize: 12, color: "#34d399", fontWeight: 600 }}>Added to Actual Budget</span></div>}
     </div>
   );
 }
@@ -215,9 +397,9 @@ function useEmailBody(email) {
   return { body: result.body, loading: false };
 }
 
-function EmailBody({ email }) {
+function EmailBody({ email, model }) {
   const { body, loading: loadingBody } = useEmailBody(email);
-  const isHtml = body && body.trim().startsWith("<");
+  const isHtml = body && /<[a-z!\/]/i.test(body);
 
   return (
     <div onClick={e => e.stopPropagation()} style={{ animation: "fadeIn 0.2s ease", borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: 12, paddingTop: 14 }}>
@@ -241,7 +423,7 @@ function EmailBody({ email }) {
       ) : (
         <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Email body unavailable</div>
       )}
-      {email.hasBill && email.extractedBill && <div style={{ marginTop: 10 }}><BillBadge bill={email.extractedBill} /></div>}
+      {email.hasBill && email.extractedBill && <div style={{ marginTop: 10 }}><BillBadge bill={email.extractedBill} model={model} /></div>}
     </div>
   );
 }
@@ -284,7 +466,8 @@ export default function Dashboard() {
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [expandedTask, setExpandedTask] = useState(null);
   const [holdConfirm, setHoldConfirm] = useState(false); // show "Generate fresh AI briefing?" confirm
-  const [cooldownMsg, setCooldownMsg] = useState(null); // transient cooldown notice
+  const [modelLabel, setModelLabel] = useState("Claude");
+  const [genProgress, setGenProgress] = useState(null); // progress text from server
   const [historyOpen, setHistoryOpen] = useState(false);
   const [viewingPast, setViewingPast] = useState(null); // { id, generated_at } when viewing a past briefing
   const [latestBriefing, setLatestBriefing] = useState(null); // preserved so "Back to latest" is instant
@@ -293,6 +476,7 @@ export default function Dashboard() {
   const [holdProgress, setHoldProgress] = useState(0); // 0-100 for progress bar
   const holdProgressRef = useRef(null);
   const emailSectionRef = useRef(null);
+  const ctmSectionRef = useRef(null);
   const historyTriggerRef = useRef(null);
 
   useEffect(() => {
@@ -302,6 +486,25 @@ export default function Dashboard() {
   }, [selectedEmail]);
 
   useEffect(() => {
+    getSettings().then(s => {
+      const id = s?.claude_model || "claude-haiku-4-5-20251001";
+      // "claude-haiku-4-5-20251001" → "Claude Haiku 4.5"
+      const name = id.replace(/^claude-/, "").replace(/-\d{8,}$/, "")
+        .replace(/(\w+)-(\d+)-(\d+)/, (_, n, maj, min) => `${n.charAt(0).toUpperCase() + n.slice(1)} ${maj}.${min}`)
+        .replace(/(\w+)$/, m => m.charAt(0).toUpperCase() + m.slice(1));
+      setModelLabel(`Claude ${name}`);
+    }).catch(() => {});
+
+    // Resume polling if a generation is already in progress (e.g. navigated away and back)
+    checkInProgress().then(({ generating: inProgress, id, progress }) => {
+      if (inProgress && id) {
+        if (progress) setGenProgress(progress);
+        startPolling(id);
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     getLatestBriefing()
       .then(res => {
         const transformed = transformBriefing(res.briefing);
@@ -309,18 +512,18 @@ export default function Dashboard() {
         setLatestBriefing(transformed);
         setLatestId(res.id);
 
-        // Auto-refresh if settings were changed (e.g. weather location)
-        if (sessionStorage.getItem("ea_settings_changed")) {
-          sessionStorage.removeItem("ea_settings_changed");
-          quickRefresh()
-            .then(result => {
-              const updated = transformBriefing(result.briefingJson);
-              setBriefing(updated);
-              setLatestBriefing(updated);
-              setLatestId(result.id);
-            })
-            .catch(() => {}); // silent — stale data is acceptable
-        }
+        // Always quick-refresh on load to get fresh weather/calendar/CTM
+        sessionStorage.removeItem("ea_settings_changed");
+        setRefreshing(true);
+        quickRefresh()
+          .then(result => {
+            const updated = transformBriefing(result.briefingJson);
+            setBriefing(updated);
+            setLatestBriefing(updated);
+            setLatestId(result.id);
+          })
+          .catch(() => {})
+          .finally(() => setRefreshing(false));
       })
       .catch(err => setError(err.message))
       .finally(() => {
@@ -347,45 +550,46 @@ export default function Dashboard() {
     }
   }
 
-  // Full generation: hold → confirm → Haiku call
+  // Start polling an in-progress briefing by ID
+  function startPolling(id) {
+    setGenerating(true);
+    const poll = setInterval(async () => {
+      try {
+        const { status, error_message, progress } = await pollStatus(id);
+        if (progress) setGenProgress(progress);
+        if (status === "ready") {
+          clearInterval(poll);
+          setGenProgress(null);
+          const res = await getLatestBriefing();
+          const transformed = transformBriefing(res.briefing);
+          setBriefing(transformed);
+          setLatestBriefing(transformed);
+          setLatestId(res.id);
+          setViewingPast(null);
+          setGenerating(false);
+        } else if (status === "error") {
+          clearInterval(poll);
+          setGenProgress(null);
+          setError(error_message);
+          setGenerating(false);
+        }
+      } catch {
+        clearInterval(poll);
+        setGenProgress(null);
+        setError("Lost connection while generating briefing.");
+        setGenerating(false);
+      }
+    }, 2000);
+  }
+
+  // Full generation: hold → confirm → Claude call
   async function handleFullGeneration() {
     setHoldConfirm(false);
     setGenerating(true);
     try {
       const genResult = await triggerGeneration();
 
-      // Cooldown: Haiku was called too recently, show message instead
-      if (genResult.status === "cooldown") {
-        setGenerating(false);
-        setCooldownMsg(genResult.message);
-        setTimeout(() => setCooldownMsg(null), 5000);
-        return;
-      }
-
-      const { id } = genResult;
-      const poll = setInterval(async () => {
-        try {
-          const { status, error_message } = await pollStatus(id);
-          if (status === "ready") {
-            clearInterval(poll);
-            const res = await getLatestBriefing();
-            const transformed = transformBriefing(res.briefing);
-            setBriefing(transformed);
-            setLatestBriefing(transformed);
-            setLatestId(res.id);
-            setViewingPast(null);
-            setGenerating(false);
-          } else if (status === "error") {
-            clearInterval(poll);
-            setError(error_message);
-            setGenerating(false);
-          }
-        } catch {
-          clearInterval(poll);
-          setError("Lost connection while generating briefing.");
-          setGenerating(false);
-        }
-      }, 2000);
+      startPolling(genResult.id);
     } catch (err) {
       setError(err.message);
       setGenerating(false);
@@ -425,10 +629,11 @@ export default function Dashboard() {
   function onPointerUp() { endHold(false); }
   function onPointerLeave() { endHold(true); }
 
-  // R hotkey: tap = quick refresh, hold = full generation
+  // R hotkey: tap = quick refresh, hold = full generation (same as button)
   useEffect(() => {
     function onKeyDown(e) {
       if (e.repeat || e.key !== "r" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (holdConfirm) { handleFullGeneration(); return; }
       startHold();
     }
     function onKeyUp(e) {
@@ -451,13 +656,13 @@ export default function Dashboard() {
         <button onClick={handleFullGeneration} className="btn-primary">Generate First Briefing</button>
         <a href="/settings" className="btn-secondary">Settings</a>
       </div>
-      {generating && <div style={{ marginTop: 16 }}><RefreshBanner /></div>}
+      {generating && <div style={{ marginTop: 16 }}><RefreshBanner progress={genProgress} /></div>}
     </div>
   );
 
   const d = briefing;
   const emailAccounts = d.emails?.accounts || [];
-  const billEmails = emailAccounts.flatMap(acc => (acc.important || []).filter(e => e.hasBill).map(e => ({ ...e, accountColor: acc.color })));
+  const billEmails = emailAccounts.flatMap((acc, accIdx) => (acc.important || []).filter(e => e.hasBill).map(e => ({ ...e, accountColor: acc.color, _accIdx: accIdx })));
   const totalBills = billEmails.reduce((sum, e) => sum + (e.extractedBill?.amount || 0), 0);
   const currentAccount = emailAccounts[activeAccount] || { important: [], name: "", icon: "", color: "#818cf8", unread: 0 };
 
@@ -465,20 +670,9 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", color: "#e2e8f0", fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", padding: "24px", maxWidth: 1100, margin: "0 auto" }}>
 
-      {generating && <RefreshBanner />}
+      {generating && <RefreshBanner progress={genProgress} />}
 
-      {/* Cooldown notice */}
-      {cooldownMsg && (
-        <div style={{
-          background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
-          borderRadius: 12, padding: '12px 20px', marginBottom: 20,
-          display: 'flex', alignItems: 'center', gap: 10,
-          animation: 'fadeIn 0.2s ease',
-        }}>
-          <span style={{ fontSize: 14 }}>⏳</span>
-          <span style={{ fontSize: 13, color: '#fcd34d' }}>{cooldownMsg}</span>
-        </div>
-      )}
+
 
       {/* Full generation confirm dialog */}
       {holdConfirm && (
@@ -492,17 +686,10 @@ export default function Dashboard() {
           <span style={{ fontSize: 16 }}>🧠</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#c7d2fe' }}>Generate fresh AI briefing?</div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Re-analyzes all data with Claude Haiku (~10s, uses an API call)</div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Re-fetches new emails and analyzes with {modelLabel} (uses an API call)</div>
           </div>
-          <button onClick={handleFullGeneration} style={{
-            background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none',
-            borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          }}>Generate</button>
-          <button onClick={() => setHoldConfirm(false)} style={{
-            background: 'rgba(255,255,255,0.06)', color: '#94a3b8',
-            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
-            padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          }}>Cancel</button>
+          <button className="btn-primary" onClick={handleFullGeneration} style={{ padding: '8px 16px', fontSize: 12 }}>Generate</button>
+          <button className="btn-secondary" onClick={() => setHoldConfirm(false)} style={{ padding: '8px 12px', fontSize: 12 }}>Cancel</button>
         </div>
       )}
 
@@ -654,10 +841,10 @@ export default function Dashboard() {
       )}
 
       {/* CTM Assignments — omit if none */}
-      {d.ctm?.upcoming?.length > 0 && <Section title="Assignments & Deadlines" delay={300} loaded={loaded}>
+      {d.ctm?.upcoming?.length > 0 && <div ref={ctmSectionRef}><Section title="Assignments & Deadlines" delay={300} loaded={loaded}>
         <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 20px", marginBottom: 12 }}>
           <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
-            <div><span style={{ fontSize: 24, fontWeight: 600, color: "#f8fafc" }}>{d.ctm.stats.pending}</span><span style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}>pending</span></div>
+            <div><span style={{ fontSize: 24, fontWeight: 600, color: "#f8fafc" }}>{d.ctm.stats.incomplete}</span><span style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}>incomplete</span></div>
             <div><span style={{ fontSize: 24, fontWeight: 600, color: "#fca5a5" }}>{d.ctm.stats.dueToday}</span><span style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}>due today</span></div>
             <div><span style={{ fontSize: 24, fontWeight: 600, color: "#fcd34d" }}>{d.ctm.stats.dueThisWeek}</span><span style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}>this week</span></div>
             <div style={{ marginLeft: "auto" }}>
@@ -681,25 +868,25 @@ export default function Dashboard() {
             <CTMCard key={task.id} task={task} expanded={expandedTask === task.id} onToggle={() => setExpandedTask(expandedTask === task.id ? null : task.id)} />
           ))}
         </div>
-      </Section>}
+      </Section></div>}
 
       {/* Bills — omit if none */}
       {billEmails.length > 0 && <Section title="Bills Detected" delay={400} loaded={loaded}>
         <div style={{ background: "rgba(99,102,241,0.04)", border: "1px solid rgba(99,102,241,0.12)", borderRadius: 12, padding: "16px 20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
-            <span style={{ fontSize: 13, color: "#a5b4fc", fontWeight: 500 }}>{billEmails.length} payments found</span>
-            <span style={{ fontSize: 18, fontWeight: 600, color: "#e2e8f0" }}>${totalBills.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            <span style={{ fontSize: 13, color: "#a5b4fc", fontWeight: 500 }}>{billEmails.length} payment{billEmails.length !== 1 ? "s" : ""} found</span>
+            {totalBills > 0 && <span style={{ fontSize: 18, fontWeight: 600, color: "#e2e8f0" }}>${totalBills.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {billEmails.map((email, i) => {
-              const typeInfo = typeLabels[email.extractedBill.type];
+            {billEmails.filter(e => e.extractedBill).map((email, i) => {
+              const typeInfo = typeLabels[email.extractedBill.type] || typeLabels.expense;
               return (
-                <div key={i} onClick={() => { const accIdx = emailAccounts.findIndex(a => a.color === email.accountColor); setActiveAccount(accIdx); setSelectedEmail(email); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8, cursor: "pointer", transition: "background 0.15s ease" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}>
+                <div key={i} onClick={() => { setActiveAccount(email._accIdx); const original = emailAccounts[email._accIdx]?.important?.find(e => e.id === email.id); setSelectedEmail(original || email); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8, cursor: "pointer", transition: "background 0.15s ease" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}>
                   <div style={{ width: 3, height: 24, borderRadius: 2, background: email.accountColor }} />
                   <span style={{ fontSize: 13, fontWeight: 500, color: "#e2e8f0", flex: 1 }}>{email.extractedBill.payee}</span>
                   <span style={{ fontSize: 10, fontWeight: 600, color: typeInfo.color, background: typeInfo.color + "15", padding: "2px 7px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{typeInfo.label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", minWidth: 80, textAlign: "right" }}>${email.extractedBill.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-                  <span style={{ fontSize: 11, color: "#64748b", minWidth: 50, textAlign: "right" }}>{new Date(email.extractedBill.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  {email.extractedBill.amount != null ? <span style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", minWidth: 80, textAlign: "right" }}>${email.extractedBill.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span> : <span style={{ fontSize: 12, color: "#64748b", minWidth: 80, textAlign: "right", fontStyle: "italic" }}>See email</span>}
+                  <span style={{ fontSize: 11, color: "#64748b", minWidth: 50, textAlign: "right" }}>{email.extractedBill.due_date ? new Date(email.extractedBill.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
                 </div>
               );
             })}
@@ -728,11 +915,12 @@ export default function Dashboard() {
         {d.calendar?.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {d.calendar.map((event, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: event.flag === "Conflict" ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.02)", border: `1px solid ${event.flag === "Conflict" ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.05)"}`, borderRadius: 10 }}>
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: event.flag === "Conflict" ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.02)", border: `1px solid ${event.flag === "Conflict" ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.05)"}`, borderRadius: 10, opacity: event.passed ? 0.4 : 1, transition: "opacity 0.2s ease" }}>
                 <div style={{ width: 3, height: 36, borderRadius: 2, background: event.color, flexShrink: 0 }} />
                 <div style={{ minWidth: 72 }}><div style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9" }}>{event.time}</div><div style={{ fontSize: 11, color: "#64748b" }}>{event.duration}</div></div>
-                <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500, color: "#e2e8f0" }}>{event.title}</div><div style={{ fontSize: 11, color: "#64748b" }}>{event.source}</div></div>
-                {event.flag && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: event.flag === "Conflict" ? "#fca5a5" : "#fcd34d", background: event.flag === "Conflict" ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.1)", padding: "4px 8px", borderRadius: 6 }}>{event.flag}</div>}
+                <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500, color: "#e2e8f0", textDecoration: event.passed ? "line-through" : "none" }}>{event.title}</div><div style={{ fontSize: 11, color: "#64748b" }}>{event.source}</div></div>
+                {event.passed && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: "#64748b", background: "rgba(255,255,255,0.05)", padding: "4px 8px", borderRadius: 6 }}>Done</div>}
+                {!event.passed && event.flag && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: event.flag === "Conflict" ? "#fca5a5" : "#fcd34d", background: event.flag === "Conflict" ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.1)", padding: "4px 8px", borderRadius: 6 }}>{event.flag}</div>}
               </div>
             ))}
           </div>
@@ -746,12 +934,37 @@ export default function Dashboard() {
         <Section title="Other Deadlines" delay={600} loaded={loaded}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {d.deadlines.map((dl, i) => {
-              const s = urgencyStyles[dl.urgency];
+              const dateStr = dl.due_date || dl.due;
+              const s = urgencyStyles[dl.urgency] || urgencyStyles.low;
+              // Match canvas/academic deadlines to CTM entries by title
+              const ctmMatch = (dl.source === "canvas" || dl.type === "academic") && !dl.email_id
+                ? (d.ctm?.upcoming || []).find(t => dl.title.includes(t.title) || t.title.includes(dl.title))
+                : null;
+              const isClickable = !!(dl.email_id || ctmMatch);
+              const handleDeadlineClick = () => {
+                if (ctmMatch) {
+                  setExpandedTask(ctmMatch.id);
+                  ctmSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  return;
+                }
+                if (!dl.email_id) return;
+                // Find which account and email this deadline links to
+                const accIdx = emailAccounts.findIndex(acc => acc.important?.some(e => e.id === dl.email_id));
+                if (accIdx === -1) return;
+                const email = emailAccounts[accIdx].important.find(e => e.id === dl.email_id);
+                if (!email) return;
+                setActiveAccount(accIdx);
+                setSelectedEmail(email);
+              };
               return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: s.bg, border: `1px solid ${s.border}22`, borderRadius: 10 }}>
+                <div key={i} onClick={handleDeadlineClick}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: s.bg, border: `1px solid ${s.border}22`, borderRadius: 10, cursor: isClickable ? "pointer" : "default", transition: "all 0.15s ease" }}
+                  onMouseEnter={e => { if (isClickable) e.currentTarget.style.background = s.bg.replace("0.1", "0.18").replace("0.08", "0.14"); }}
+                  onMouseLeave={e => { e.currentTarget.style.background = s.bg; }}
+                >
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: s.dot, flexShrink: 0 }} />
                   <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500, color: "#e2e8f0" }}>{dl.title}</div><div style={{ fontSize: 11, color: "#64748b" }}>{dl.source}</div></div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: s.text }}>{dl.due}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: s.text }}>{formatRelativeDate(dateStr)}</div>
                 </div>
               );
             })}
@@ -774,8 +987,8 @@ export default function Dashboard() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {currentAccount.important.map((email, i) => {
-            const s = urgencyStyles[email.urgency];
-            const isOpen = selectedEmail === email;
+            const s = urgencyStyles[email.urgency] || urgencyStyles.low;
+            const isOpen = selectedEmail?.id === email.id;
             return (
               <div key={i} onClick={() => setSelectedEmail(isOpen ? null : email)}
                 style={{
@@ -803,7 +1016,7 @@ export default function Dashboard() {
                     </svg>
                   </div>
                 </div>
-                {isOpen && <EmailBody email={email} />}
+                {isOpen && <EmailBody email={email} model={d.model} />}
               </div>
             );
           })}
