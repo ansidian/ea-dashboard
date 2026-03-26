@@ -379,17 +379,29 @@ function EmailIframe({ html }) {
 
 function useEmailBody(email) {
   const emailKey = email.uid || email.id;
-  // Track which key the result belongs to, so stale results don't show
-  const [result, setResult] = useState({ key: null, body: null, loading: false });
+  // Track which key the result belongs to
+  const [result, setResult] = useState({
+    key: null,
+    body: null,
+    loading: false,
+  });
 
   useEffect(() => {
     if (email.fullBody) return;
     let cancelled = false;
     getEmailBody(emailKey)
-      .then(res => { if (!cancelled) setResult({ key: emailKey, body: res.html_body, loading: false }); })
-      .catch(() => { if (!cancelled) setResult({ key: emailKey, body: null, loading: false }); });
-    return () => { cancelled = true; };
-  }, [emailKey]); // eslint-disable-line react-hooks/exhaustive-deps
+      .then((res) => {
+        if (!cancelled)
+          setResult({ key: emailKey, body: res.html_body, loading: false });
+      })
+      .catch(() => {
+        if (!cancelled)
+          setResult({ key: emailKey, body: null, loading: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [emailKey]);
 
   if (email.fullBody) return { body: email.fullBody, loading: false };
   // If result is for a different key, we're loading
@@ -397,22 +409,70 @@ function useEmailBody(email) {
   return { body: result.body, loading: false };
 }
 
-function EmailBody({ email, model }) {
+function EmailBody({ email, model, onLoaded }) {
   const { body, loading: loadingBody } = useEmailBody(email);
   const isHtml = body && /<[a-z!\/]/i.test(body);
+  const notifiedRef = useRef(false);
+
+  useEffect(() => {
+    if (!loadingBody && !notifiedRef.current) {
+      notifiedRef.current = true;
+
+      setTimeout(() => onLoaded?.(), 75);
+    }
+  }, [loadingBody]);
 
   return (
-    <div onClick={e => e.stopPropagation()} style={{ animation: "fadeIn 0.2s ease", borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: 12, paddingTop: 14 }}>
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        animation: "fadeIn 0.2s ease",
+        borderTop: "1px solid rgba(255,255,255,0.05)",
+        marginTop: 12,
+        paddingTop: 14,
+      }}
+    >
       {email.preview && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 12, padding: "10px 12px", background: "rgba(251,191,36,0.04)", borderRadius: 8, border: "1px solid rgba(251,191,36,0.08)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 6,
+            marginBottom: 12,
+            padding: "10px 12px",
+            background: "rgba(251,191,36,0.04)",
+            borderRadius: 8,
+            border: "1px solid rgba(251,191,36,0.08)",
+          }}
+        >
           <span style={{ fontSize: 11, marginTop: 1 }}>✨</span>
-          <span style={{ fontSize: 12.5, color: "#cbd5e1", lineHeight: 1.6 }}>{email.preview}</span>
+          <span style={{ fontSize: 12.5, color: "#cbd5e1", lineHeight: 1.6 }}>
+            {email.preview}
+          </span>
         </div>
       )}
       {loadingBody ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0" }}>
-          <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-          <span style={{ fontSize: 12, color: "#64748b" }}>Loading email...</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 0",
+          }}
+        >
+          <div
+            style={{
+              width: 14,
+              height: 14,
+              border: "2px solid rgba(255,255,255,0.1)",
+              borderTopColor: "#818cf8",
+              borderRadius: "50%",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          <span style={{ fontSize: 12, color: "#64748b" }}>
+            Loading email...
+          </span>
         </div>
       ) : body ? (
         isHtml ? (
@@ -421,9 +481,15 @@ function EmailBody({ email, model }) {
           <pre className="email-text">{body}</pre>
         )
       ) : (
-        <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Email body unavailable</div>
+        <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>
+          Email body unavailable
+        </div>
       )}
-      {email.hasBill && email.extractedBill && <div style={{ marginTop: 10 }}><BillBadge bill={email.extractedBill} model={model} /></div>}
+      {email.hasBill && email.extractedBill && (
+        <div style={{ marginTop: 10 }}>
+          <BillBadge bill={email.extractedBill} model={model} />
+        </div>
+      )}
     </div>
   );
 }
@@ -479,34 +545,40 @@ export default function Dashboard() {
   const ctmSectionRef = useRef(null);
   const historyTriggerRef = useRef(null);
 
-  useEffect(() => {
-    if (selectedEmail && emailSectionRef.current) {
-      emailSectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [selectedEmail]);
+  // Scroll is handled by EmailBody once the body finishes loading (or immediately if already cached)
 
   useEffect(() => {
-    getSettings().then(s => {
-      const id = s?.claude_model || "claude-haiku-4-5-20251001";
-      // "claude-haiku-4-5-20251001" → "Claude Haiku 4.5"
-      const name = id.replace(/^claude-/, "").replace(/-\d{8,}$/, "")
-        .replace(/(\w+)-(\d+)-(\d+)/, (_, n, maj, min) => `${n.charAt(0).toUpperCase() + n.slice(1)} ${maj}.${min}`)
-        .replace(/(\w+)$/, m => m.charAt(0).toUpperCase() + m.slice(1));
-      setModelLabel(`Claude ${name}`);
-    }).catch(() => {});
+    getSettings()
+      .then((s) => {
+        const id = s?.claude_model || "claude-haiku-4-5-20251001";
+        // "claude-haiku-4-5-20251001" → "Claude Haiku 4.5"
+        const name = id
+          .replace(/^claude-/, "")
+          .replace(/-\d{8,}$/, "")
+          .replace(
+            /(\w+)-(\d+)-(\d+)/,
+            (_, n, maj, min) =>
+              `${n.charAt(0).toUpperCase() + n.slice(1)} ${maj}.${min}`,
+          )
+          .replace(/(\w+)$/, (m) => m.charAt(0).toUpperCase() + m.slice(1));
+        setModelLabel(`Claude ${name}`);
+      })
+      .catch(() => {});
 
     // Resume polling if a generation is already in progress (e.g. navigated away and back)
-    checkInProgress().then(({ generating: inProgress, id, progress }) => {
-      if (inProgress && id) {
-        if (progress) setGenProgress(progress);
-        startPolling(id);
-      }
-    }).catch(() => {});
+    checkInProgress()
+      .then(({ generating: inProgress, id, progress }) => {
+        if (inProgress && id) {
+          if (progress) setGenProgress(progress);
+          startPolling(id);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     getLatestBriefing()
-      .then(res => {
+      .then((res) => {
         const transformed = transformBriefing(res.briefing);
         setBriefing(transformed);
         setLatestBriefing(transformed);
@@ -516,7 +588,7 @@ export default function Dashboard() {
         sessionStorage.removeItem("ea_settings_changed");
         setRefreshing(true);
         quickRefresh()
-          .then(result => {
+          .then((result) => {
             const updated = transformBriefing(result.briefingJson);
             setBriefing(updated);
             setLatestBriefing(updated);
@@ -525,7 +597,7 @@ export default function Dashboard() {
           .catch(() => {})
           .finally(() => setRefreshing(false));
       })
-      .catch(err => setError(err.message))
+      .catch((err) => setError(err.message))
       .finally(() => {
         setLoading(false);
         setTimeout(() => setLoaded(true), 100);
@@ -625,15 +697,30 @@ export default function Dashboard() {
     holdTimerRef.current = null;
     if (!cancel) handleQuickRefresh();
   }
-  function onPointerDown() { startHold(); }
-  function onPointerUp() { endHold(false); }
-  function onPointerLeave() { endHold(true); }
+  function onPointerDown() {
+    startHold();
+  }
+  function onPointerUp() {
+    endHold(false);
+  }
+  function onPointerLeave() {
+    endHold(true);
+  }
 
   // R hotkey: tap = quick refresh, hold = full generation (same as button)
   useEffect(() => {
     function onKeyDown(e) {
-      if (e.repeat || e.key !== "r" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if (holdConfirm) { handleFullGeneration(); return; }
+      if (
+        e.repeat ||
+        e.key !== "r" ||
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "TEXTAREA"
+      )
+        return;
+      if (holdConfirm) {
+        handleFullGeneration();
+        return;
+      }
       startHold();
     }
     function onKeyUp(e) {
@@ -642,67 +729,207 @@ export default function Dashboard() {
     }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
-    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   });
 
   if (loading) return <LoadingSkeleton />;
-  if (error && !briefing) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
-  if (!briefing) return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", color: "#e2e8f0", fontFamily: "'DM Sans', sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: 24 }}>
-      <div style={{ fontSize: 48 }}>☀️</div>
-      <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, color: "#f8fafc", margin: 0 }}>No briefings yet</h1>
-      <p style={{ fontSize: 14, color: "#64748b", margin: 0, textAlign: "center", maxWidth: 400 }}>Connect your email accounts in Settings, then generate your first briefing.</p>
-      <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-        <button onClick={handleFullGeneration} className="btn-primary">Generate First Briefing</button>
-        <a href="/settings" className="btn-secondary">Settings</a>
+  if (error && !briefing)
+    return (
+      <ErrorState message={error} onRetry={() => window.location.reload()} />
+    );
+  if (!briefing)
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background:
+            "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)",
+          color: "#e2e8f0",
+          fontFamily: "'DM Sans', sans-serif",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+          padding: 24,
+        }}
+      >
+        <div style={{ fontSize: 48 }}>☀️</div>
+        <h1
+          style={{
+            fontFamily: "'DM Serif Display', Georgia, serif",
+            fontSize: 28,
+            fontWeight: 400,
+            color: "#f8fafc",
+            margin: 0,
+          }}
+        >
+          No briefings yet
+        </h1>
+        <p
+          style={{
+            fontSize: 14,
+            color: "#64748b",
+            margin: 0,
+            textAlign: "center",
+            maxWidth: 400,
+          }}
+        >
+          Connect your email accounts in Settings, then generate your first
+          briefing.
+        </p>
+        <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+          <button onClick={handleFullGeneration} className="btn-primary">
+            Generate First Briefing
+          </button>
+          <a href="/settings" className="btn-secondary">
+            Settings
+          </a>
+        </div>
+        {generating && (
+          <div style={{ marginTop: 16 }}>
+            <RefreshBanner progress={genProgress} />
+          </div>
+        )}
       </div>
-      {generating && <div style={{ marginTop: 16 }}><RefreshBanner progress={genProgress} /></div>}
-    </div>
-  );
+    );
 
   const d = briefing;
   const emailAccounts = d.emails?.accounts || [];
-  const billEmails = emailAccounts.flatMap((acc, accIdx) => (acc.important || []).filter(e => e.hasBill).map(e => ({ ...e, accountColor: acc.color, _accIdx: accIdx })));
-  const totalBills = billEmails.reduce((sum, e) => sum + (e.extractedBill?.amount || 0), 0);
-  const currentAccount = emailAccounts[activeAccount] || { important: [], name: "", icon: "", color: "#818cf8", unread: 0 };
-
+  const billEmails = emailAccounts.flatMap((acc, accIdx) =>
+    (acc.important || [])
+      .filter((e) => e.hasBill)
+      .map((e) => ({ ...e, accountColor: acc.color, _accIdx: accIdx })),
+  );
+  const totalBills = billEmails.reduce(
+    (sum, e) => sum + (e.extractedBill?.amount || 0),
+    0,
+  );
+  const currentAccount = emailAccounts[activeAccount] || {
+    important: [],
+    name: "",
+    icon: "",
+    color: "#818cf8",
+    unread: 0,
+  };
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)", color: "#e2e8f0", fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", padding: "24px", maxWidth: 1100, margin: "0 auto" }}>
-
+    <div
+      style={{
+        minHeight: "100vh",
+        background:
+          "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)",
+        color: "#e2e8f0",
+        fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
+        padding: "24px",
+        maxWidth: 1100,
+        margin: "0 auto",
+      }}
+    >
       {generating && <RefreshBanner progress={genProgress} />}
-
-
 
       {/* Full generation confirm dialog */}
       {holdConfirm && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))',
-          border: '1px solid rgba(99,102,241,0.25)',
-          borderRadius: 12, padding: '14px 20px', marginBottom: 20,
-          display: 'flex', alignItems: 'center', gap: 12,
-          animation: 'fadeIn 0.2s ease',
-        }}>
+        <div
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))",
+            border: "1px solid rgba(99,102,241,0.25)",
+            borderRadius: 12,
+            padding: "14px 20px",
+            marginBottom: 20,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            animation: "fadeIn 0.2s ease",
+          }}
+        >
           <span style={{ fontSize: 16 }}>🧠</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#c7d2fe' }}>Generate fresh AI briefing?</div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>Re-fetches new emails and analyzes with {modelLabel} (uses an API call)</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#c7d2fe" }}>
+              Generate fresh AI briefing?
+            </div>
+            <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
+              Re-fetches new emails and analyzes with {modelLabel} (uses an API
+              call)
+            </div>
           </div>
-          <button className="btn-primary" onClick={handleFullGeneration} style={{ padding: '8px 16px', fontSize: 12 }}>Generate</button>
-          <button className="btn-secondary" onClick={() => setHoldConfirm(false)} style={{ padding: '8px 12px', fontSize: 12 }}>Cancel</button>
+          <button
+            className="btn-primary"
+            onClick={handleFullGeneration}
+            style={{ padding: "8px 16px", fontSize: 12 }}
+          >
+            Generate
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={() => setHoldConfirm(false)}
+            style={{ padding: "8px 12px", fontSize: 12 }}
+          >
+            Cancel
+          </button>
         </div>
       )}
 
       {/* Header */}
-      <div style={{ opacity: loaded ? 1 : 0, transform: loaded ? "translateY(0)" : "translateY(12px)", transition: "all 0.6s cubic-bezier(0.16,1,0.3,1)", marginBottom: 32 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div
+        style={{
+          opacity: loaded ? 1 : 0,
+          transform: loaded ? "translateY(0)" : "translateY(12px)",
+          transition: "all 0.6s cubic-bezier(0.16,1,0.3,1)",
+          marginBottom: 32,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+          }}
+        >
           <div>
-            <div style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#64748b", marginBottom: 8, fontWeight: 600 }}>{getGreeting().label}</div>
-            <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 36, fontWeight: 400, margin: 0, color: "#f8fafc", lineHeight: 1.1 }}>{getGreeting().greeting}</h1>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, flexWrap: "wrap" }}>
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 3,
+                textTransform: "uppercase",
+                color: "#64748b",
+                marginBottom: 8,
+                fontWeight: 600,
+              }}
+            >
+              {getGreeting().label}
+            </div>
+            <h1
+              style={{
+                fontFamily: "'DM Serif Display', Georgia, serif",
+                fontSize: 36,
+                fontWeight: 400,
+                margin: 0,
+                color: "#f8fafc",
+                lineHeight: 1.1,
+              }}
+            >
+              {getGreeting().greeting}
+            </h1>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginTop: 6,
+                flexWrap: "wrap",
+              }}
+            >
               <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
-                {d.dataUpdatedAt ? `Data updated ${timeAgo(d.dataUpdatedAt)}` : d.generatedAt}
-                {d.aiGeneratedAt && ` · AI analysis from ${formatShortTime(d.aiGeneratedAt)}`}
+                {d.dataUpdatedAt
+                  ? `Data updated ${timeAgo(d.dataUpdatedAt)}`
+                  : d.generatedAt}
+                {d.aiGeneratedAt &&
+                  ` · AI analysis from ${formatShortTime(d.aiGeneratedAt)}`}
               </p>
               <button
                 className="btn-header"
@@ -712,47 +939,101 @@ export default function Dashboard() {
                 disabled={refreshing || generating}
                 title="Tap to refresh data · Hold to regenerate AI briefing · Hotkey: R"
                 style={{
-                  position: "relative", overflow: "hidden",
-                  background: refreshing ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.04)",
+                  position: "relative",
+                  overflow: "hidden",
+                  background: refreshing
+                    ? "rgba(99,102,241,0.12)"
+                    : "rgba(255,255,255,0.04)",
                   border: `1px solid ${refreshing ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.08)"}`,
-                  borderRadius: 6, padding: "4px 10px", fontSize: 11, color: refreshing ? "#a5b4fc" : "#94a3b8",
-                  cursor: (refreshing || generating) ? "not-allowed" : "pointer",
-                  display: "flex", alignItems: "center", gap: 4,
-                  opacity: (refreshing || generating) ? 0.7 : 1, fontWeight: 500,
-                  transition: "color 0.2s ease, opacity 0.2s ease, border-color 0.2s ease",
-                  userSelect: "none", touchAction: "none",
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  color: refreshing ? "#a5b4fc" : "#94a3b8",
+                  cursor: refreshing || generating ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  opacity: refreshing || generating ? 0.7 : 1,
+                  fontWeight: 500,
+                  transition:
+                    "color 0.2s ease, opacity 0.2s ease, border-color 0.2s ease",
+                  userSelect: "none",
+                  touchAction: "none",
                 }}
               >
                 {holdProgress > 0 && (
-                  <div style={{
-                    position: "absolute", left: 0, top: 0, bottom: 0,
-                    width: `${holdProgress}%`,
-                    background: "linear-gradient(90deg, rgba(99,102,241,0.2), rgba(139,92,246,0.3))",
-                    transition: "none",
-                    borderRadius: 6,
-                  }} />
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: `${holdProgress}%`,
+                      background:
+                        "linear-gradient(90deg, rgba(99,102,241,0.2), rgba(139,92,246,0.3))",
+                      transition: "none",
+                      borderRadius: 6,
+                    }}
+                  />
                 )}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none", position: "relative" }}>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    animation: refreshing
+                      ? "spin 0.8s linear infinite"
+                      : "none",
+                    position: "relative",
+                  }}
+                >
                   <polyline points="23 4 23 10 17 10" />
                   <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
                 </svg>
-                <span style={{ position: "relative" }}>{holdProgress > 0 ? "Hold for new briefing..." : refreshing ? "Updating..." : "Refresh"}</span>
+                <span style={{ position: "relative" }}>
+                  {holdProgress > 0
+                    ? "Hold for new briefing..."
+                    : refreshing
+                      ? "Updating..."
+                      : "Refresh"}
+                </span>
               </button>
               <div ref={historyTriggerRef} style={{ position: "relative" }}>
                 <button
                   className="btn-header"
                   onClick={() => setHistoryOpen((v) => !v)}
                   style={{
-                    background: historyOpen ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.04)",
+                    background: historyOpen
+                      ? "rgba(99,102,241,0.12)"
+                      : "rgba(255,255,255,0.04)",
                     border: `1px solid ${historyOpen ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.08)"}`,
-                    borderRadius: 6, padding: "4px 10px", fontSize: 11,
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: 11,
                     color: historyOpen ? "#a5b4fc" : "#94a3b8",
-                    cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
-                    fontWeight: 500, transition: "all 0.2s ease",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontWeight: 500,
+                    transition: "all 0.2s ease",
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
@@ -771,42 +1052,100 @@ export default function Dashboard() {
                   />
                 )}
               </div>
-              <a href="/settings" className="btn-header" style={{ textDecoration: "none" }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <a
+                href="/settings"
+                className="btn-header"
+                style={{ textDecoration: "none" }}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
                 </svg>
               </a>
             </div>
           </div>
-          <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: "16px 20px", textAlign: "center", minWidth: 100 }}>
+          <div
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 16,
+              padding: "16px 20px",
+              textAlign: "center",
+              minWidth: 100,
+            }}
+          >
             <div style={{ fontSize: 36, lineHeight: 1 }}>☀️</div>
-            <div style={{ fontSize: 28, fontWeight: 300, color: "#f8fafc", marginTop: 4 }}>{d.weather.temp}°</div>
-            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{d.weather.high}° / {d.weather.low}°</div>
+            <div
+              style={{
+                fontSize: 28,
+                fontWeight: 300,
+                color: "#f8fafc",
+                marginTop: 4,
+              }}
+            >
+              {d.weather.temp}°
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+              {d.weather.high}° / {d.weather.low}°
+            </div>
           </div>
         </div>
       </div>
 
       {/* Viewing past briefing banner */}
       {viewingPast && (
-        <div style={{
-          background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)",
-          borderRadius: 10, padding: "10px 16px", marginBottom: 20,
-          display: "flex", alignItems: "center", gap: 8,
-          animation: "fadeIn 0.2s ease",
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div
+          style={{
+            background: "rgba(99,102,241,0.06)",
+            border: "1px solid rgba(99,102,241,0.15)",
+            borderRadius: 10,
+            padding: "10px 16px",
+            marginBottom: 20,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            animation: "fadeIn 0.2s ease",
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#a5b4fc"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
           <span style={{ fontSize: 12, color: "#a5b4fc", flex: 1 }}>
-            Viewing briefing from {(() => {
+            Viewing briefing from{" "}
+            {(() => {
               const d = new Date(viewingPast.generated_at + "Z");
-              const today = new Date(); today.setHours(0,0,0,0);
-              const itemDate = new Date(d); itemDate.setHours(0,0,0,0);
-              const dayLabel = itemDate.getTime() === today.getTime() ? "Today" :
-                itemDate.getTime() === today.getTime() - 86400000 ? "Yesterday" :
-                d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const itemDate = new Date(d);
+              itemDate.setHours(0, 0, 0, 0);
+              const dayLabel =
+                itemDate.getTime() === today.getTime()
+                  ? "Today"
+                  : itemDate.getTime() === today.getTime() - 86400000
+                    ? "Yesterday"
+                    : d.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      });
               return `${dayLabel} ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
             })()}
           </span>
@@ -816,9 +1155,15 @@ export default function Dashboard() {
               setViewingPast(null);
             }}
             style={{
-              background: "none", border: "none", color: "#818cf8",
-              fontSize: 12, fontWeight: 500, cursor: "pointer", padding: 0,
-              textDecoration: "underline", textUnderlineOffset: 2,
+              background: "none",
+              border: "none",
+              color: "#818cf8",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              padding: 0,
+              textDecoration: "underline",
+              textUnderlineOffset: 2,
             }}
           >
             Back to latest
@@ -831,8 +1176,27 @@ export default function Dashboard() {
         <Section title="Claude's Take" delay={200} loaded={loaded}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {d.aiInsights.map((insight, i) => (
-              <div key={i} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px", fontSize: 13.5, lineHeight: 1.6, color: "#cbd5e1", display: "flex", gap: 12, alignItems: "flex-start", opacity: loaded ? 1 : 0, transform: loaded ? "translateY(0)" : "translateY(8px)", transition: `all 0.5s cubic-bezier(0.16,1,0.3,1) ${300 + i * 80}ms` }}>
-                <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{insight.icon}</span>
+              <div
+                key={i}
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  borderRadius: 12,
+                  padding: "14px 16px",
+                  fontSize: 13.5,
+                  lineHeight: 1.6,
+                  color: "#cbd5e1",
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  opacity: loaded ? 1 : 0,
+                  transform: loaded ? "translateY(0)" : "translateY(8px)",
+                  transition: `all 0.5s cubic-bezier(0.16,1,0.3,1) ${300 + i * 80}ms`,
+                }}
+              >
+                <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>
+                  {insight.icon}
+                </span>
                 <span>{insight.text}</span>
               </div>
             ))}
@@ -841,69 +1205,327 @@ export default function Dashboard() {
       )}
 
       {/* CTM Assignments — omit if none */}
-      {d.ctm?.upcoming?.length > 0 && <div ref={ctmSectionRef}><Section title="Assignments & Deadlines" delay={300} loaded={loaded}>
-        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 20px", marginBottom: 12 }}>
-          <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
-            <div><span style={{ fontSize: 24, fontWeight: 600, color: "#f8fafc" }}>{d.ctm.stats.incomplete}</span><span style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}>incomplete</span></div>
-            <div><span style={{ fontSize: 24, fontWeight: 600, color: "#fca5a5" }}>{d.ctm.stats.dueToday}</span><span style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}>due today</span></div>
-            <div><span style={{ fontSize: 24, fontWeight: 600, color: "#fcd34d" }}>{d.ctm.stats.dueThisWeek}</span><span style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}>this week</span></div>
-            <div style={{ marginLeft: "auto" }}>
-              <a href="https://ctm.andysu.tech" target="_blank" rel="noopener noreferrer" style={{
-                background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.15)",
-                borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer",
-                color: "#a78bfa", display: "flex", alignItems: "center", gap: 4, textDecoration: "none",
-                transition: "all 0.2s ease",
+      {d.ctm?.upcoming?.length > 0 && (
+        <div ref={ctmSectionRef}>
+          <Section title="Assignments & Deadlines" delay={300} loaded={loaded}>
+            <div
+              style={{
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: 12,
+                padding: "16px 20px",
+                marginBottom: 12,
               }}
-                onMouseEnter={e => { e.currentTarget.style.background = "rgba(167,139,250,0.18)"; e.currentTarget.style.borderColor = "rgba(167,139,250,0.35)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(167,139,250,0.08)"; e.currentTarget.style.borderColor = "rgba(167,139,250,0.15)"; e.currentTarget.style.transform = "none"; }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: 16,
+                  alignItems: "baseline",
+                  flexWrap: "wrap",
+                }}
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
-                CTM
-              </a>
+                <div>
+                  <span
+                    style={{ fontSize: 24, fontWeight: 600, color: "#f8fafc" }}
+                  >
+                    {d.ctm.stats.incomplete}
+                  </span>
+                  <span
+                    style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}
+                  >
+                    incomplete
+                  </span>
+                </div>
+                <div>
+                  <span
+                    style={{ fontSize: 24, fontWeight: 600, color: "#fca5a5" }}
+                  >
+                    {d.ctm.stats.dueToday}
+                  </span>
+                  <span
+                    style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}
+                  >
+                    due today
+                  </span>
+                </div>
+                <div>
+                  <span
+                    style={{ fontSize: 24, fontWeight: 600, color: "#fcd34d" }}
+                  >
+                    {d.ctm.stats.dueThisWeek}
+                  </span>
+                  <span
+                    style={{ fontSize: 12, color: "#64748b", marginLeft: 6 }}
+                  >
+                    this week
+                  </span>
+                </div>
+                <div style={{ marginLeft: "auto" }}>
+                  <a
+                    href="https://ctm.andysu.tech"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      background: "rgba(167,139,250,0.08)",
+                      border: "1px solid rgba(167,139,250,0.15)",
+                      borderRadius: 6,
+                      padding: "5px 10px",
+                      fontSize: 11,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      color: "#a78bfa",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      textDecoration: "none",
+                      transition: "all 0.2s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background =
+                        "rgba(167,139,250,0.18)";
+                      e.currentTarget.style.borderColor =
+                        "rgba(167,139,250,0.35)";
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background =
+                        "rgba(167,139,250,0.08)";
+                      e.currentTarget.style.borderColor =
+                        "rgba(167,139,250,0.15)";
+                      e.currentTarget.style.transform = "none";
+                    }}
+                  >
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                    </svg>
+                    CTM
+                  </a>
+                </div>
+              </div>
             </div>
-          </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {d.ctm.upcoming.map((task) => (
+                <CTMCard
+                  key={task.id}
+                  task={task}
+                  expanded={expandedTask === task.id}
+                  onToggle={() =>
+                    setExpandedTask(expandedTask === task.id ? null : task.id)
+                  }
+                />
+              ))}
+            </div>
+          </Section>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {d.ctm.upcoming.map(task => (
-            <CTMCard key={task.id} task={task} expanded={expandedTask === task.id} onToggle={() => setExpandedTask(expandedTask === task.id ? null : task.id)} />
-          ))}
-        </div>
-      </Section></div>}
+      )}
 
       {/* Bills — omit if none */}
-      {billEmails.length > 0 && <Section title="Bills Detected" delay={400} loaded={loaded}>
-        <div style={{ background: "rgba(99,102,241,0.04)", border: "1px solid rgba(99,102,241,0.12)", borderRadius: 12, padding: "16px 20px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
-            <span style={{ fontSize: 13, color: "#a5b4fc", fontWeight: 500 }}>{billEmails.length} payment{billEmails.length !== 1 ? "s" : ""} found</span>
-            {totalBills > 0 && <span style={{ fontSize: 18, fontWeight: 600, color: "#e2e8f0" }}>${totalBills.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>}
+      {billEmails.length > 0 && (
+        <Section title="Bills Detected" delay={400} loaded={loaded}>
+          <div
+            style={{
+              background: "rgba(99,102,241,0.04)",
+              border: "1px solid rgba(99,102,241,0.12)",
+              borderRadius: 12,
+              padding: "16px 20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                marginBottom: 14,
+              }}
+            >
+              <span style={{ fontSize: 13, color: "#a5b4fc", fontWeight: 500 }}>
+                {billEmails.length} payment{billEmails.length !== 1 ? "s" : ""}{" "}
+                found
+              </span>
+              {totalBills > 0 && (
+                <span
+                  style={{ fontSize: 18, fontWeight: 600, color: "#e2e8f0" }}
+                >
+                  $
+                  {totalBills.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                  })}
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {billEmails
+                .filter((e) => e.extractedBill)
+                .map((email, i) => {
+                  const typeInfo =
+                    typeLabels[email.extractedBill.type] || typeLabels.expense;
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => {
+                        setActiveAccount(email._accIdx);
+                        const original = emailAccounts[
+                          email._accIdx
+                        ]?.important?.find((e) => e.id === email.id);
+                        setSelectedEmail(original || email);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "10px 12px",
+                        background: "rgba(255,255,255,0.02)",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        transition: "background 0.15s ease",
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background =
+                          "rgba(255,255,255,0.05)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background =
+                          "rgba(255,255,255,0.02)")
+                      }
+                    >
+                      <div
+                        style={{
+                          width: 3,
+                          height: 24,
+                          borderRadius: 2,
+                          background: email.accountColor,
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: "#e2e8f0",
+                          flex: 1,
+                        }}
+                      >
+                        {email.extractedBill.payee}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: typeInfo.color,
+                          background: typeInfo.color + "15",
+                          padding: "2px 7px",
+                          borderRadius: 4,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {typeInfo.label}
+                      </span>
+                      {email.extractedBill.amount != null ? (
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: "#cbd5e1",
+                            minWidth: 80,
+                            textAlign: "right",
+                          }}
+                        >
+                          $
+                          {email.extractedBill.amount.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "#64748b",
+                            minWidth: 80,
+                            textAlign: "right",
+                            fontStyle: "italic",
+                          }}
+                        >
+                          See email
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#64748b",
+                          minWidth: 50,
+                          textAlign: "right",
+                        }}
+                      >
+                        {email.extractedBill.due_date
+                          ? new Date(
+                              email.extractedBill.due_date + "T12:00:00",
+                            ).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })
+                          : ""}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {billEmails.filter(e => e.extractedBill).map((email, i) => {
-              const typeInfo = typeLabels[email.extractedBill.type] || typeLabels.expense;
-              return (
-                <div key={i} onClick={() => { setActiveAccount(email._accIdx); const original = emailAccounts[email._accIdx]?.important?.find(e => e.id === email.id); setSelectedEmail(original || email); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 8, cursor: "pointer", transition: "background 0.15s ease" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"} onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}>
-                  <div style={{ width: 3, height: 24, borderRadius: 2, background: email.accountColor }} />
-                  <span style={{ fontSize: 13, fontWeight: 500, color: "#e2e8f0", flex: 1 }}>{email.extractedBill.payee}</span>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: typeInfo.color, background: typeInfo.color + "15", padding: "2px 7px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{typeInfo.label}</span>
-                  {email.extractedBill.amount != null ? <span style={{ fontSize: 13, fontWeight: 600, color: "#cbd5e1", minWidth: 80, textAlign: "right" }}>${email.extractedBill.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span> : <span style={{ fontSize: 12, color: "#64748b", minWidth: 80, textAlign: "right", fontStyle: "italic" }}>See email</span>}
-                  <span style={{ fontSize: 11, color: "#64748b", minWidth: 50, textAlign: "right" }}>{email.extractedBill.due_date ? new Date(email.extractedBill.due_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </Section>}
+        </Section>
+      )}
 
       {/* Weather */}
-      <Section title={`Weather · ${d.weather?.location || "El Monte, CA"}`} delay={450} loaded={loaded}>
-        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "16px 20px" }}>
-          <p style={{ fontSize: 13.5, color: "#94a3b8", margin: "0 0 14px 0", lineHeight: 1.5 }}>{d.weather.summary}</p>
+      <Section
+        title={`Weather · ${d.weather?.location || "El Monte, CA"}`}
+        delay={450}
+        loaded={loaded}
+      >
+        <div
+          style={{
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: 12,
+            padding: "16px 20px",
+          }}
+        >
+          <p
+            style={{
+              fontSize: 13.5,
+              color: "#94a3b8",
+              margin: "0 0 14px 0",
+              lineHeight: 1.5,
+            }}
+          >
+            {d.weather.summary}
+          </p>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             {d.weather.hourly.map((h, i) => (
               <div key={i} style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>{h.time}</div>
+                <div
+                  style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}
+                >
+                  {h.time}
+                </div>
                 <div style={{ fontSize: 18 }}>{h.icon}</div>
-                <div style={{ fontSize: 13, color: "#e2e8f0", marginTop: 4, fontWeight: 500 }}>{h.temp}°</div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "#e2e8f0",
+                    marginTop: 4,
+                    fontWeight: 500,
+                  }}
+                >
+                  {h.temp}°
+                </div>
               </div>
             ))}
           </div>
@@ -915,17 +1537,106 @@ export default function Dashboard() {
         {d.calendar?.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {d.calendar.map((event, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: event.flag === "Conflict" ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.02)", border: `1px solid ${event.flag === "Conflict" ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.05)"}`, borderRadius: 10, opacity: event.passed ? 0.4 : 1, transition: "opacity 0.2s ease" }}>
-                <div style={{ width: 3, height: 36, borderRadius: 2, background: event.color, flexShrink: 0 }} />
-                <div style={{ minWidth: 72 }}><div style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9" }}>{event.time}</div><div style={{ fontSize: 11, color: "#64748b" }}>{event.duration}</div></div>
-                <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500, color: "#e2e8f0", textDecoration: event.passed ? "line-through" : "none" }}>{event.title}</div><div style={{ fontSize: 11, color: "#64748b" }}>{event.source}</div></div>
-                {event.passed && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: "#64748b", background: "rgba(255,255,255,0.05)", padding: "4px 8px", borderRadius: 6 }}>Done</div>}
-                {!event.passed && event.flag && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: event.flag === "Conflict" ? "#fca5a5" : "#fcd34d", background: event.flag === "Conflict" ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.1)", padding: "4px 8px", borderRadius: 6 }}>{event.flag}</div>}
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "12px 16px",
+                  background:
+                    event.flag === "Conflict"
+                      ? "rgba(239,68,68,0.06)"
+                      : "rgba(255,255,255,0.02)",
+                  border: `1px solid ${event.flag === "Conflict" ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.05)"}`,
+                  borderRadius: 10,
+                  opacity: event.passed ? 0.4 : 1,
+                  transition: "opacity 0.2s ease",
+                }}
+              >
+                <div
+                  style={{
+                    width: 3,
+                    height: 36,
+                    borderRadius: 2,
+                    background: event.color,
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ minWidth: 72 }}>
+                  <div
+                    style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9" }}
+                  >
+                    {event.time}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>
+                    {event.duration}
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 500,
+                      color: "#e2e8f0",
+                      textDecoration: event.passed ? "line-through" : "none",
+                    }}
+                  >
+                    {event.title}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>
+                    {event.source}
+                  </div>
+                </div>
+                {event.passed && (
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      color: "#64748b",
+                      background: "rgba(255,255,255,0.05)",
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                    }}
+                  >
+                    Done
+                  </div>
+                )}
+                {!event.passed && event.flag && (
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                      color: event.flag === "Conflict" ? "#fca5a5" : "#fcd34d",
+                      background:
+                        event.flag === "Conflict"
+                          ? "rgba(239,68,68,0.12)"
+                          : "rgba(245,158,11,0.1)",
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                    }}
+                  >
+                    {event.flag}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ padding: "20px 16px", textAlign: "center", fontSize: 13, color: "#64748b" }}>No events today</div>
+          <div
+            style={{
+              padding: "20px 16px",
+              textAlign: "center",
+              fontSize: 13,
+              color: "#64748b",
+            }}
+          >
+            No events today
+          </div>
         )}
       </Section>
 
@@ -937,34 +1648,89 @@ export default function Dashboard() {
               const dateStr = dl.due_date || dl.due;
               const s = urgencyStyles[dl.urgency] || urgencyStyles.low;
               // Match canvas/academic deadlines to CTM entries by title
-              const ctmMatch = (dl.source === "canvas" || dl.type === "academic") && !dl.email_id
-                ? (d.ctm?.upcoming || []).find(t => dl.title.includes(t.title) || t.title.includes(dl.title))
-                : null;
+              const ctmMatch =
+                (dl.source === "canvas" || dl.type === "academic") &&
+                !dl.email_id
+                  ? (d.ctm?.upcoming || []).find(
+                      (t) =>
+                        dl.title.includes(t.title) ||
+                        t.title.includes(dl.title),
+                    )
+                  : null;
               const isClickable = !!(dl.email_id || ctmMatch);
               const handleDeadlineClick = () => {
                 if (ctmMatch) {
                   setExpandedTask(ctmMatch.id);
-                  ctmSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  ctmSectionRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
                   return;
                 }
                 if (!dl.email_id) return;
                 // Find which account and email this deadline links to
-                const accIdx = emailAccounts.findIndex(acc => acc.important?.some(e => e.id === dl.email_id));
+                const accIdx = emailAccounts.findIndex((acc) =>
+                  acc.important?.some((e) => e.id === dl.email_id),
+                );
                 if (accIdx === -1) return;
-                const email = emailAccounts[accIdx].important.find(e => e.id === dl.email_id);
+                const email = emailAccounts[accIdx].important.find(
+                  (e) => e.id === dl.email_id,
+                );
                 if (!email) return;
                 setActiveAccount(accIdx);
                 setSelectedEmail(email);
               };
               return (
-                <div key={i} onClick={handleDeadlineClick}
-                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: s.bg, border: `1px solid ${s.border}22`, borderRadius: 10, cursor: isClickable ? "pointer" : "default", transition: "all 0.15s ease" }}
-                  onMouseEnter={e => { if (isClickable) e.currentTarget.style.background = s.bg.replace("0.1", "0.18").replace("0.08", "0.14"); }}
-                  onMouseLeave={e => { e.currentTarget.style.background = s.bg; }}
+                <div
+                  key={i}
+                  onClick={handleDeadlineClick}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: "12px 16px",
+                    background: s.bg,
+                    border: `1px solid ${s.border}22`,
+                    borderRadius: 10,
+                    cursor: isClickable ? "pointer" : "default",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (isClickable)
+                      e.currentTarget.style.background = s.bg
+                        .replace("0.1", "0.18")
+                        .replace("0.08", "0.14");
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = s.bg;
+                  }}
                 >
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: s.dot, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500, color: "#e2e8f0" }}>{dl.title}</div><div style={{ fontSize: 11, color: "#64748b" }}>{dl.source}</div></div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: s.text }}>{formatRelativeDate(dateStr)}</div>
+                  <div
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: s.dot,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: 500,
+                        color: "#e2e8f0",
+                      }}
+                    >
+                      {dl.title}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748b" }}>
+                      {dl.source}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: s.text }}>
+                    {formatRelativeDate(dateStr)}
+                  </div>
                 </div>
               );
             })}
@@ -975,13 +1741,56 @@ export default function Dashboard() {
       {/* Email Overview */}
       <div ref={emailSectionRef} />
       <Section title="Email Overview" delay={700} loaded={loaded}>
-        <p style={{ fontSize: 13.5, color: "#94a3b8", margin: "0 0 16px 0" }}>{d.emails?.summary || "No email accounts connected."}</p>
-        <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        <p style={{ fontSize: 13.5, color: "#94a3b8", margin: "0 0 16px 0" }}>
+          {d.emails?.summary || "No email accounts connected."}
+        </p>
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            marginBottom: 16,
+            flexWrap: "wrap",
+          }}
+        >
           {emailAccounts.map((acc, i) => (
-            <button key={i} onClick={() => { setActiveAccount(i); setSelectedEmail(null); }} style={{ background: activeAccount === i ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.03)", border: `1px solid ${activeAccount === i ? acc.color + "66" : "rgba(255,255,255,0.06)"}`, borderRadius: 10, padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "all 0.2s ease", color: activeAccount === i ? "#f1f5f9" : "#94a3b8" }}>
+            <button
+              key={i}
+              onClick={() => {
+                setActiveAccount(i);
+                setSelectedEmail(null);
+              }}
+              style={{
+                background:
+                  activeAccount === i
+                    ? "rgba(255,255,255,0.1)"
+                    : "rgba(255,255,255,0.03)",
+                border: `1px solid ${activeAccount === i ? acc.color + "66" : "rgba(255,255,255,0.06)"}`,
+                borderRadius: 10,
+                padding: "10px 14px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                transition: "all 0.2s ease",
+                color: activeAccount === i ? "#f1f5f9" : "#94a3b8",
+              }}
+            >
               <span style={{ fontSize: 15 }}>{acc.icon}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 500 }}>{acc.name}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, background: acc.color + "22", color: acc.color, padding: "2px 7px", borderRadius: 20 }}>{acc.unread}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 500 }}>
+                {acc.name}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  background: acc.color + "22",
+                  color: acc.color,
+                  padding: "2px 7px",
+                  borderRadius: 20,
+                }}
+              >
+                {acc.unread}
+              </span>
             </button>
           ))}
         </div>
@@ -990,40 +1799,172 @@ export default function Dashboard() {
             const s = urgencyStyles[email.urgency] || urgencyStyles.low;
             const isOpen = selectedEmail?.id === email.id;
             return (
-              <div key={i} onClick={() => setSelectedEmail(isOpen ? null : email)}
+              <div
+                key={i}
+                data-email-id={email.id}
+                onClick={() => setSelectedEmail(isOpen ? null : email)}
                 style={{
-                  background: isOpen ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)",
+                  background: isOpen
+                    ? "rgba(255,255,255,0.04)"
+                    : "rgba(255,255,255,0.02)",
                   border: `1px solid ${isOpen ? currentAccount.color + "33" : "rgba(255,255,255,0.06)"}`,
-                  borderRadius: 10, padding: "14px 16px", cursor: "pointer", transition: "all 0.15s ease",
+                  borderRadius: 10,
+                  padding: "14px 16px",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
                 }}
-                onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+                onMouseEnter={(e) => {
+                  if (!isOpen)
+                    e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!isOpen)
+                    e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+                }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 12,
+                  }}
+                >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 12, color: "#64748b" }}>{email.from}</span>
-                      {email.hasBill && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: "#818cf8", background: "rgba(99,102,241,0.12)", padding: "2px 6px", borderRadius: 4, textTransform: "uppercase" }}>💳 Bill</span>}
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <span style={{ fontSize: 12, color: "#64748b" }}>
+                        {email.from}
+                      </span>
+                      {email.hasBill && (
+                        <span
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 700,
+                            letterSpacing: 0.5,
+                            color: "#818cf8",
+                            background: "rgba(99,102,241,0.12)",
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          💳 Bill
+                        </span>
+                      )}
                     </div>
-                    <div style={{ fontSize: 13.5, fontWeight: 500, color: "#e2e8f0", marginTop: 2 }}>{email.subject}</div>
-                    {!isOpen && <div style={{ fontSize: 12, color: "#64748b", marginTop: 4, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email.preview}</div>}
+                    <div
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: 500,
+                        color: "#e2e8f0",
+                        marginTop: 2,
+                      }}
+                    >
+                      {email.subject}
+                    </div>
+                    {!isOpen && (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "#64748b",
+                          marginTop: 4,
+                          lineHeight: 1.4,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {email.preview}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    {email.action && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.3, color: s.text, background: s.bg, border: `1px solid ${s.border}33`, padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>{email.action}</div>}
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                      style={{ transition: "transform 0.2s ease", transform: isOpen ? "rotate(180deg)" : "rotate(0)" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {email.action && (
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          letterSpacing: 0.3,
+                          color: s.text,
+                          background: s.bg,
+                          border: `1px solid ${s.border}33`,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {email.action}
+                      </div>
+                    )}
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#64748b"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{
+                        transition: "transform 0.2s ease",
+                        transform: isOpen ? "rotate(180deg)" : "rotate(0)",
+                      }}
+                    >
                       <polyline points="6 9 12 15 18 9" />
                     </svg>
                   </div>
                 </div>
-                {isOpen && <EmailBody email={email} model={d.model} />}
+                {isOpen && (
+                  <EmailBody
+                    email={email}
+                    model={d.model}
+                    onLoaded={() => {
+                      const row = document.querySelector(
+                        `[data-email-id="${email.id}"]`,
+                      );
+                      if (!row) return;
+                      const maxScroll =
+                        document.documentElement.scrollHeight -
+                        window.innerHeight;
+                      const rowTop =
+                        row.getBoundingClientRect().top + window.scrollY;
+                      if (maxScroll < rowTop) {
+                        row.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      } else {
+                        window.scrollTo({
+                          top: document.documentElement.scrollHeight,
+                          behavior: "smooth",
+                        });
+                      }
+                    }}
+                  />
+                )}
               </div>
             );
           })}
         </div>
       </Section>
 
-      <div style={{ textAlign: "center", padding: "32px 0 16px", opacity: loaded ? 0.4 : 0, transition: "opacity 1s ease 1.2s" }}>
+      <div
+        style={{
+          textAlign: "center",
+          padding: "32px 0 16px",
+          opacity: loaded ? 0.4 : 0,
+          transition: "opacity 1s ease 1.2s",
+        }}
+      >
         <div style={{ fontSize: 11, color: "#475569", letterSpacing: 1 }}>
           TAP REFRESH FOR DATA · HOLD FOR AI ANALYSIS
         </div>
