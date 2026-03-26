@@ -76,12 +76,12 @@ Plans:
   2. Extracted components use CSS classes from per-component CSS files instead of inline styles
   3. Dashboard.jsx is measurably smaller (target: under 1600 lines)
   4. All existing dashboard functionality works identically after extraction (no visual or behavioral regressions)
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 **UI hint**: yes
 
 Plans:
 - [x] 04-01-PLAN.md — Extract metadata module, SearchableDropdown, and CTMCard with per-component CSS
-- [ ] 04-02-PLAN.md — Extract BillBadge, EmailIframe, and EmailBody with per-component CSS
+- [x] 04-02-PLAN.md — Extract BillBadge, EmailIframe, and EmailBody with per-component CSS
 - [ ] 04-03-PLAN.md — Wire Dashboard.jsx imports, remove extracted code, smoke test
 
 ## Progress
@@ -95,4 +95,4 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | 1. Test Foundation & Security | 0/2 | Planned | - |
 | 2. Reliability & Test Coverage | 3/4 | In Progress|  |
 | 3. Actual Budget Performance | 2/2 | Complete   | 2026-03-26 |
-| 4. Component Extraction | 1/3 | In Progress|  |
+| 4. Component Extraction | 2/3 | In Progress|  |
