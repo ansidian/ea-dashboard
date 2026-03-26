@@ -5,13 +5,12 @@ import { generateBriefing, quickRefresh } from "../briefing/index.js";
 import { fetchEmailBody as fetchGmailBody } from "../briefing/gmail.js";
 import { fetchEmailBody as fetchIcloudBody } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
-import { sendBill, testConnection as testActual } from "../briefing/actual.js";
+import { sendBill, getAccounts as getActualAccounts, testConnection as testActual } from "../briefing/actual.js";
 import { generateMockBriefing, generateMockHistory } from "../db/dev-fixture.js";
 
 const router = Router();
 router.use(requireAuth);
 
-const GENERATION_COOLDOWN_MINUTES = 10;
 
 // Merge current account display preferences (label, color, icon) into a briefing object.
 // This ensures user changes are reflected immediately without regenerating.
@@ -36,32 +35,7 @@ async function mergeAccountPrefs(briefing, userId) {
 
 router.post("/generate", async (req, res) => {
   const userId = process.env.EA_USER_ID;
-  const force = req.body?.force === true;
-
   try {
-    if (!force) {
-      const recent = await db.execute({
-        sql: `SELECT id, generated_at FROM ea_briefings
-              WHERE user_id = ? AND status = 'ready'
-              ORDER BY generated_at DESC LIMIT 1`,
-        args: [userId],
-      });
-
-      if (recent.rows.length) {
-        const generatedAt = new Date(recent.rows[0].generated_at + "Z").getTime();
-        const minutesAgo = (Date.now() - generatedAt) / 60000;
-
-        if (minutesAgo < GENERATION_COOLDOWN_MINUTES) {
-          return res.json({
-            id: recent.rows[0].id,
-            status: "cooldown",
-            minutesRemaining: Math.ceil(GENERATION_COOLDOWN_MINUTES - minutesAgo),
-            message: `AI briefing was generated ${Math.floor(minutesAgo)}m ago. Next generation available in ${Math.ceil(GENERATION_COOLDOWN_MINUTES - minutesAgo)}m.`,
-          });
-        }
-      }
-    }
-
     generateBriefing(userId).catch((err) =>
       console.error("[Briefing] Generation failed:", err.message),
     );
@@ -76,6 +50,22 @@ router.post("/generate", async (req, res) => {
   } catch (err) {
     console.error("Error triggering briefing:", err);
     res.status(500).json({ message: "Failed to trigger briefing generation" });
+  }
+});
+
+router.get("/in-progress", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    const result = await db.execute({
+      sql: `SELECT id, progress FROM ea_briefings
+            WHERE user_id = ? AND status = 'generating'
+            ORDER BY id DESC LIMIT 1`,
+      args: [userId],
+    });
+    if (!result.rows.length) return res.json({ generating: false });
+    res.json({ generating: true, id: result.rows[0].id, progress: result.rows[0].progress });
+  } catch (err) {
+    res.json({ generating: false });
   }
 });
 
@@ -149,7 +139,7 @@ router.get("/status/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.execute({
-      sql: `SELECT id, status, error_message, generation_time_ms
+      sql: `SELECT id, status, error_message, generation_time_ms, progress
             FROM ea_briefings WHERE id = ? AND user_id = ?`,
       args: [id, userId],
     });
@@ -231,6 +221,16 @@ router.post("/actual/send", async (req, res) => {
     res.json(await sendBill(billData, userId));
   } catch (err) {
     console.error("Error sending to Actual Budget:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/actual/accounts", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    res.json(await getActualAccounts(userId));
+  } catch (err) {
+    console.error("Error fetching Actual Budget accounts:", err.message);
     res.status(500).json({ message: err.message });
   }
 });

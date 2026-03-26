@@ -5,7 +5,7 @@ import { fetchEmails as fetchIcloudEmails } from "./icloud.js";
 import { fetchCalendar } from "./calendar.js";
 import { fetchWeather } from "./weather.js";
 import { fetchCTMDeadlines } from "./ctm-events.js";
-import { callHaiku } from "./haiku.js";
+import { callClaude } from "./claude.js";
 
 // Shared: load accounts + settings, return them
 async function loadUserConfig(userId) {
@@ -126,7 +126,61 @@ function computeCTMStats(deadlines) {
     if (d.points_possible) totalPoints += d.points_possible;
   }
 
-  return { pending: deadlines.length, dueToday, dueThisWeek, totalPoints };
+  return { incomplete: deadlines.length, dueToday, dueThisWeek, totalPoints };
+}
+
+// Fix email accounts: re-group triaged emails by their original account_label,
+// correct unread counts, and ensure no emails land in the wrong account.
+function fixEmailAccounts(briefingJson, inputEmails) {
+  if (!briefingJson.emails?.accounts?.length || !inputEmails?.length) return;
+
+  // Build lookup: email uid/id → original account info
+  const emailLookup = new Map();
+  for (const e of inputEmails) {
+    emailLookup.set(e.uid, {
+      label: e.account_label,
+      icon: e.account_icon,
+      color: e.account_color,
+    });
+  }
+
+  // Collect all triaged emails from Claude's response, tag with correct account
+  const allTriaged = [];
+  for (const acct of briefingJson.emails.accounts) {
+    for (const email of acct.important || []) {
+      const id = email.id || email.uid;
+      const original = emailLookup.get(id);
+      allTriaged.push({ email, accountLabel: original?.label || acct.name });
+    }
+  }
+
+  // Re-group by correct account label
+  const grouped = new Map();
+  for (const { email, accountLabel } of allTriaged) {
+    if (!grouped.has(accountLabel)) {
+      const original = inputEmails.find((e) => e.account_label === accountLabel);
+      grouped.set(accountLabel, {
+        name: accountLabel,
+        icon: original?.account_icon || "📧",
+        color: original?.account_color || "#6366f1",
+        important: [],
+        noise_count: 0,
+      });
+    }
+    grouped.get(accountLabel).important.push(email);
+  }
+
+  // Preserve noise_count from Claude's response
+  for (const acct of briefingJson.emails.accounts) {
+    const g = grouped.get(acct.name);
+    if (g && acct.noise_count) g.noise_count = acct.noise_count;
+  }
+
+  // Replace accounts with corrected grouping, fix unread counts
+  briefingJson.emails.accounts = [...grouped.values()].map((acct) => ({
+    ...acct,
+    unread: acct.important.length,
+  }));
 }
 
 // Load previously triaged email IDs from the last ready briefing
@@ -155,9 +209,16 @@ function hasCalendarChanged(prev, currentCalendar) {
 }
 
 // Full generation: fetch data + Haiku AI analysis (with delta optimization)
+async function updateProgress(briefingId, progress) {
+  await db.execute({
+    sql: `UPDATE ea_briefings SET progress = ? WHERE id = ?`,
+    args: [progress, briefingId],
+  });
+}
+
 export async function generateBriefing(userId) {
   const insertResult = await db.execute({
-    sql: `INSERT INTO ea_briefings (user_id, status) VALUES (?, 'generating')`,
+    sql: `INSERT INTO ea_briefings (user_id, status, progress) VALUES (?, 'generating', 'Loading settings...')`,
     args: [userId],
   });
   const briefingId = Number(insertResult.lastInsertRowid);
@@ -173,6 +234,9 @@ export async function generateBriefing(userId) {
       ? Math.max(Math.ceil(sinceLastHours) + 1, minLookback)
       : minLookback;
 
+    const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
+    await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
+
     const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing }] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
@@ -183,10 +247,15 @@ export async function generateBriefing(userId) {
     const newEmails = emails.filter(e => !triagedIds.has(e.id));
     const calendarChanged = prevBriefing ? hasCalendarChanged(prevBriefing, calendar) : true;
 
+    await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${newEmails.length} new · Analyzing...`);
+
     if (newEmails.length === 0 && !calendarChanged && prevBriefing) {
+      await updateProgress(briefingId, "No new data — refreshing weather and deadlines...");
       console.log("[EA] No new emails or data changes — cloning previous briefing with fresh weather");
       const cloned = { ...prevBriefing };
       cloned.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
+      cloned.ctm = { upcoming: ctmDeadlines, stats: computeCTMStats(ctmDeadlines) };
+      fixEmailAccounts(cloned, emails);
       cloned.dataUpdatedAt = new Date().toISOString();
       cloned.generatedAt = nowPacific();
       // Keep previous aiGeneratedAt to indicate AI didn't re-run
@@ -200,13 +269,16 @@ export async function generateBriefing(userId) {
       return { id: briefingId, briefingJson: cloned, skippedAI: true };
     }
 
-    // Optimization #1: Delta-only generation — only send new emails to Haiku,
+    // Optimization #1: Delta-only generation — only send new emails to Claude,
     // merge results with previous triage
+    const model = settings.claude_model || undefined;
+    const emailInterests = settings.email_interests_json ? JSON.parse(settings.email_interests_json) : [];
     let briefingJson;
     if (newEmails.length > 0 && newEmails.length < emails.length && prevBriefing) {
+      await updateProgress(briefingId, `Sending ${newEmails.length} new email${newEmails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Delta generation: ${newEmails.length} new emails (${emails.length - newEmails.length} previously triaged)`);
-      // Send only new emails to Haiku
-      briefingJson = await callHaiku({ emails: newEmails, calendar, weather, ctmDeadlines });
+      const ctmStats = computeCTMStats(ctmDeadlines);
+      briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests });
 
       // Merge: keep previous triage for old emails, add new triage
       const newTriagedByAccount = {};
@@ -238,14 +310,33 @@ export async function generateBriefing(userId) {
       }
     } else {
       // Full generation: all emails are new or no previous triage
+      await updateProgress(briefingId, `Sending ${emails.length} email${emails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Full generation: ${emails.length} emails`);
-      briefingJson = await callHaiku({ emails, calendar, weather, ctmDeadlines });
+      const ctmStats = computeCTMStats(ctmDeadlines);
+      briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests });
     }
+
+    await updateProgress(briefingId, "Finalizing briefing...");
+
+    // Always overwrite CTM stats with server-computed values (Claude may hallucinate these)
+    briefingJson.ctm = {
+      upcoming: ctmDeadlines,
+      stats: computeCTMStats(ctmDeadlines),
+    };
+
+    // Overwrite calendar with server-fetched data (has accurate `passed` flags)
+    briefingJson.calendar = calendar;
+
+    // Fix email account grouping: re-assign emails to correct accounts based on
+    // the original account_label from the fetched data (Claude sometimes misgroups)
+    fixEmailAccounts(briefingJson, emails);
+
+    // Set server-fetched weather (Claude no longer returns this)
+    briefingJson.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
 
     briefingJson.generatedAt = nowPacific();
     briefingJson.dataUpdatedAt = new Date().toISOString();
     briefingJson.aiGeneratedAt = new Date().toISOString();
-    if (briefingJson.weather) briefingJson.weather.location = settings.weather_location || "El Monte, CA";
 
     const elapsed = Date.now() - startTime;
     await db.execute({

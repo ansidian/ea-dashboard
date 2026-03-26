@@ -74,7 +74,7 @@ export async function fetchEmails(account, password, hoursBack) {
     for await (const msg of client.fetch(searchResults, {
       envelope: true,
       bodyStructure: true,
-      source: { start: 0, maxLength: 2048 },
+      source: { start: 0, maxLength: 16384 },
     })) {
       const msgDate = msg.envelope?.date;
       if (msgDate && new Date(msgDate) < cutoffDate) continue;
@@ -112,7 +112,7 @@ function extractPreview(source) {
   if (bodyStart === -1) return "";
   const body = text.slice(bodyStart + 4);
   const clean = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  return clean.slice(0, 200);
+  return clean.slice(0, 600);
 }
 
 export async function fetchEmailBody(email, password, uid) {
