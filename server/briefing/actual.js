@@ -20,62 +20,87 @@ async function getActualConfig(userId) {
   };
 }
 
-export async function testConnection(userId) {
-  const { serverURL, password, syncId } = await getActualConfig(userId);
+// --- Mutex: serialize all Actual Budget API access (singleton contention prevention) ---
+let lock = Promise.resolve();
 
-  try {
-    await actualApi.init({ serverURL, password });
-    // getBudgets validates auth + connectivity without downloading/syncing
-    const budgets = await actualApi.getBudgets();
-    const found = budgets.some((b) => b.groupId === syncId);
-    await actualApi.shutdown().catch(() => {});
-    return {
-      success: true,
-      budgetCount: budgets.length,
-      budgetFound: found,
-    };
-  } catch (err) {
-    await actualApi.shutdown().catch(() => {});
-    throw err;
-  }
+function withLock(fn) {
+  const result = lock.then(() => fn());
+  lock = result.catch(() => {});
+  return result;
+}
+
+// --- Metadata cache: 5-minute TTL ---
+const METADATA_TTL_MS = 5 * 60 * 1000;
+let metadataCache = { data: null, ts: 0 };
+
+export function testConnection(userId) {
+  return withLock(async () => {
+    const { serverURL, password, syncId } = await getActualConfig(userId);
+
+    try {
+      await actualApi.init({ serverURL, password });
+      // getBudgets validates auth + connectivity without downloading/syncing
+      const budgets = await actualApi.getBudgets();
+      const found = budgets.some((b) => b.groupId === syncId);
+      await actualApi.shutdown().catch(() => {});
+      return {
+        success: true,
+        budgetCount: budgets.length,
+        budgetFound: found,
+      };
+    } catch (err) {
+      await actualApi.shutdown().catch(() => {});
+      throw err;
+    }
+  });
 }
 
 // Fetch all Actual Budget metadata in a single connection (accounts, payees, categories)
 // The @actual-app/api is a singleton — parallel init/shutdown calls conflict,
 // so we batch everything into one connection.
-export async function getMetadata(userId) {
-  const { serverURL, password, syncId } = await getActualConfig(userId);
-  try {
-    await actualApi.init({ serverURL, password });
-    await actualApi.downloadBudget(syncId);
+// Cache check is inside withLock to prevent cache stampede (D-03 from RESEARCH.md).
+export function getMetadata(userId) {
+  return withLock(async () => {
+    const now = Date.now();
+    if (metadataCache.data && now - metadataCache.ts < METADATA_TTL_MS) {
+      return metadataCache.data;
+    }
 
-    const [rawAccounts, rawPayees, groups] = await Promise.all([
-      actualApi.getAccounts(),
-      actualApi.getPayees(),
-      actualApi.getCategoryGroups(),
-    ]);
+    const { serverURL, password, syncId } = await getActualConfig(userId);
+    try {
+      await actualApi.init({ serverURL, password });
+      await actualApi.downloadBudget(syncId);
 
-    const accounts = rawAccounts
-      .filter(a => !a.closed)
-      .map(a => ({ id: a.id, name: a.name, type: a.type }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      const [rawAccounts, rawPayees, groups] = await Promise.all([
+        actualApi.getAccounts(),
+        actualApi.getPayees(),
+        actualApi.getCategoryGroups(),
+      ]);
 
-    const payees = rawPayees
-      .filter(p => p.name && !p.transfer_acct)
-      .map(p => ({ id: p.id, name: p.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      const accounts = rawAccounts
+        .filter(a => !a.closed)
+        .map(a => ({ id: a.id, name: a.name, type: a.type }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-    const categories = groups
-      .filter(g => g.name !== "Internal")
-      .map(g => ({
-        group_name: g.name,
-        categories: (g.categories || []).map(c => ({ id: c.id, name: c.name })),
-      }));
+      const payees = rawPayees
+        .filter(p => p.name && !p.transfer_acct)
+        .map(p => ({ id: p.id, name: p.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-    return { accounts, payees, categories };
-  } finally {
-    await actualApi.shutdown().catch(() => {});
-  }
+      const categories = groups
+        .filter(g => g.name !== "Internal")
+        .map(g => ({
+          group_name: g.name,
+          categories: (g.categories || []).map(c => ({ id: c.id, name: c.name })),
+        }));
+
+      const result = { accounts, payees, categories };
+      metadataCache = { data: result, ts: Date.now() };
+      return result;
+    } finally {
+      await actualApi.shutdown().catch(() => {});
+    }
+  });
 }
 
 // Individual accessors (used by briefing generation where only one is needed)
@@ -288,55 +313,57 @@ async function upsertTransferSchedule(billData) {
   return { success: true, message: result.reused ? `Updated existing transfer schedule "${name}"` : `Transfer schedule "${name}" created` };
 }
 
-export async function sendBill(billData, userId) {
-  const { serverURL, password, syncId } = await getActualConfig(userId);
+export function sendBill(billData, userId) {
+  return withLock(async () => {
+    const { serverURL, password, syncId } = await getActualConfig(userId);
 
-  try {
-    await actualApi.init({ serverURL, password });
-    await actualApi.downloadBudget(syncId);
+    try {
+      await actualApi.init({ serverURL, password });
+      await actualApi.downloadBudget(syncId);
 
-    const accounts = await actualApi.getAccounts();
+      const accounts = await actualApi.getAccounts();
 
-    // Use user-selected account if provided, otherwise auto-detect
-    const resolveAccount = () => {
-      if (billData.account_id) {
-        const selected = accounts.find((a) => a.id === billData.account_id);
-        if (selected) return selected;
-      }
-      return accounts.find((a) => a.type === "checking" || a.name.toLowerCase().includes("checking")) || accounts[0];
-    };
-
-    const targetAccount = resolveAccount();
-    const amountCents = Math.round(billData.amount * 100);
-    const isIncome = billData.type === "income";
-
-    let result;
-
-    if (billData.type === "transfer") {
-      // Transfer: use from/to account IDs for schedule upsert
-      if (!billData.from_account_id || !billData.to_account_id) {
-        throw new Error("Transfer requires from_account_id and to_account_id");
-      }
-      result = await upsertTransferSchedule(billData);
-    } else if (billData.type === "bill") {
-      // Bill: upsert schedule with category
-      result = await upsertSchedule(billData, targetAccount.id);
-    } else {
-      // Expense / Income: one-time transaction (existing behavior + category support)
-      const txn = {
-        date: billData.due_date,
-        amount: isIncome ? amountCents : -amountCents,
-        payee_name: billData.payee,
-        notes: `Auto-detected ${billData.type} from EA briefing`,
+      // Use user-selected account if provided, otherwise auto-detect
+      const resolveAccount = () => {
+        if (billData.account_id) {
+          const selected = accounts.find((a) => a.id === billData.account_id);
+          if (selected) return selected;
+        }
+        return accounts.find((a) => a.type === "checking" || a.name.toLowerCase().includes("checking")) || accounts[0];
       };
-      if (billData.category_id) txn.category = billData.category_id;
-      await actualApi.addTransactions(targetAccount.id, [txn]);
-      result = { success: true, message: `Sent ${billData.payee} $${billData.amount} to Actual Budget` };
-    }
 
-    await actualApi.sync();
-    return result;
-  } finally {
-    await actualApi.shutdown().catch(() => {});
-  }
+      const targetAccount = resolveAccount();
+      const amountCents = Math.round(billData.amount * 100);
+      const isIncome = billData.type === "income";
+
+      let result;
+
+      if (billData.type === "transfer") {
+        // Transfer: use from/to account IDs for schedule upsert
+        if (!billData.from_account_id || !billData.to_account_id) {
+          throw new Error("Transfer requires from_account_id and to_account_id");
+        }
+        result = await upsertTransferSchedule(billData);
+      } else if (billData.type === "bill") {
+        // Bill: upsert schedule with category
+        result = await upsertSchedule(billData, targetAccount.id);
+      } else {
+        // Expense / Income: one-time transaction (existing behavior + category support)
+        const txn = {
+          date: billData.due_date,
+          amount: isIncome ? amountCents : -amountCents,
+          payee_name: billData.payee,
+          notes: `Auto-detected ${billData.type} from EA briefing`,
+        };
+        if (billData.category_id) txn.category = billData.category_id;
+        await actualApi.addTransactions(targetAccount.id, [txn]);
+        result = { success: true, message: `Sent ${billData.payee} $${billData.amount} to Actual Budget` };
+      }
+
+      await actualApi.sync();
+      return result;
+    } finally {
+      await actualApi.shutdown().catch(() => {});
+    }
+  });
 }
