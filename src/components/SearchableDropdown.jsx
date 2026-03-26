@@ -73,8 +73,8 @@ export default function SearchableDropdown({ options, value, onChange, placehold
             {showCreateOption && (
               <div
                 className="searchable-dropdown-create"
-                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
-                onClick={e => { e.stopPropagation(); handleCreate(); }}
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); handleCreate(); }}
+                onClick={e => e.stopPropagation()}
               >
                 <span className="searchable-dropdown-create-icon">+</span> Create "{search.trim()}"
               </div>
@@ -86,8 +86,8 @@ export default function SearchableDropdown({ options, value, onChange, placehold
               <div
                 key={o.id}
                 className={`searchable-dropdown-item${o.id === value ? " searchable-dropdown-item--selected" : ""}`}
-                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
-                onClick={e => { e.stopPropagation(); onChange(o.id); setOpen(false); setSearch(""); }}
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange(o.id); setOpen(false); setSearch(""); }}
+                onClick={e => e.stopPropagation()}
               >
                 {o.name}
               </div>
