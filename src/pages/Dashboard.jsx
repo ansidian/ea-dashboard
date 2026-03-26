@@ -299,6 +299,9 @@ export default function Dashboard() {
     }
     function onKeyUp(e) {
       if (e.key !== "r") return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      // Only end hold if startHold was actually called (holdTimerRef is set)
+      if (!holdTimerRef.current) return;
       endHold(false);
     }
     window.addEventListener("keydown", onKeyDown);
