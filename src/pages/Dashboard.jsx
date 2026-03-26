@@ -764,7 +764,7 @@ export default function Dashboard() {
                     triggerRef={historyTriggerRef}
                     onSelect={(briefing, meta) => {
                       setBriefing(briefing);
-                      setViewingPast(meta);
+                      setViewingPast(meta.id === latestId ? null : meta);
                       setHistoryOpen(false);
                     }}
                     onClose={() => setHistoryOpen(false)}
