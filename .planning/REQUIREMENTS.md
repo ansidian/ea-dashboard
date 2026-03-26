@@ -16,7 +16,7 @@
 
 - [ ] **PERF-01**: All Actual Budget API access serialized through mutex to prevent singleton contention
 - [ ] **PERF-02**: Actual Budget metadata (accounts, payees, categories) cached server-side with 5-minute TTL; invalidated on write operations
-- [ ] **PERF-03**: Gmail batch fallback fetches messages in parallel chunks (10 concurrent) instead of sequentially
+- [x] **PERF-03**: Gmail batch fallback fetches messages in parallel chunks (10 concurrent) instead of sequentially
 
 ### Reliability
 
@@ -74,7 +74,7 @@
 | SEC-04 | Phase 1 | Complete |
 | PERF-01 | Phase 3 | Pending |
 | PERF-02 | Phase 3 | Pending |
-| PERF-03 | Phase 3 | Pending |
+| PERF-03 | Phase 3 | Complete |
 | REL-01 | Phase 2 | Complete |
 | REL-02 | Phase 2 | Complete |
 | REL-03 | Phase 2 | Complete |
