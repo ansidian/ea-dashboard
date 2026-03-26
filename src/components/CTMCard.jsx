@@ -1,5 +1,7 @@
 import "./CTMCard.css";
 
+// Urgency color palette — referenced by BillBadge (Plan 02) and future components
+// eslint-disable-next-line no-unused-vars
 const urgencyStyles = {
   high: { bg: "rgba(239,68,68,0.1)", border: "#ef4444", text: "#fca5a5", dot: "#ef4444" },
   medium: { bg: "rgba(245,158,11,0.08)", border: "#f59e0b", text: "#fcd34d", dot: "#f59e0b" },
