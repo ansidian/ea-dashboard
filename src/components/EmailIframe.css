@@ -1,0 +1,25 @@
+/* Existing rules moved from index.css */
+.email-iframe { width: 100%; border: none; border-radius: 8px; min-height: 200px; max-height: 70vh; background: #fff; }
+/* Plain text email fallback */
+.email-text { font-family: 'DM Sans', sans-serif; font-size: 13px; line-height: 1.6; color: #94a3b8; white-space: pre-wrap; word-break: break-word; margin: 0; max-height: 70vh; overflow-y: auto; }
+
+/* EmailBody wrapper styles */
+.email-body-root {
+  animation: fadeIn 0.2s ease; border-top: 1px solid rgba(255,255,255,0.05);
+  margin-top: 12px; padding-top: 14px;
+}
+.email-body-preview {
+  display: flex; align-items: flex-start; gap: 6px; margin-bottom: 12px;
+  padding: 10px 12px; background: rgba(251,191,36,0.04); border-radius: 8px;
+  border: 1px solid rgba(251,191,36,0.08);
+}
+.email-body-preview-icon { font-size: 11px; margin-top: 1px; }
+.email-body-preview-text { font-size: 12.5px; color: #cbd5e1; line-height: 1.6; }
+.email-body-loading { display: flex; align-items: center; gap: 8px; padding: 12px 0; }
+.email-body-spinner {
+  width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.1);
+  border-top-color: #818cf8; border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+.email-body-loading-text { font-size: 12px; color: #64748b; }
+.email-body-unavailable { font-size: 12px; color: #64748b; padding: 8px 0; }
+.email-body-bill { margin-top: 10px; }
