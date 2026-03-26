@@ -50,7 +50,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Claude parseResponse schema validation and tests (TDD)
 - [x] 02-02-PLAN.md — Email regrouping invariant check and tests (TDD)
-- [ ] 02-03-PLAN.md — Delta merge extraction, invariant check, and tests (TDD)
+- [x] 02-03-PLAN.md — Delta merge extraction, invariant check, and tests (TDD)
 - [x] 02-04-PLAN.md — Schedule logic deduplication in actual.js
 
 ### Phase 3: Actual Budget Performance

@@ -22,7 +22,7 @@
 
 - [x] **REL-01**: Claude JSON response parsing validates against expected schema shape after parse; logs failures
 - [x] **REL-02**: Email regrouping logic (`fixEmailAccounts`) includes invariant check: email count in = email count out
-- [ ] **REL-03**: Delta briefing merge includes invariant check: no silent email loss or duplication
+- [x] **REL-03**: Delta briefing merge includes invariant check: no silent email loss or duplication
 - [x] **REL-04**: Duplicate schedule logic in `actual.js` consolidated into shared helper function
 
 ### Architecture
@@ -36,7 +36,7 @@
 - [x] **TEST-02**: Encryption module tested: encrypt/decrypt round-trip, CBC->GCM migration, tampered ciphertext rejection, invalid key handling
 - [x] **TEST-03**: Claude `parseResponse()` tested: valid JSON, regex fallback, malformed/empty input
 - [x] **TEST-04**: `fixEmailAccounts()` tested: correct regrouping, mismatched labels, empty arrays, duplicate IDs
-- [ ] **TEST-05**: Delta briefing merge tested: email dedup, dismiss filtering, seenCount tracking, edge cases
+- [x] **TEST-05**: Delta briefing merge tested: email dedup, dismiss filtering, seenCount tracking, edge cases
 
 ## v2 Requirements
 
@@ -77,7 +77,7 @@
 | PERF-03 | Phase 3 | Pending |
 | REL-01 | Phase 2 | Complete |
 | REL-02 | Phase 2 | Complete |
-| REL-03 | Phase 2 | Pending |
+| REL-03 | Phase 2 | Complete |
 | REL-04 | Phase 2 | Complete |
 | ARCH-01 | Phase 4 | Pending |
 | ARCH-02 | Phase 4 | Pending |
@@ -85,7 +85,7 @@
 | TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 2 | Complete |
 | TEST-04 | Phase 2 | Complete |
-| TEST-05 | Phase 2 | Pending |
+| TEST-05 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 18 total
