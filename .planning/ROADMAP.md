@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Test Foundation & Security** - Vitest infrastructure, encryption migration to GCM, session persistence, and CSRF protection
 - [ ] **Phase 2: Reliability & Test Coverage** - Invariant checks, schema validation, and tests for fragile parsing/merge logic
-- [ ] **Phase 3: Actual Budget Performance** - Mutex serialization, metadata caching, and parallel email fetch
+- [x] **Phase 3: Actual Budget Performance** - Mutex serialization, metadata caching, and parallel email fetch (completed 2026-03-26)
 - [ ] **Phase 4: Component Extraction** - Surgical Dashboard.jsx decomposition and CSS migration for extracted components
 
 ## Phase Details
@@ -61,10 +61,10 @@ Plans:
   1. Concurrent Actual Budget requests execute sequentially through a mutex (no singleton contention)
   2. Actual Budget metadata (accounts, payees, categories) returns from cache on repeated requests within 5 minutes
   3. Gmail batch fallback fetches messages in parallel chunks instead of sequentially
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 03-01-PLAN.md — Actual Budget mutex serialization and metadata caching (PERF-01, PERF-02)
+- [x] 03-01-PLAN.md — Actual Budget mutex serialization and metadata caching (PERF-01, PERF-02)
 - [x] 03-02-PLAN.md — Gmail parallel chunk fetch for batch fallback (PERF-03)
 
 ### Phase 4: Component Extraction
@@ -89,5 +89,5 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 |-|-|-|-|
 | 1. Test Foundation & Security | 0/2 | Planned | - |
 | 2. Reliability & Test Coverage | 3/4 | In Progress|  |
-| 3. Actual Budget Performance | 1/2 | In Progress|  |
+| 3. Actual Budget Performance | 2/2 | Complete   | 2026-03-26 |
 | 4. Component Extraction | 0/? | Not started | - |
