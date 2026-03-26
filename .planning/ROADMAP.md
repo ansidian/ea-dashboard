@@ -61,7 +61,11 @@ Plans:
   1. Concurrent Actual Budget requests execute sequentially through a mutex (no singleton contention)
   2. Actual Budget metadata (accounts, payees, categories) returns from cache on repeated requests within 5 minutes
   3. Gmail batch fallback fetches messages in parallel chunks instead of sequentially
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Actual Budget mutex serialization and metadata caching (PERF-01, PERF-02)
+- [ ] 03-02-PLAN.md — Gmail parallel chunk fetch for batch fallback (PERF-03)
 
 ### Phase 4: Component Extraction
 **Goal**: Dashboard.jsx is smaller and extracted components use proper CSS instead of inline styles
@@ -85,5 +89,5 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 |-|-|-|-|
 | 1. Test Foundation & Security | 0/2 | Planned | - |
 | 2. Reliability & Test Coverage | 3/4 | In Progress|  |
-| 3. Actual Budget Performance | 0/? | Not started | - |
+| 3. Actual Budget Performance | 0/2 | Planned | - |
 | 4. Component Extraction | 0/? | Not started | - |
