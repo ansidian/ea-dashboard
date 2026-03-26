@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getEmailBody, sendToActualBudget, getActualAccounts, getSettings } from "../api";
+import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getEmailBody, sendToActualBudget, getActualAccounts, getSettings, dismissEmail } from "../api";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -530,6 +530,8 @@ export default function Dashboard() {
   const [activeAccount, setActiveAccount] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [selectedEmail, setSelectedEmail] = useState(null);
+  const [loadingBillId, setLoadingBillId] = useState(null); // bill card waiting for email body
+  const [confirmDismissId, setConfirmDismissId] = useState(null); // first-seen dismiss confirmation
   const [expandedTask, setExpandedTask] = useState(null);
   const [holdConfirm, setHoldConfirm] = useState(false); // show "Generate fresh AI briefing?" confirm
   const [modelLabel, setModelLabel] = useState("Claude");
@@ -603,6 +605,20 @@ export default function Dashboard() {
         setTimeout(() => setLoaded(true), 100);
       });
   }, []);
+
+  // Dismiss an email from current and future briefings
+  async function handleDismiss(emailId) {
+    dismissEmail(emailId).catch(() => {}); // fire and forget
+    if (selectedEmail?.id === emailId) setSelectedEmail(null);
+    setBriefing(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      for (const acct of updated.emails?.accounts || []) {
+        acct.important = acct.important.filter(e => e.id !== emailId);
+        acct.unread = acct.important.length;
+      }
+      return updated;
+    });
+  }
 
   // Quick refresh: tap — raw data only, no Haiku
   async function handleQuickRefresh() {
@@ -745,8 +761,6 @@ export default function Dashboard() {
       <div
         style={{
           minHeight: "100vh",
-          background:
-            "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)",
           color: "#e2e8f0",
           fontFamily: "'DM Sans', sans-serif",
           display: "flex",
@@ -820,8 +834,6 @@ export default function Dashboard() {
     <div
       style={{
         minHeight: "100vh",
-        background:
-          "linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)",
         color: "#e2e8f0",
         fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
         padding: "24px",
@@ -955,10 +967,24 @@ export default function Dashboard() {
                   gap: 4,
                   opacity: refreshing || generating ? 0.7 : 1,
                   fontWeight: 500,
-                  transition:
-                    "color 0.2s ease, opacity 0.2s ease, border-color 0.2s ease",
+                  transition: "all 0.2s ease",
                   userSelect: "none",
                   touchAction: "none",
+                  fontFamily: "inherit",
+                }}
+                onMouseEnter={(e) => {
+                  if (!refreshing && !generating) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+                    e.currentTarget.style.color = "#e2e8f0";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!refreshing && !generating) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                    e.currentTarget.style.color = "#94a3b8";
+                  }
                 }}
               >
                 {holdProgress > 0 && (
@@ -1022,6 +1048,20 @@ export default function Dashboard() {
                     gap: 4,
                     fontWeight: 500,
                     transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!historyOpen) {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+                      e.currentTarget.style.color = "#e2e8f0";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!historyOpen) {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                      e.currentTarget.style.color = "#94a3b8";
+                    }
                   }}
                 >
                   <svg
@@ -1164,7 +1204,10 @@ export default function Dashboard() {
               padding: 0,
               textDecoration: "underline",
               textUnderlineOffset: 2,
+              transition: "color 0.15s ease, opacity 0.15s ease",
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#a5b4fc"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#818cf8"; }}
           >
             Back to latest
           </button>
@@ -1369,15 +1412,23 @@ export default function Dashboard() {
                 .map((email, i) => {
                   const typeInfo =
                     typeLabels[email.extractedBill.type] || typeLabels.expense;
+                  const billCarriedOver = (email.seenCount || 1) >= 2;
                   return (
                     <div
                       key={i}
                       onClick={() => {
+                        // Toggle off if already selected
+                        if (selectedEmail?.id === email.id) {
+                          setSelectedEmail(null);
+                          setLoadingBillId(null);
+                          return;
+                        }
                         setActiveAccount(email._accIdx);
                         const original = emailAccounts[
                           email._accIdx
                         ]?.important?.find((e) => e.id === email.id);
                         setSelectedEmail(original || email);
+                        setLoadingBillId(email.id);
                       }}
                       style={{
                         display: "flex",
@@ -1387,16 +1438,19 @@ export default function Dashboard() {
                         background: "rgba(255,255,255,0.02)",
                         borderRadius: 8,
                         cursor: "pointer",
-                        transition: "background 0.15s ease",
+                        transition: "background 0.15s ease, opacity 0.15s ease",
+                        opacity: billCarriedOver ? 0.6 : 1,
                       }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          "rgba(255,255,255,0.05)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background =
-                          "rgba(255,255,255,0.02)")
-                      }
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                        const btn = e.currentTarget.querySelector(".dismiss-btn");
+                        if (btn) btn.style.opacity = "1";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+                        const btn = e.currentTarget.querySelector(".dismiss-btn");
+                        if (btn && !billCarriedOver) btn.style.opacity = "0";
+                      }}
                     >
                       <div
                         style={{
@@ -1415,6 +1469,9 @@ export default function Dashboard() {
                         }}
                       >
                         {email.extractedBill.payee}
+                        {billCarriedOver && (
+                          <span style={{ fontSize: 10, color: "#64748b", opacity: 0.7, marginLeft: 8 }}>↩ From previous</span>
+                        )}
                       </span>
                       <span
                         style={{
@@ -1475,6 +1532,47 @@ export default function Dashboard() {
                             })
                           : ""}
                       </span>
+                      {loadingBillId === email.id && (
+                        <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+                      )}
+                      {confirmDismissId === email.id ? (
+                        <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                          <button
+                            className="dismiss-confirm-btn"
+                            onClick={() => { handleDismiss(email.id); setConfirmDismissId(null); }}
+                            style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, color: "#fca5a5", fontSize: 10, fontWeight: 600, padding: "2px 8px", cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s ease" }}
+                          >Dismiss</button>
+                          <button
+                            className="dismiss-cancel-btn"
+                            onClick={() => setConfirmDismissId(null)}
+                            style={{ background: "none", border: "none", color: "#64748b", fontSize: 14, cursor: "pointer", padding: "2px 4px", lineHeight: 1, transition: "color 0.15s ease" }}
+                          >×</button>
+                        </div>
+                      ) : (
+                        <button
+                          className="dismiss-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (billCarriedOver) handleDismiss(email.id);
+                            else setConfirmDismissId(email.id);
+                          }}
+                          style={{
+                            opacity: billCarriedOver ? 1 : 0,
+                            transition: "opacity 0.15s, color 0.15s",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            color: "#64748b",
+                            fontSize: 16,
+                            padding: "2px 4px",
+                            lineHeight: 1,
+                            flexShrink: 0,
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = "#64748b"; }}
+                          title="Dismiss from briefing"
+                        >×</button>
+                      )}
                     </div>
                   );
                 })}
@@ -1758,6 +1856,9 @@ export default function Dashboard() {
               onClick={() => {
                 setActiveAccount(i);
                 setSelectedEmail(null);
+                requestAnimationFrame(() => {
+                  emailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                });
               }}
               style={{
                 background:
@@ -1773,6 +1874,20 @@ export default function Dashboard() {
                 gap: 8,
                 transition: "all 0.2s ease",
                 color: activeAccount === i ? "#f1f5f9" : "#94a3b8",
+              }}
+              onMouseEnter={(e) => {
+                if (activeAccount !== i) {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
+                  e.currentTarget.style.color = "#e2e8f0";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeAccount !== i) {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+                  e.currentTarget.style.color = "#94a3b8";
+                }
               }}
             >
               <span style={{ fontSize: 15 }}>{acc.icon}</span>
@@ -1798,6 +1913,7 @@ export default function Dashboard() {
           {currentAccount.important.map((email, i) => {
             const s = urgencyStyles[email.urgency] || urgencyStyles.low;
             const isOpen = selectedEmail?.id === email.id;
+            const isCarriedOver = (email.seenCount || 1) >= 2;
             return (
               <div
                 key={i}
@@ -1816,10 +1932,14 @@ export default function Dashboard() {
                 onMouseEnter={(e) => {
                   if (!isOpen)
                     e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                  const btn = e.currentTarget.querySelector(".dismiss-btn");
+                  if (btn) btn.style.opacity = "1";
                 }}
                 onMouseLeave={(e) => {
                   if (!isOpen)
                     e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+                  const btn = e.currentTarget.querySelector(".dismiss-btn");
+                  if (btn && !isCarriedOver) btn.style.opacity = "0";
                 }}
               >
                 <div
@@ -1828,6 +1948,8 @@ export default function Dashboard() {
                     justifyContent: "space-between",
                     alignItems: "flex-start",
                     gap: 12,
+                    opacity: isCarriedOver ? 0.6 : 1,
+                    transition: "opacity 0.15s ease",
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1837,6 +1959,9 @@ export default function Dashboard() {
                       <span style={{ fontSize: 12, color: "#64748b" }}>
                         {email.from}
                       </span>
+                      {isCarriedOver && (
+                        <span style={{ fontSize: 10, color: "#64748b", opacity: 0.7 }}>↩ From previous</span>
+                      )}
                       {email.hasBill && (
                         <span
                           style={{
@@ -1888,6 +2013,43 @@ export default function Dashboard() {
                       flexShrink: 0,
                     }}
                   >
+                    {confirmDismissId === email.id ? (
+                      <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <button
+                          className="dismiss-confirm-btn"
+                          onClick={() => { handleDismiss(email.id); setConfirmDismissId(null); }}
+                          style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, color: "#fca5a5", fontSize: 10, fontWeight: 600, padding: "2px 8px", cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s ease" }}
+                        >Dismiss</button>
+                        <button
+                          className="dismiss-cancel-btn"
+                          onClick={() => setConfirmDismissId(null)}
+                          style={{ background: "none", border: "none", color: "#64748b", fontSize: 14, cursor: "pointer", padding: "2px 4px", lineHeight: 1, transition: "color 0.15s ease" }}
+                        >×</button>
+                      </div>
+                    ) : (
+                      <button
+                        className="dismiss-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isCarriedOver) handleDismiss(email.id);
+                          else setConfirmDismissId(email.id);
+                        }}
+                        style={{
+                          opacity: isCarriedOver ? 1 : 0,
+                          transition: "opacity 0.15s, color 0.15s",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "#64748b",
+                          fontSize: 16,
+                          padding: "2px 4px",
+                          lineHeight: 1,
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = "#64748b"; }}
+                        title="Dismiss from briefing"
+                      >×</button>
+                    )}
                     {email.action && (
                       <div
                         style={{
@@ -1928,6 +2090,7 @@ export default function Dashboard() {
                     email={email}
                     model={d.model}
                     onLoaded={() => {
+                      setLoadingBillId(null);
                       const row = document.querySelector(
                         `[data-email-id="${email.id}"]`,
                       );
