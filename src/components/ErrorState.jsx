@@ -2,7 +2,6 @@ export default function ErrorState({ message, onRetry }) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)',
       color: '#e2e8f0',
       fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
       display: 'flex',

@@ -20,7 +20,7 @@ export default function LoadingSkeleton() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%)', color: '#e2e8f0', fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", padding: 24, maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', color: '#e2e8f0', fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", padding: 24, maxWidth: 900, margin: '0 auto' }}>
       <style>{`
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         @keyframes fadeIn { to { opacity: 1; } }

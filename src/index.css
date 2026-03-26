@@ -7,8 +7,10 @@
 
 html, body, #root {
   min-height: 100vh;
-  background: #0a0a0f;
   color-scheme: dark;
+}
+html {
+  background: linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%) fixed;
 }
 
 body {
@@ -152,7 +154,6 @@ body {
 /* Utilities */
 .page-center {
   min-height: 100vh;
-  background: linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -170,7 +171,6 @@ body {
 /* Login */
 .login-page {
   min-height: 100vh;
-  background: linear-gradient(165deg, #0a0a0f 0%, #0f1118 40%, #111827 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -345,6 +345,16 @@ body {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: #cbd5e1 !important;
+}
+
+/* Dismiss confirm/cancel */
+.dismiss-confirm-btn:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  color: #fecaca !important;
+}
+.dismiss-cancel-btn:hover {
+  color: #e2e8f0 !important;
 }
 
 /* Scrollbar */
