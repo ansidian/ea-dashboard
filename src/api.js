@@ -26,12 +26,14 @@ export const getLatestBriefing = () => apiFetch("/api/briefing/latest");
 export const triggerGeneration = () => apiFetch("/api/briefing/generate", { method: "POST" });
 export const quickRefresh = () => apiFetch("/api/briefing/refresh", { method: "POST" });
 export const pollStatus = (id) => apiFetch(`/api/briefing/status/${id}`);
+export const checkInProgress = () => apiFetch("/api/briefing/in-progress");
 export const getBriefingHistory = () => apiFetch("/api/briefing/history");
 export const getBriefingById = (id) => apiFetch(`/api/briefing/${id}`);
 export const getEmailBody = (uid) => apiFetch(`/api/briefing/email/${uid}`);
 
 // Actual Budget
 export const sendToActualBudget = (bill) => apiFetch("/api/briefing/actual/send", { method: "POST", body: JSON.stringify(bill) });
+export const getActualAccounts = () => apiFetch("/api/briefing/actual/accounts");
 export const testActualBudget = () => apiFetch("/api/briefing/actual/test", { method: "POST" });
 
 // Accounts & Settings
@@ -43,3 +45,4 @@ export const removeAccount = (id) => apiFetch(`/api/ea/accounts/${id}`, { method
 export const getSettings = () => apiFetch("/api/ea/settings");
 export const updateSettings = (data) => apiFetch("/api/ea/settings", { method: "PUT", body: JSON.stringify(data) });
 export const geocodeLocation = (q) => apiFetch(`/api/ea/geocode?q=${encodeURIComponent(q)}`);
+export const getModels = () => apiFetch("/api/ea/models");
