@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// These vi.mock calls are hoisted to the top of the module by Vitest.
-// After vi.resetModules(), dynamic imports will get fresh module instances
-// but still use these mock factories.
+// vi.mock is hoisted — these factories run fresh after each vi.resetModules()
 vi.mock("@actual-app/api", () => ({
   default: {
     init: vi.fn().mockResolvedValue(undefined),
@@ -27,19 +25,18 @@ vi.mock("../db/connection.js", () => ({
 
 vi.mock("./encryption.js", () => ({ decrypt: vi.fn((v) => v) }));
 
-// Helper: get fresh module instances (resets module-level lock and cache state)
-async function freshActual() {
-  vi.resetModules();
-  const mod = await import("./actual.js");
-  const actualApi = (await import("@actual-app/api")).default;
-  const db = (await import("../db/connection.js")).default;
-  return { mod, actualApi, db };
-}
-
 describe("actual.js mutex (withLock)", () => {
+  beforeEach(() => {
+    // Reset module registry so each test gets fresh lock + metadataCache state
+    // Reset all mocks so call counts start from 0
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
   it("two concurrent calls execute sequentially (second starts after first finishes)", async () => {
-    const { mod, actualApi } = await freshActual();
-    const { getMetadata } = mod;
+    // Use testConnection (no cache) so both calls always reach init
+    const { testConnection } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
 
     const order = [];
     let callCount = 0;
@@ -51,8 +48,8 @@ describe("actual.js mutex (withLock)", () => {
     });
 
     // Launch two calls without awaiting the first — simulates concurrent access
-    const p1 = getMetadata("user1");
-    const p2 = getMetadata("user1");
+    const p1 = testConnection("user1");
+    const p2 = testConnection("user1");
 
     await Promise.all([p1, p2]);
 
@@ -61,8 +58,8 @@ describe("actual.js mutex (withLock)", () => {
   });
 
   it("a rejected call does not block the next caller", async () => {
-    const { mod, actualApi } = await freshActual();
-    const { getMetadata } = mod;
+    const { getMetadata } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
 
     let callCount = 0;
     actualApi.init.mockImplementation(async () => {
@@ -82,9 +79,14 @@ describe("actual.js mutex (withLock)", () => {
 });
 
 describe("actual.js metadata cache", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
   it("getMetadata returns cached data on second call within TTL (init called once)", async () => {
-    const { mod, actualApi } = await freshActual();
-    const { getMetadata } = mod;
+    const { getMetadata } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
 
     await getMetadata("user1");
     await getMetadata("user1");
@@ -94,8 +96,8 @@ describe("actual.js metadata cache", () => {
   });
 
   it("getMetadata re-fetches after TTL expires (init called twice)", async () => {
-    const { mod, actualApi } = await freshActual();
-    const { getMetadata } = mod;
+    const { getMetadata } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
 
     const baseTime = Date.now();
     const dateSpy = vi.spyOn(Date, "now");
@@ -115,9 +117,14 @@ describe("actual.js metadata cache", () => {
 });
 
 describe("actual.js sendBill mutex", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
   it("sendBill acquires the mutex (init not called concurrently with getMetadata)", async () => {
-    const { mod, actualApi } = await freshActual();
-    const { getMetadata, sendBill } = mod;
+    const { getMetadata, sendBill } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
 
     const order = [];
     let callCount = 0;
@@ -147,9 +154,14 @@ describe("actual.js sendBill mutex", () => {
 });
 
 describe("actual.js testConnection mutex", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
   it("testConnection acquires the mutex (init not called concurrently with getMetadata)", async () => {
-    const { mod, actualApi } = await freshActual();
-    const { getMetadata, testConnection } = mod;
+    const { getMetadata, testConnection } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
 
     const order = [];
     let callCount = 0;
