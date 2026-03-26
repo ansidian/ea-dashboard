@@ -12,8 +12,10 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
    Summary: count each triage category separately — "10 emails across 3 accounts. 4 need attention, 2 FYI, 4 noise." "Need attention" = actionable only. Do NOT count fyi emails as needing attention. No subjects/topics in summary.
    Verification emails (OTP, 2FA, login confirmations) = always "noise".
 
-2. DETECT TRANSACTIONS: Extract financial data from emails with SPECIFIC dollar amounts. No amount in email = no bill (hasBill: false).
-   Extract: payee (short name), amount (number, REQUIRED), due_date (YYYY-MM-DD), type: "transfer" (credit card payments), "bill" (recurring services), "expense" (one-off purchases), "income" (refunds/deposits).
+2. DETECT TRANSACTIONS: Extract financial data from emails about payments, purchases, or subscriptions.
+   Receipts (Apple, Google, app stores), order confirmations (Amazon, retailers), autopay notices (credit cards, loans), subscription renewals, and payment reminders are ALL bills — set hasBill: true.
+   Extract: payee (short name), amount (number — REQUIRED, look in body_preview if not in subject), due_date (YYYY-MM-DD), type: "transfer" (credit card payments), "bill" (recurring services), "expense" (one-off purchases), "income" (refunds/deposits).
+   If the email clearly describes a payment/purchase but the exact amount isn't visible, still set hasBill: true and set amount to 0 — the user can fill it in.
    If budget categories are provided, also set category_id and category_name to the best matching category. Only set these if confident in the match.
 
 3. GENERATE INSIGHTS (2-4 items): Connect dots across emails, calendar, and deadlines. Be specific and actionable.
