@@ -243,25 +243,6 @@ body {
   overflow-y: auto;
 }
 
-/* Bill badge buttons */
-.bill-send-btn:hover {
-  filter: brightness(1.15);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-}
-.bill-send-btn:active { transform: translateY(0); box-shadow: none; }
-.bill-confirm-btn:hover {
-  background: #7c7ff7 !important;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-}
-.bill-confirm-btn:active { transform: translateY(0); }
-.bill-cancel-btn:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-  color: #cbd5e1 !important;
-}
-
 /* Dismiss confirm/cancel */
 .dismiss-confirm-btn:hover {
   background: rgba(239, 68, 68, 0.25) !important;
