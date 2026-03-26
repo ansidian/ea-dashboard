@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import db from "../db/connection.js";
 import { requireAuth } from "../middleware/auth.js";
 import { encrypt, decrypt } from "../briefing/encryption.js";
@@ -11,14 +12,45 @@ const router = Router();
 
 // Gmail OAuth callback — no auth required (it's a redirect from Google)
 router.get("/accounts/gmail/callback", async (req, res) => {
-  const { code, state: accountId } = req.query;
-  if (!code || !accountId) return res.status(400).send("Missing code or state parameter");
+  const { code, state: csrfToken } = req.query;
+  if (!code || !csrfToken) {
+    return res.status(400).send("Missing code or state parameter");
+  }
 
   try {
-    const [userId, label] = accountId.split(":");
+    // Validate CSRF token (SEC-03)
+    const csrfResult = await db.execute({
+      sql: "SELECT account_label, expires_at FROM ea_csrf_tokens WHERE token = ?",
+      args: [csrfToken],
+    });
+
+    if (!csrfResult.rows.length) {
+      return res.status(400).send("Invalid OAuth state - CSRF validation failed");
+    }
+
+    const csrfRow = csrfResult.rows[0];
+
+    // Delete token immediately (one-time use)
+    await db.execute({
+      sql: "DELETE FROM ea_csrf_tokens WHERE token = ?",
+      args: [csrfToken],
+    });
+
+    // Check expiry
+    if (Date.now() > csrfRow.expires_at) {
+      return res.status(400).send("OAuth state expired - please try again");
+    }
+
+    // Recover userId and label from DB (tamper-proof)
+    const [userId, label] = csrfRow.account_label.split(":");
+    const accountId = csrfRow.account_label;
+
     const result = await handleCallback(code, accountId, userId);
     if (label && label !== "Gmail") {
-      await db.execute({ sql: "UPDATE ea_accounts SET label = ? WHERE id = ?", args: [label, result.accountId] });
+      await db.execute({
+        sql: "UPDATE ea_accounts SET label = ? WHERE id = ?",
+        args: [label, result.accountId],
+      });
     }
     const baseUrl = process.env.NODE_ENV === "production" ? "" : "http://localhost:5173";
     res.redirect(`${baseUrl}/settings?account_connected=${result.email}`);
@@ -48,8 +80,16 @@ router.get("/accounts", async (req, res) => {
 router.get("/accounts/gmail/auth", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const label = req.query.label || "Gmail";
-  const accountId = `${userId}:${label}`;
-  res.json({ url: getAuthUrl(accountId) });
+
+  // Generate CSRF token and store with label
+  const csrfToken = crypto.randomUUID();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  await db.execute({
+    sql: "INSERT INTO ea_csrf_tokens (token, account_label, expires_at) VALUES (?, ?, ?)",
+    args: [csrfToken, `${userId}:${label}`, expiresAt],
+  });
+
+  res.json({ url: getAuthUrl(csrfToken) });
 });
 
 router.post("/accounts/icloud", async (req, res) => {
