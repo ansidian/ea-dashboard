@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getEmailBody, sendToActualBudget, getActualAccounts, getSettings, dismissEmail } from "../api";
+import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getEmailBody, sendToActualBudget, getActualMetadata, getSettings, dismissEmail } from "../api";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -134,32 +134,49 @@ function CTMCard({ task, expanded, onToggle }) {
   );
 }
 
-// Shared Actual Budget accounts cache — fetched once across all BillBadge instances
-let _accountsCache = null;
-let _accountsFetching = false;
-let _accountsListeners = [];
+// Shared Actual Budget metadata cache — single fetch for accounts, payees, categories
+let _metadataCache = null;
+let _metadataFetching = false;
+let _metadataListeners = [];
 
-function ensureAccountsLoaded(setAccounts) {
-  if (_accountsCache) { setAccounts(_accountsCache); return; }
-  _accountsListeners.push(setAccounts);
-  if (_accountsFetching) return;
-  _accountsFetching = true;
-  getActualAccounts()
-    .then(list => { _accountsCache = list; _accountsListeners.forEach(fn => fn(list)); })
-    .catch(() => { _accountsListeners.forEach(fn => fn([])); })
-    .finally(() => { _accountsFetching = false; _accountsListeners = []; });
+function ensureMetadataLoaded(callback) {
+  if (_metadataCache) { callback(_metadataCache); return; }
+  _metadataListeners.push(callback);
+  if (_metadataFetching) return;
+  _metadataFetching = true;
+  getActualMetadata()
+    .then(data => {
+      // Flatten grouped categories into a flat list
+      const flatCategories = [];
+      for (const g of data.categories || []) {
+        for (const c of g.categories) {
+          flatCategories.push({ id: c.id, name: c.name, group: g.group_name });
+        }
+      }
+      _metadataCache = { accounts: data.accounts || [], payees: data.payees || [], categories: flatCategories };
+      _metadataListeners.forEach(fn => fn(_metadataCache));
+    })
+    .catch(() => {
+      const empty = { accounts: [], payees: [], categories: [] };
+      _metadataListeners.forEach(fn => fn(empty));
+    })
+    .finally(() => { _metadataFetching = false; _metadataListeners = []; });
 }
 
-function SearchableDropdown({ options, value, onChange, placeholder = "Select..." }) {
+function SearchableDropdown({ options, value, onChange, placeholder = "Select...", allowCreate = false, onCreateNew }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef(null);
   const inputRef = useRef(null);
 
   const selected = options.find(o => o.id === value);
+  // For allowCreate with string values (payee names), also check if value is a raw string
+  const displayName = selected?.name || (allowCreate && value && !selected ? value : null);
   const filtered = search
     ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()))
     : options;
+  const exactMatch = search && filtered.some(o => o.name.toLowerCase() === search.toLowerCase());
+  const showCreateOption = allowCreate && search.trim() && !exactMatch;
 
   useEffect(() => {
     if (!open) return;
@@ -172,10 +189,26 @@ function SearchableDropdown({ options, value, onChange, placeholder = "Select...
     if (open && inputRef.current) inputRef.current.focus();
   }, [open]);
 
-  // Auto-select first match on type
+  // Auto-select first match on type (skip if allowCreate — user may be typing a new name)
   useEffect(() => {
-    if (search && filtered.length > 0) onChange(filtered[0].id);
-  }, [search]);
+    if (!allowCreate && search && filtered.length > 0) onChange(filtered[0].id);
+  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCreate = () => {
+    const name = search.trim();
+    if (onCreateNew) onCreateNew(name);
+    else onChange(name);
+    setOpen(false);
+    setSearch("");
+  };
+
+  const handleEnter = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault(); e.stopPropagation();
+      if (showCreateOption) { handleCreate(); }
+      else if (filtered.length) { onChange(filtered[0].id); setOpen(false); setSearch(""); }
+    } else if (e.key === "Escape") { e.stopPropagation(); setOpen(false); setSearch(""); }
+  };
 
   return (
     <div ref={ref} style={{ position: "relative" }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
@@ -191,7 +224,7 @@ function SearchableDropdown({ options, value, onChange, placeholder = "Select...
         onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(99,102,241,0.4)"; }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.borderColor = "rgba(99,102,241,0.2)"; }}
       >
-        <span style={{ fontWeight: 500 }}>{selected?.name || placeholder}</span>
+        <span style={{ fontWeight: 500 }}>{displayName || placeholder}</span>
         <span style={{ color: "#64748b", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
       </button>
       {open && (
@@ -205,7 +238,7 @@ function SearchableDropdown({ options, value, onChange, placeholder = "Select...
               ref={inputRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search..."
+              placeholder={allowCreate ? "Search or type new..." : "Search..."}
               style={{
                 width: "100%", fontSize: 12, color: "#e2e8f0", background: "rgba(255,255,255,0.06)",
                 border: "1px solid rgba(255,255,255,0.08)", borderRadius: 5, padding: "5px 8px",
@@ -213,11 +246,27 @@ function SearchableDropdown({ options, value, onChange, placeholder = "Select...
               }}
               onFocus={e => { e.target.style.borderColor = "rgba(99,102,241,0.4)"; }}
               onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.08)"; }}
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (filtered.length) { onChange(filtered[0].id); } setOpen(false); setSearch(""); } else if (e.key === "Escape") { e.stopPropagation(); setOpen(false); setSearch(""); } }}
+              onKeyDown={handleEnter}
             />
           </div>
           <div style={{ maxHeight: 180, overflowY: "auto" }}>
-            {filtered.length === 0 && (
+            {showCreateOption && (
+              <div
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+                onClick={e => { e.stopPropagation(); handleCreate(); }}
+                style={{
+                  padding: "8px 12px", fontSize: 13, cursor: "pointer",
+                  color: "#818cf8", background: "rgba(129,140,248,0.06)",
+                  borderBottom: "1px solid rgba(255,255,255,0.04)",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(129,140,248,0.12)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(129,140,248,0.06)"; }}
+              >
+                <span style={{ fontSize: 14 }}>+</span> Create "{search.trim()}"
+              </div>
+            )}
+            {filtered.length === 0 && !showCreateOption && (
               <div style={{ padding: "8px 12px", fontSize: 12, color: "#64748b" }}>No matches</div>
             )}
             {filtered.map(o => (
@@ -256,24 +305,79 @@ function formatModelName(model) {
   return "Claude";
 }
 
+const typeHints = {
+  transfer: "Updates upcoming transfer schedule in Actual",
+  bill: "Updates upcoming schedule in Actual",
+  expense: "Creates one-time transaction",
+  income: "Creates one-time transaction",
+};
+
 function BillBadge({ bill, model }) {
   const modelDisplayName = formatModelName(model);
   const [state, setState] = useState("idle"); // idle | sending | sent | error
+  const [successMessage, setSuccessMessage] = useState("");
   const [editPayee, setEditPayee] = useState(bill.payee || "");
   const [editAmount, setEditAmount] = useState(bill.amount != null ? String(bill.amount) : "");
   const [editDue, setEditDue] = useState(bill.due_date || "");
-  const [accounts, setAccounts] = useState(_accountsCache || []);
+  const [editType, setEditType] = useState(bill.type || "expense");
+  const [accounts, setAccounts] = useState(_metadataCache?.accounts || []);
+  const [payees, setPayees] = useState(_metadataCache?.payees || []);
+  const [categories, setCategories] = useState(_metadataCache?.categories || []);
   const [editAccount, setEditAccount] = useState("");
-  const typeInfo = typeLabels[bill.type] || typeLabels.expense;
+  const [editCategory, setEditCategory] = useState(bill.category_id || "");
+  const [editFromAccount, setEditFromAccount] = useState("");
+  const [editToAccount, setEditToAccount] = useState("");
+  const [actualReady, setActualReady] = useState(!!_metadataCache);
 
-  useEffect(() => { ensureAccountsLoaded(setAccounts); }, []);
+  const isTransfer = editType === "transfer";
+
+  useEffect(() => {
+    ensureMetadataLoaded((data) => {
+      setAccounts(data.accounts);
+      setPayees(data.payees);
+      setCategories(data.categories);
+      setActualReady(true);
+
+      // Auto-select accounts for transfers
+      if (bill.type === "transfer" && data.accounts.length) {
+        const checking = data.accounts.find(a => a.type === "checking" || a.name.toLowerCase().includes("checking"));
+        if (checking) setEditFromAccount(checking.id);
+        if (bill.payee) {
+          const match = data.accounts.find(a =>
+            a.name.toLowerCase().includes(bill.payee.toLowerCase()) ||
+            bill.payee.toLowerCase().includes(a.name.toLowerCase())
+          );
+          if (match) setEditToAccount(match.id);
+        }
+      }
+
+      // Pre-select existing payee by name match
+      if (bill.payee && data.payees.length) {
+        const match = data.payees.find(p => p.name.toLowerCase() === bill.payee.toLowerCase());
+        if (match) setEditPayee(match.id);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- bill props are stable
 
   const handleSend = (e) => {
     e.stopPropagation();
     setState("sending");
-    const edited = { ...bill, payee: editPayee, amount: parseFloat(editAmount) || 0, due_date: editDue, account_id: editAccount || undefined };
+    const edited = {
+      ...bill,
+      payee: payees.find(p => p.id === editPayee)?.name || editPayee,
+      amount: parseFloat(editAmount) || 0,
+      due_date: editDue,
+      type: editType,
+    };
+    if (isTransfer) {
+      edited.from_account_id = editFromAccount;
+      edited.to_account_id = editToAccount;
+    } else {
+      edited.account_id = editAccount || undefined;
+      if (editCategory) edited.category_id = editCategory;
+    }
     sendToActualBudget(edited)
-      .then(() => setState("sent"))
+      .then((res) => { setSuccessMessage(res?.message || "Added to Actual Budget"); setState("sent"); })
       .catch(() => setState("error"));
   };
 
@@ -285,27 +389,66 @@ function BillBadge({ bill, model }) {
   const focusStyle = (e) => { e.target.style.borderColor = "rgba(99,102,241,0.5)"; e.target.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.1)"; };
   const blurStyle = (e) => { e.target.style.borderColor = "rgba(99,102,241,0.2)"; e.target.style.boxShadow = "none"; };
 
-  const canSend = editPayee.trim() && editAmount.trim() && editDue && editAccount;
+  const canSend = editAmount.trim() && editDue &&
+    (isTransfer ? (editFromAccount && editToAccount) : (editPayee.trim() && editAccount));
 
   return (
     <div onClick={(e) => e.stopPropagation()} style={{
       background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.15)",
       borderRadius: 10, padding: "12px 14px", marginTop: 12,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", color: typeInfo.color, background: typeInfo.color + "18", padding: "3px 8px", borderRadius: 5 }}>{typeInfo.icon} {typeInfo.label}</span>
-        <span style={{ fontSize: 11, color: "#94a3b8" }}>detected by {modelDisplayName}</span>
+      {/* Type selector row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        {Object.entries(typeLabels).map(([key, info]) => (
+          <button
+            key={key}
+            onClick={(e) => { e.stopPropagation(); setEditType(key); }}
+            style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase",
+              color: editType === key ? info.color : "#64748b",
+              background: editType === key ? info.color + "18" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${editType === key ? info.color + "40" : "rgba(255,255,255,0.06)"}`,
+              padding: "3px 8px", borderRadius: 5, cursor: "pointer",
+              transition: "all 0.2s ease",
+            }}
+          >{info.icon} {info.label}</button>
+        ))}
+        <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: "auto" }}>detected by {modelDisplayName}</span>
+      </div>
+      {/* Behavior hint */}
+      <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, fontStyle: "italic" }}>
+        {typeHints[editType]}
       </div>
 
-      {(state === "idle" || state === "error") && (
+      {(state === "idle" || state === "error") && !actualReady && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0 4px" }}>
+          <div style={{ width: 14, height: 14, border: "2px solid rgba(99,102,241,0.2)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ fontSize: 12, color: "#64748b" }}>Loading Actual Budget data...</span>
+        </div>
+      )}
+
+      {(state === "idle" || state === "error") && actualReady && (
         <>
-          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-            <div style={{ flex: 2 }}>
-              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Payee</div>
-              <input value={editPayee} onChange={e => setEditPayee(e.target.value)} placeholder="e.g. Da Vien" style={inputStyle}
-                onFocus={focusStyle} onBlur={blurStyle}
-              />
-            </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 10, animation: "fadeIn 0.25s ease" }}>
+            {!isTransfer && (
+              <div style={{ flex: 2 }}>
+                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Payee</div>
+                {payees.length > 0 ? (
+                  <SearchableDropdown
+                    options={payees}
+                    value={editPayee}
+                    onChange={setEditPayee}
+                    placeholder="Select or create payee..."
+                    allowCreate
+                    onCreateNew={(name) => setEditPayee(name)}
+                  />
+                ) : (
+                  <input value={editPayee} onChange={e => setEditPayee(e.target.value)} placeholder="e.g. Da Vien" style={inputStyle}
+                    onFocus={focusStyle} onBlur={blurStyle}
+                  />
+                )}
+              </div>
+            )}
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Amount</div>
               <div style={{ position: "relative" }}>
@@ -322,12 +465,31 @@ function BillBadge({ bill, model }) {
               />
             </div>
           </div>
-          {accounts.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Account</div>
-              <SearchableDropdown options={accounts} value={editAccount} onChange={setEditAccount} placeholder="Select account..." />
+          {/* Row 2: Account + Category/ToAccount — swaps based on type */}
+          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>{isTransfer ? "From Account" : "Account"}</div>
+              <SearchableDropdown
+                options={accounts}
+                value={isTransfer ? editFromAccount : editAccount}
+                onChange={isTransfer ? setEditFromAccount : setEditAccount}
+                placeholder={isTransfer ? "Payment source..." : "Select account..."}
+              />
             </div>
-          )}
+            <div style={{ flex: 1 }}>
+              {isTransfer ? (
+                <>
+                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>To Account</div>
+                  <SearchableDropdown options={accounts} value={editToAccount} onChange={setEditToAccount} placeholder="Credit card..." />
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Category</div>
+                  <SearchableDropdown options={categories} value={editCategory} onChange={setEditCategory} placeholder="Select category..." />
+                </>
+              )}
+            </div>
+            </div>
           <div style={{ marginTop: 10 }}>
             {state === "error" && <div style={{ fontSize: 11, color: "#fca5a5", marginBottom: 6 }}>Failed to send — check fields and try again.</div>}
             <button onClick={handleSend} disabled={!canSend} className="bill-send-btn" style={{ background: canSend ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "rgba(99,102,241,0.2)", color: canSend ? "#fff" : "#64748b", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 600, cursor: canSend ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center", transition: "all 0.2s ease" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Send to Actual Budget</button>
@@ -336,7 +498,7 @@ function BillBadge({ bill, model }) {
       )}
 
       {state === "sending" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "9px 16px", marginTop: 10, background: "rgba(99,102,241,0.1)", borderRadius: 8 }}><div style={{ width: 14, height: 14, border: "2px solid rgba(99,102,241,0.3)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /><span style={{ fontSize: 12, color: "#a5b4fc" }}>Syncing with Actual Budget…</span></div>}
-      {state === "sent" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", marginTop: 10, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg><span style={{ fontSize: 12, color: "#34d399", fontWeight: 600 }}>Added to Actual Budget</span></div>}
+      {state === "sent" && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 16px", marginTop: 10, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 8 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg><span style={{ fontSize: 12, color: "#34d399", fontWeight: 600 }}>{successMessage}</span></div>}
     </div>
   );
 }
@@ -587,6 +749,9 @@ export default function Dashboard() {
         setLatestId(res.id);
 
         // Always quick-refresh on load to get fresh weather/calendar/CTM
+        // Skip refresh in mock mode — it would overwrite the mock with real data
+        const isMock = new URLSearchParams(window.location.search).has("mock");
+        if (isMock) return;
         sessionStorage.removeItem("ea_settings_changed");
         setRefreshing(true);
         quickRefresh()
@@ -1918,7 +2083,13 @@ export default function Dashboard() {
               <div
                 key={i}
                 data-email-id={email.id}
-                onClick={() => setSelectedEmail(isOpen ? null : email)}
+                onClick={(e) => {
+                  // Only toggle on header clicks — not expanded content area
+                  // Check if click target is within the expanded body (stopPropagation covers most,
+                  // but padding gaps in the parent div can still trigger this)
+                  if (isOpen && !e.target.closest('[data-email-header]')) return;
+                  setSelectedEmail(isOpen ? null : email);
+                }}
                 style={{
                   background: isOpen
                     ? "rgba(255,255,255,0.04)"
@@ -1943,6 +2114,7 @@ export default function Dashboard() {
                 }}
               >
                 <div
+                  data-email-header
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -2086,6 +2258,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {isOpen && (
+                  <div onClick={(e) => e.stopPropagation()}>
                   <EmailBody
                     email={email}
                     model={d.model}
@@ -2113,6 +2286,7 @@ export default function Dashboard() {
                       }
                     }}
                   />
+                  </div>
                 )}
               </div>
             );

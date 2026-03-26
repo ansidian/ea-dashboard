@@ -40,16 +40,275 @@ export async function testConnection(userId) {
   }
 }
 
-export async function getAccounts(userId) {
+// Fetch all Actual Budget metadata in a single connection (accounts, payees, categories)
+// The @actual-app/api is a singleton — parallel init/shutdown calls conflict,
+// so we batch everything into one connection.
+export async function getMetadata(userId) {
   const { serverURL, password, syncId } = await getActualConfig(userId);
   try {
     await actualApi.init({ serverURL, password });
     await actualApi.downloadBudget(syncId);
-    const accounts = await actualApi.getAccounts();
-    return accounts.filter(a => !a.closed).map((a) => ({ id: a.id, name: a.name, type: a.type })).sort((a, b) => a.name.localeCompare(b.name));
+
+    const [rawAccounts, rawPayees, groups] = await Promise.all([
+      actualApi.getAccounts(),
+      actualApi.getPayees(),
+      actualApi.getCategoryGroups(),
+    ]);
+
+    const accounts = rawAccounts
+      .filter(a => !a.closed)
+      .map(a => ({ id: a.id, name: a.name, type: a.type }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const payees = rawPayees
+      .filter(p => p.name && !p.transfer_acct)
+      .map(p => ({ id: p.id, name: p.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const categories = groups
+      .filter(g => g.name !== "Internal")
+      .map(g => ({
+        group_name: g.name,
+        categories: (g.categories || []).map(c => ({ id: c.id, name: c.name })),
+      }));
+
+    return { accounts, payees, categories };
   } finally {
     await actualApi.shutdown().catch(() => {});
   }
+}
+
+// Individual accessors (used by briefing generation where only one is needed)
+export async function getAccounts(userId) {
+  const { accounts } = await getMetadata(userId);
+  return accounts;
+}
+
+export async function getPayees(userId) {
+  const { payees } = await getMetadata(userId);
+  return payees;
+}
+
+export async function getCategories(userId) {
+  const { categories } = await getMetadata(userId);
+  return categories;
+}
+
+// --- Schedule helpers (ported from actual-helper.mjs) ---
+
+async function getSchedulesWithConditions({ includeCompleted = false } = {}) {
+  const rows = (await actualApi.runQuery(
+    actualApi.q('schedules').select(['id', 'name', 'rule', 'next_date', 'completed'])
+  )).data;
+  const rules = await actualApi.getRules();
+  const ruleMap = Object.fromEntries(rules.map(r => [r.id, r]));
+  return rows
+    .filter(s => includeCompleted || !s.completed)
+    .map(s => ({ ...s, conditions: ruleMap[s.rule]?.conditions || [] }));
+}
+
+function findScheduleByPayee(schedules, payeeId, accountId, amountCents) {
+  const matches = schedules.filter(s =>
+    s.conditions.some(c => c.field === 'payee' && c.value === payeeId)
+  );
+  if (matches.length <= 1) return matches[0] || null;
+
+  for (const s of matches) {
+    const acctMatch = !accountId || s.conditions.some(c => c.field === 'account' && c.value === accountId);
+    if (!acctMatch) continue;
+
+    const amtCond = s.conditions.find(c => c.field === 'amount');
+    if (!amtCond || !amountCents) return s;
+
+    const amt = Math.abs(amountCents);
+    if (amtCond.op === 'is' && Math.abs(amtCond.value) === amt) return s;
+    if (amtCond.op === 'isapprox' && Math.abs(Math.abs(amtCond.value) - amt) / amt < 0.3) return s;
+    if (amtCond.op === 'isbetween') {
+      const lo = Math.min(Math.abs(amtCond.value.num1), Math.abs(amtCond.value.num2));
+      const hi = Math.max(Math.abs(amtCond.value.num1), Math.abs(amtCond.value.num2));
+      if (amt >= lo * 0.7 && amt <= hi * 1.3) return s;
+    }
+  }
+  return matches[0];
+}
+
+async function resolvePayee(payeeName) {
+  if (!payeeName) return null;
+  const payees = await actualApi.getPayees();
+  const match = payees.find(p => p.name?.toLowerCase() === payeeName.toLowerCase());
+  return match ? match.id : await actualApi.createPayee({ name: payeeName });
+}
+
+async function upsertSchedule(billData, targetAccountId) {
+  const amountCents = -Math.round(billData.amount * 100);
+  const isIncome = billData.type === "income";
+  const signedAmount = isIncome ? Math.abs(amountCents) : amountCents;
+  const name = billData.payee;
+
+  // If date is today or past, create a posted transaction instead
+  const today = new Date().toISOString().slice(0, 10);
+  if (billData.due_date <= today) {
+    const txn = { date: billData.due_date, amount: signedAmount, cleared: false };
+    const payeeId = await resolvePayee(billData.payee);
+    if (payeeId) txn.payee = payeeId;
+    if (billData.category_id) txn.category = billData.category_id;
+    await actualApi.addTransactions(targetAccountId, [txn]);
+    return { success: true, message: `Transaction "${name}" created (date is today or past)` };
+  }
+
+  const payeeId = await resolvePayee(billData.payee);
+
+  // Try to find existing schedule by payee, then by name
+  let existingId = null;
+  if (payeeId) {
+    const schedules = await getSchedulesWithConditions();
+    const existing = findScheduleByPayee(schedules, payeeId, targetAccountId, Math.abs(amountCents));
+    if (existing) existingId = existing.id;
+  }
+  if (!existingId && name) {
+    const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
+    const byName = allSchedules.find(s => s.name === name);
+    if (byName) existingId = byName.id;
+  }
+
+  if (existingId) {
+    // Update existing schedule — rebuild conditions preserving recurrence
+    const schedules = await getSchedulesWithConditions({ includeCompleted: true });
+    const existing = schedules.find(s => s.id === existingId);
+    const oldConditions = existing?.conditions || [];
+
+    const newConditions = [];
+    const dateCond = oldConditions.find(c => c.field === 'date');
+    if (dateCond && typeof dateCond.value === 'object' && dateCond.value?.frequency) {
+      if (dateCond.value.interval > 1) {
+        newConditions.push(dateCond);
+      } else {
+        newConditions.push({ op: dateCond.op, field: 'date', value: { ...dateCond.value, start: billData.due_date } });
+      }
+    } else {
+      newConditions.push({ op: 'is', field: 'date', value: billData.due_date });
+    }
+
+    newConditions.push({ op: 'is', field: 'amount', value: signedAmount });
+
+    for (const c of oldConditions) {
+      if (c.field !== 'date' && c.field !== 'amount') newConditions.push(c);
+    }
+
+    await actualApi.internal.send('schedule/update', {
+      schedule: { id: existingId, completed: false },
+      conditions: newConditions,
+    });
+    return { success: true, message: `Updated schedule "${existing?.name || name}"` };
+  }
+
+  // Create new one-time schedule
+  const conditions = [
+    { op: 'is', field: 'date', value: billData.due_date },
+    { op: 'is', field: 'amount', value: signedAmount },
+  ];
+  if (payeeId) conditions.push({ op: 'is', field: 'payee', value: payeeId });
+  if (targetAccountId) conditions.push({ op: 'is', field: 'account', value: targetAccountId });
+
+  // Pre-check for name collision (including completed)
+  const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
+  const byName = allSchedules.find(s => s.name === name);
+  if (byName) {
+    await actualApi.internal.send('schedule/update', {
+      schedule: { id: byName.id, completed: false },
+      conditions,
+    });
+    return { success: true, message: `Updated existing schedule "${name}"` };
+  }
+
+  const id = await actualApi.createSchedule({ name, date: billData.due_date, amount: signedAmount });
+  await actualApi.internal.send('schedule/update', { schedule: { id, name }, conditions });
+  return { success: true, message: `Schedule "${name}" created` };
+}
+
+async function upsertTransferSchedule(billData) {
+  const amountCents = Math.round(billData.amount * 100); // positive for transfers into account
+
+  // Find the transfer payee (special payee linked to from_account)
+  const payees = await actualApi.getPayees();
+  const transferPayee = payees.find(p => p.transfer_acct === billData.from_account_id);
+  if (!transferPayee) {
+    throw new Error(`No transfer payee found for account ${billData.from_account_id}`);
+  }
+
+  // If date is today or past, create a posted transfer transaction
+  const today = new Date().toISOString().slice(0, 10);
+  if (billData.due_date <= today) {
+    await actualApi.addTransactions(billData.to_account_id, [{
+      date: billData.due_date,
+      amount: amountCents,
+      payee: transferPayee.id,
+      cleared: false,
+    }]);
+    return { success: true, message: `Transfer created as transaction (date is today or past)` };
+  }
+
+  const name = billData.payee;
+  const conditions = [
+    { op: 'is', field: 'date', value: billData.due_date },
+    { op: 'is', field: 'amount', value: amountCents },
+    { op: 'is', field: 'payee', value: transferPayee.id },
+    { op: 'is', field: 'account', value: billData.to_account_id },
+  ];
+
+  // Try to find existing schedule by transfer payee, then by name
+  let existingId = null;
+  const schedules = await getSchedulesWithConditions();
+  const existing = findScheduleByPayee(schedules, transferPayee.id, billData.to_account_id, amountCents);
+  if (existing) existingId = existing.id;
+
+  if (!existingId && name) {
+    const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
+    const byName = allSchedules.find(s => s.name === name);
+    if (byName) existingId = byName.id;
+  }
+
+  if (existingId) {
+    const existingSched = [...schedules, ...(await getSchedulesWithConditions({ includeCompleted: true }))].find(s => s.id === existingId);
+    const oldConditions = existingSched?.conditions || [];
+
+    const newConditions = [];
+    const dateCond = oldConditions.find(c => c.field === 'date');
+    if (dateCond && typeof dateCond.value === 'object' && dateCond.value?.frequency) {
+      if (dateCond.value.interval > 1) {
+        newConditions.push(dateCond);
+      } else {
+        newConditions.push({ op: dateCond.op, field: 'date', value: { ...dateCond.value, start: billData.due_date } });
+      }
+    } else {
+      newConditions.push({ op: 'is', field: 'date', value: billData.due_date });
+    }
+
+    newConditions.push({ op: 'is', field: 'amount', value: amountCents });
+    newConditions.push({ op: 'is', field: 'payee', value: transferPayee.id });
+    newConditions.push({ op: 'is', field: 'account', value: billData.to_account_id });
+
+    await actualApi.internal.send('schedule/update', {
+      schedule: { id: existingId, completed: false },
+      conditions: newConditions,
+    });
+    return { success: true, message: `Updated transfer schedule "${existingSched?.name || name}"` };
+  }
+
+  // Create new transfer schedule
+  const allSchedules = await getSchedulesWithConditions({ includeCompleted: true });
+  const byName = allSchedules.find(s => s.name === name);
+  if (byName) {
+    await actualApi.internal.send('schedule/update', {
+      schedule: { id: byName.id, completed: false },
+      conditions,
+    });
+    return { success: true, message: `Updated existing transfer schedule "${name}"` };
+  }
+
+  const id = await actualApi.createSchedule({ name, date: billData.due_date, amount: amountCents });
+  await actualApi.internal.send('schedule/update', { schedule: { id, name }, conditions });
+  return { success: true, message: `Transfer schedule "${name}" created` };
 }
 
 export async function sendBill(billData, userId) {
@@ -74,46 +333,32 @@ export async function sendBill(billData, userId) {
     const amountCents = Math.round(billData.amount * 100);
     const isIncome = billData.type === "income";
 
-    if (billData.type === "transfer" && !billData.account_id) {
-      // Legacy transfer logic: try to find matching credit card account for transfer_id
-      const creditCardAccount = accounts.find(
-        (a) =>
-          a.name.toLowerCase().includes(billData.payee.toLowerCase()) ||
-          billData.payee.toLowerCase().includes(a.name.toLowerCase()),
-      );
-      if (creditCardAccount) {
-        await actualApi.addTransactions(targetAccount.id, [
-          {
-            date: billData.due_date,
-            amount: -amountCents,
-            payee_name: billData.payee,
-            transfer_id: creditCardAccount.id,
-            notes: "Auto-detected bill from EA briefing",
-          },
-        ]);
-      } else {
-        await actualApi.addTransactions(targetAccount.id, [
-          {
-            date: billData.due_date,
-            amount: -amountCents,
-            payee_name: billData.payee,
-            notes: "Credit card payment (auto-detected from EA briefing)",
-          },
-        ]);
+    let result;
+
+    if (billData.type === "transfer") {
+      // Transfer: use from/to account IDs for schedule upsert
+      if (!billData.from_account_id || !billData.to_account_id) {
+        throw new Error("Transfer requires from_account_id and to_account_id");
       }
+      result = await upsertTransferSchedule(billData);
+    } else if (billData.type === "bill") {
+      // Bill: upsert schedule with category
+      result = await upsertSchedule(billData, targetAccount.id);
     } else {
-      await actualApi.addTransactions(targetAccount.id, [
-        {
-          date: billData.due_date,
-          amount: isIncome ? amountCents : -amountCents,
-          payee_name: billData.payee,
-          notes: `Auto-detected ${billData.type} from EA briefing`,
-        },
-      ]);
+      // Expense / Income: one-time transaction (existing behavior + category support)
+      const txn = {
+        date: billData.due_date,
+        amount: isIncome ? amountCents : -amountCents,
+        payee_name: billData.payee,
+        notes: `Auto-detected ${billData.type} from EA briefing`,
+      };
+      if (billData.category_id) txn.category = billData.category_id;
+      await actualApi.addTransactions(targetAccount.id, [txn]);
+      result = { success: true, message: `Sent ${billData.payee} $${billData.amount} to Actual Budget` };
     }
 
     await actualApi.sync();
-    return { success: true, message: `Sent ${billData.payee} $${billData.amount} to Actual Budget` };
+    return result;
   } finally {
     await actualApi.shutdown().catch(() => {});
   }

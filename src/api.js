@@ -22,7 +22,10 @@ export const login = (password) => apiFetch("/api/auth/login", { method: "POST",
 export const logout = () => apiFetch("/api/auth/logout", { method: "POST" });
 
 // Briefings
-export const getLatestBriefing = () => apiFetch("/api/briefing/latest");
+export const getLatestBriefing = () => {
+  const mock = new URLSearchParams(window.location.search).get("mock");
+  return apiFetch(mock ? "/api/briefing/latest?mock=1" : "/api/briefing/latest");
+};
 export const triggerGeneration = () => apiFetch("/api/briefing/generate", { method: "POST" });
 export const quickRefresh = () => apiFetch("/api/briefing/refresh", { method: "POST" });
 export const pollStatus = (id) => apiFetch(`/api/briefing/status/${id}`);
@@ -35,6 +38,9 @@ export const dismissEmail = (emailId) => apiFetch(`/api/briefing/dismiss/${encod
 // Actual Budget
 export const sendToActualBudget = (bill) => apiFetch("/api/briefing/actual/send", { method: "POST", body: JSON.stringify(bill) });
 export const getActualAccounts = () => apiFetch("/api/briefing/actual/accounts");
+export const getActualPayees = () => apiFetch("/api/briefing/actual/payees");
+export const getActualCategories = () => apiFetch("/api/briefing/actual/categories");
+export const getActualMetadata = () => apiFetch("/api/briefing/actual/metadata");
 export const testActualBudget = () => apiFetch("/api/briefing/actual/test", { method: "POST" });
 
 // Accounts & Settings

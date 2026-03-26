@@ -14,6 +14,7 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
 
 2. DETECT TRANSACTIONS: Extract financial data from emails with SPECIFIC dollar amounts. No amount in email = no bill (hasBill: false).
    Extract: payee (short name), amount (number, REQUIRED), due_date (YYYY-MM-DD), type: "transfer" (credit card payments), "bill" (recurring services), "expense" (one-off purchases), "income" (refunds/deposits).
+   If budget categories are provided, also set category_id and category_name to the best matching category. Only set these if confident in the match.
 
 3. GENERATE INSIGHTS (2-4 items): Connect dots across emails, calendar, and deadlines. Be specific and actionable.
    Calendar events with "passed": true already ended — skip them. Focus on what's ahead.
@@ -31,7 +32,7 @@ Respond with ONLY valid JSON matching this structure:
         "id": string, "from": string, "fromEmail": string, "subject": string,
         "preview": string (1-2 sentences), "action": string (max 3-4 words: "Reply needed", "FYI", "Pay by Apr 5"),
         "urgency": string, "date": string, "hasBill": boolean,
-        "extractedBill": { "payee": string, "amount": number, "due_date": string, "type": string } | null
+        "extractedBill": { "payee": string, "amount": number, "due_date": string, "type": string, "category_id": string|null, "category_name": string|null } | null
       }],
       "noise_count": number
     }]
@@ -44,7 +45,7 @@ RULES:
 - "unread" MUST equal the length of "important" array. Do NOT fabricate emails.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.`;
 
-export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests }) {
+export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories }) {
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
 
   const selectedModel = model || PREFERRED_MODELS[0];
@@ -82,6 +83,11 @@ export async function callClaude({ emails, calendar, ctmDeadlines, model, emailI
     ? ctmDeadlines.map(d => `"${d.title}" due ${d.due_date} ${d.due_time || ""} (${d.class_name}, ${d.points_possible || 0}pts)`).join("; ")
     : "None";
 
+  // Compact category list for bill matching
+  const categoriesNote = categories?.length
+    ? `\n\n## Budget Categories (for bill detection — match extractedBill to closest category)\n${categories.flatMap(g => g.categories.map(c => `${c.id}:${c.name}`)).join(", ")}`
+    : "";
+
   const userMessage = `## Emails
 ${JSON.stringify(trimmedEmails)}
 
@@ -91,7 +97,7 @@ ${calendarSummary || "No events"}
 ## Academic Deadlines (for insights only — do NOT include in output)
 ${ctmSummary}
 
-## Now: ${now}${interestsNote}`;
+## Now: ${now}${interestsNote}${categoriesNote}`;
 
   console.log(`[EA] Calling Claude API with model: ${selectedModel}`);
 

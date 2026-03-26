@@ -5,7 +5,7 @@ import { generateBriefing, quickRefresh } from "../briefing/index.js";
 import { fetchEmailBody as fetchGmailBody } from "../briefing/gmail.js";
 import { fetchEmailBody as fetchIcloudBody } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
-import { sendBill, getAccounts as getActualAccounts, testConnection as testActual } from "../briefing/actual.js";
+import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
 import { generateMockBriefing, generateMockHistory } from "../db/dev-fixture.js";
 
 const router = Router();
@@ -91,6 +91,11 @@ router.get("/latest", async (req, res) => {
             ORDER BY generated_at DESC LIMIT 1`,
       args: [userId],
     });
+
+    // ?mock=1 forces mock briefing in dev (useful when real briefings exist)
+    if (req.query.mock && process.env.NODE_ENV !== "production") {
+      return res.json({ id: 0, status: "ready", briefing: generateMockBriefing(), generated_at: new Date().toISOString(), generation_time_ms: 0 });
+    }
 
     if (!result.rows.length) {
       // In dev, return a dynamic mock briefing so the UI is always usable
@@ -268,12 +273,42 @@ router.post("/actual/send", async (req, res) => {
   }
 });
 
+router.get("/actual/metadata", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    res.json(await getActualMetadata(userId));
+  } catch (err) {
+    console.error("Error fetching Actual Budget metadata:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.get("/actual/accounts", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     res.json(await getActualAccounts(userId));
   } catch (err) {
     console.error("Error fetching Actual Budget accounts:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/actual/payees", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    res.json(await getActualPayees(userId));
+  } catch (err) {
+    console.error("Error fetching Actual Budget payees:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/actual/categories", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    res.json(await getActualCategories(userId));
+  } catch (err) {
+    console.error("Error fetching Actual Budget categories:", err.message);
     res.status(500).json({ message: err.message });
   }
 });

@@ -6,6 +6,7 @@ import { fetchCalendar } from "./calendar.js";
 import { fetchWeather } from "./weather.js";
 import { fetchCTMDeadlines } from "./ctm-events.js";
 import { callClaude } from "./claude.js";
+import { getCategories } from "./actual.js";
 
 // Shared: load accounts + settings, return them
 async function loadUserConfig(userId) {
@@ -250,10 +251,14 @@ export async function generateBriefing(userId) {
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing, dismissedIds }] = await Promise.all([
+    const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing, dismissedIds }, categories] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
+      getCategories(userId).catch((err) => {
+        console.error("Actual Budget categories fetch failed:", err.message);
+        return [];
+      }),
     ]);
 
     // Optimization #2: Skip if nothing new (also exclude dismissed emails)
@@ -298,7 +303,7 @@ export async function generateBriefing(userId) {
       await updateProgress(briefingId, `Sending ${newEmails.length} new email${newEmails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Delta generation: ${newEmails.length} new emails (${emails.length - newEmails.length} previously triaged)`);
       const ctmStats = computeCTMStats(ctmDeadlines);
-      briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests });
+      briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories });
 
       // Merge: keep previous triage for old emails, add new triage
       const newTriagedByAccount = {};
@@ -339,7 +344,7 @@ export async function generateBriefing(userId) {
       await updateProgress(briefingId, `Sending ${emails.length} email${emails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Full generation: ${emails.length} emails`);
       const ctmStats = computeCTMStats(ctmDeadlines);
-      briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests });
+      briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories });
       // Tag all emails with seenCount 1
       for (const acct of briefingJson.emails?.accounts || []) {
         acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
