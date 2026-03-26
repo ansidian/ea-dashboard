@@ -1,0 +1,1 @@
+ALTER TABLE ea_settings ADD COLUMN claude_model TEXT DEFAULT NULL;

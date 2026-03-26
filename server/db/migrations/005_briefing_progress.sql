@@ -1,0 +1,1 @@
+ALTER TABLE ea_briefings ADD COLUMN progress TEXT DEFAULT NULL;
