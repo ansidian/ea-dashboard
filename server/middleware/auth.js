@@ -1,29 +1,39 @@
 import crypto from "crypto";
+import db from "../db/connection.js";
 
-// In-memory session store (sessions lost on restart — acceptable for single-user)
-const sessions = new Map();
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-export function createSession() {
+export async function createSession() {
   const token = crypto.randomUUID();
-  sessions.set(token, { expiresAt: Date.now() + SESSION_MAX_AGE_MS });
+  const expiresAt = Date.now() + SESSION_MAX_AGE_MS;
+  await db.execute({
+    sql: "INSERT INTO ea_sessions (token, expires_at) VALUES (?, ?)",
+    args: [token, expiresAt],
+  });
   return token;
 }
 
-export function validateSession(token) {
+export async function validateSession(token) {
   if (!token) return false;
-  const session = sessions.get(token);
-  if (!session) return false;
-  if (Date.now() > session.expiresAt) {
-    sessions.delete(token);
+  const result = await db.execute({
+    sql: "SELECT expires_at FROM ea_sessions WHERE token = ?",
+    args: [token],
+  });
+  if (!result.rows.length) return false;
+  if (Date.now() > result.rows[0].expires_at) {
+    // Lazy cleanup — delete expired session
+    await db.execute({
+      sql: "DELETE FROM ea_sessions WHERE token = ?",
+      args: [token],
+    });
     return false;
   }
   return true;
 }
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const token = req.cookies?.ea_session;
-  if (!validateSession(token)) {
+  if (!await validateSession(token)) {
     return res.status(401).json({ message: "Not authenticated" });
   }
   next();

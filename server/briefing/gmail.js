@@ -14,7 +14,7 @@ const SCOPES = [
 
 // --- OAuth flow ---
 
-export function getAuthUrl(accountId) {
+export function getAuthUrl(state) {
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: GOOGLE_REDIRECT_URI,
@@ -22,7 +22,7 @@ export function getAuthUrl(accountId) {
     scope: SCOPES.join(" "),
     access_type: "offline",
     prompt: "consent",
-    state: accountId,
+    state: state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
