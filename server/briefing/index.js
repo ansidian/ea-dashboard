@@ -232,6 +232,65 @@ function hasCalendarChanged(prev, currentCalendar) {
   return JSON.stringify(prev.calendar || []) !== JSON.stringify(currentCalendar || []);
 }
 
+// Pure function: merge delta triage results with previous briefing triage.
+// Takes (prevBriefing, newBriefing, dismissedIds, allEmailIds) and returns merged accounts array.
+// The DB call (loadDismissedIds) stays in generateBriefing.
+export function mergeDeltaBriefing(prevBriefing, newBriefing, dismissedIds, allEmailIds) {
+  // Clone new accounts to avoid mutating input; tag all new emails with seenCount 1
+  const mergedAccounts = (newBriefing?.emails?.accounts || []).map(acct => ({
+    ...acct,
+    important: acct.important.map(e => ({ ...e, seenCount: 1 })),
+  }));
+
+  const newByAccount = new Map();
+  for (const acct of mergedAccounts) {
+    newByAccount.set(acct.name, acct);
+  }
+
+  for (const prevAcct of prevBriefing?.emails?.accounts || []) {
+    const newAcct = newByAccount.get(prevAcct.name);
+    if (newAcct) {
+      // Merge: old emails that still exist in inbox, not dismissed, not expired
+      const existingIds = new Set(newAcct.important.map(e => e.id));
+      const keptOld = prevAcct.important
+        .filter(e => !existingIds.has(e.id) && allEmailIds.has(e.id) && !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
+        .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
+      newAcct.important = [...keptOld, ...newAcct.important];
+      newAcct.unread = newAcct.important.length;
+      newAcct.noise_count = (prevAcct.noise_count || 0) + (newAcct.noise_count || 0);
+    } else {
+      // Account had no new emails — carry forward previous triage
+      const stillRelevant = prevAcct.important
+        .filter(e => allEmailIds.has(e.id) && !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
+        .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
+      if (stillRelevant.length > 0 || prevAcct.noise_count > 0) {
+        mergedAccounts.push({
+          ...prevAcct,
+          important: stillRelevant,
+          unread: stillRelevant.length,
+        });
+      }
+    }
+  }
+
+  // Ensure unread equals important.length on every account
+  for (const acct of mergedAccounts) {
+    acct.unread = acct.important.length;
+  }
+
+  // Invariant check: total emails out should not exceed total emails in
+  const totalIn = (newBriefing?.emails?.accounts || []).reduce((s, a) => s + a.important.length, 0)
+    + (prevBriefing?.emails?.accounts || []).reduce((s, a) => s + a.important.length, 0);
+  const totalOut = mergedAccounts.reduce((s, a) => s + a.important.length, 0);
+  if (totalOut > totalIn) {
+    console.warn(
+      `[Briefing] Delta merge email count anomaly: ${totalIn} in, ${totalOut} out`
+    );
+  }
+
+  return mergedAccounts;
+}
+
 // Full generation: fetch data + Haiku AI analysis (with delta optimization)
 async function updateProgress(briefingId, progress) {
   await db.execute({
@@ -316,40 +375,10 @@ export async function generateBriefing(userId) {
       const ctmStats = computeCTMStats(ctmDeadlines);
       briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories });
 
-      // Merge: keep previous triage for old emails, add new triage
-      const newTriagedByAccount = {};
-      for (const acct of briefingJson.emails?.accounts || []) {
-        // Tag newly triaged emails with seenCount 1
-        acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
-        newTriagedByAccount[acct.name] = acct;
-      }
-
-      // Rebuild accounts: previous important emails + newly triaged
-      for (const prevAcct of prevBriefing.emails?.accounts || []) {
-        const newAcct = newTriagedByAccount[prevAcct.name];
-        if (newAcct) {
-          // Merge: old emails that still exist + new ones (filter dismissed/expired, increment seenCount)
-          const existingEmailIds = new Set(newAcct.important.map(e => e.id));
-          const keptOld = prevAcct.important
-            .filter(e => !existingEmailIds.has(e.id) && emails.some(fe => fe.id === e.id) && !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
-            .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
-          newAcct.important = [...keptOld, ...newAcct.important];
-          newAcct.unread = newAcct.important.length;
-          newAcct.noise_count = (prevAcct.noise_count || 0) + (newAcct.noise_count || 0);
-        } else {
-          // Account had no new emails — carry forward previous triage (filter dismissed/expired, increment seenCount)
-          const stillRelevant = prevAcct.important
-            .filter(e => emails.some(fe => fe.id === e.id) && !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
-            .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
-          if (stillRelevant.length > 0 || prevAcct.noise_count > 0) {
-            briefingJson.emails.accounts.push({
-              ...prevAcct,
-              important: stillRelevant,
-              unread: stillRelevant.length,
-            });
-          }
-        }
-      }
+      // Merge previous triage with new triage using pure function
+      const allEmailIds = new Set(emails.map(e => e.id));
+      const mergedAccounts = mergeDeltaBriefing(prevBriefing, briefingJson, dismissedIds, allEmailIds);
+      briefingJson.emails.accounts = mergedAccounts;
     } else {
       // Full generation: all emails are new or no previous triage
       await updateProgress(briefingId, `Sending ${emails.length} email${emails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
