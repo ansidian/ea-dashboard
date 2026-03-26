@@ -1,99 +1,120 @@
-// WMO weather code → icon mapping
-const WMO_ICONS = {
-  0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
-  45: "🌫️", 48: "🌫️",
-  51: "🌦️", 53: "🌦️", 55: "🌧️",
-  56: "🌧️", 57: "🌧️",
-  61: "🌧️", 63: "🌧️", 65: "🌧️",
-  66: "🌧️", 67: "🌧️",
-  71: "🌨️", 73: "🌨️", 75: "🌨️", 77: "🌨️",
-  80: "🌦️", 81: "🌧️", 82: "🌧️",
-  85: "🌨️", 86: "🌨️",
-  95: "⛈️", 96: "⛈️", 99: "⛈️",
+const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
+
+// WeatherAPI condition code → emoji mapping (day / night variants)
+const CONDITION_ICONS = {
+  1000: ["☀️", "🌙"],    // Sunny / Clear
+  1003: ["⛅", "☁️"],    // Partly cloudy
+  1006: ["☁️", "☁️"],    // Cloudy
+  1009: ["☁️", "☁️"],    // Overcast
+  1030: ["☁️", "☁️"],    // Mist
+  1063: ["🌦️", "🌧️"],  // Patchy rain possible
+  1066: ["🌨️", "🌨️"],  // Patchy snow possible
+  1069: ["🌨️", "🌨️"],  // Patchy sleet possible
+  1072: ["🌧️", "🌧️"],  // Patchy freezing drizzle
+  1087: ["⛈️", "⛈️"],    // Thundery outbreaks possible
+  1114: ["🌨️", "🌨️"],  // Blowing snow
+  1117: ["🌨️", "🌨️"],  // Blizzard
+  1135: ["☁️", "☁️"],    // Fog
+  1147: ["☁️", "☁️"],    // Freezing fog
+  1150: ["🌦️", "🌧️"],  // Patchy light drizzle
+  1153: ["🌦️", "🌧️"],  // Light drizzle
+  1168: ["🌧️", "🌧️"],  // Freezing drizzle
+  1171: ["🌧️", "🌧️"],  // Heavy freezing drizzle
+  1180: ["🌦️", "🌧️"],  // Patchy light rain
+  1183: ["🌧️", "🌧️"],  // Light rain
+  1186: ["🌧️", "🌧️"],  // Moderate rain at times
+  1189: ["🌧️", "🌧️"],  // Moderate rain
+  1192: ["🌧️", "🌧️"],  // Heavy rain at times
+  1195: ["🌧️", "🌧️"],  // Heavy rain
+  1198: ["🌧️", "🌧️"],  // Light freezing rain
+  1201: ["🌧️", "🌧️"],  // Moderate/heavy freezing rain
+  1204: ["🌨️", "🌨️"],  // Light sleet
+  1207: ["🌨️", "🌨️"],  // Moderate/heavy sleet
+  1210: ["🌨️", "🌨️"],  // Patchy light snow
+  1213: ["🌨️", "🌨️"],  // Light snow
+  1216: ["🌨️", "🌨️"],  // Patchy moderate snow
+  1219: ["🌨️", "🌨️"],  // Moderate snow
+  1222: ["🌨️", "🌨️"],  // Patchy heavy snow
+  1225: ["🌨️", "🌨️"],  // Heavy snow
+  1237: ["🌨️", "🌨️"],  // Ice pellets
+  1240: ["🌦️", "🌧️"],  // Light rain shower
+  1243: ["🌧️", "🌧️"],  // Moderate/heavy rain shower
+  1246: ["🌧️", "🌧️"],  // Torrential rain shower
+  1249: ["🌨️", "🌨️"],  // Light sleet showers
+  1252: ["🌨️", "🌨️"],  // Moderate/heavy sleet showers
+  1255: ["🌨️", "🌨️"],  // Light snow showers
+  1258: ["🌨️", "🌨️"],  // Moderate/heavy snow showers
+  1261: ["🌨️", "🌨️"],  // Light showers of ice pellets
+  1264: ["🌨️", "🌨️"],  // Moderate/heavy showers of ice pellets
+  1273: ["⛈️", "⛈️"],    // Patchy light rain with thunder
+  1276: ["⛈️", "⛈️"],    // Moderate/heavy rain with thunder
+  1279: ["⛈️", "⛈️"],    // Patchy light snow with thunder
+  1282: ["⛈️", "⛈️"],    // Moderate/heavy snow with thunder
 };
 
-const WMO_DESCRIPTIONS = {
-  0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-  45: "Foggy", 48: "Depositing rime fog",
-  51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
-  61: "Slight rain", 63: "Moderate rain", 65: "Heavy rain",
-  71: "Slight snow", 73: "Moderate snow", 75: "Heavy snow",
-  80: "Slight rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
-  95: "Thunderstorm", 96: "Thunderstorm with slight hail", 99: "Thunderstorm with heavy hail",
-};
+function getIcon(code, isDay) {
+  const pair = CONDITION_ICONS[code] || ["☀️", "🌙"];
+  return pair[isDay ? 0 : 1];
+}
 
-function formatHour(isoString) {
-  // Parse the hour from the ISO string directly (already in target timezone)
-  const h = parseInt(isoString.split("T")[1].split(":")[0], 10);
+function formatHour(timeStr) {
+  // timeStr is "2026-03-25 14:00" from WeatherAPI
+  const h = parseInt(timeStr.split(" ")[1].split(":")[0], 10);
   if (h === 0) return "12a";
   if (h < 12) return `${h}a`;
   if (h === 12) return "12p";
   return `${h - 12}p`;
 }
 
-function getCurrentHourInTimezone(tz) {
-  const now = new Date();
-  const timeStr = now.toLocaleString("en-US", { timeZone: tz, hour: "numeric", hour12: false });
-  return parseInt(timeStr, 10);
-}
-
-// Cache weather for 30 minutes — Open-Meteo free tier is 10k req/day
+// Cache weather for 30 minutes
 let weatherCache = { data: null, ts: 0, key: "" };
-const CACHE_TTL = 30 * 60 * 1000; // 30 min
+const CACHE_TTL = 30 * 60 * 1000;
 
 export async function fetchWeather(lat, lng) {
+  if (!WEATHER_API_KEY) throw new Error("WEATHER_API_KEY not set");
+
   const cacheKey = `${lat},${lng}`;
   if (weatherCache.key === cacheKey && Date.now() - weatherCache.ts < CACHE_TTL && weatherCache.data) {
     return weatherCache.data;
   }
 
-  const url = new URL("https://api.open-meteo.com/v1/forecast");
-  url.searchParams.set("latitude", lat);
-  url.searchParams.set("longitude", lng);
-  url.searchParams.set("hourly", "temperature_2m,weather_code");
-  url.searchParams.set("daily", "temperature_2m_max,temperature_2m_min");
-  url.searchParams.set("temperature_unit", "fahrenheit");
-  url.searchParams.set("timezone", "America/Los_Angeles");
-  url.searchParams.set("forecast_days", "2");
+  const url = `https://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${lat},${lng}&days=2&aqi=no&alerts=no`;
 
   const res = await fetch(url);
   if (!res.ok) {
-    // If rate-limited and we have cached data, return stale cache
-    if (res.status === 429 && weatherCache.data) {
-      console.warn("Weather API rate-limited, returning cached data");
+    if (weatherCache.data) {
+      console.warn("WeatherAPI error, returning cached data");
       return weatherCache.data;
     }
     const text = await res.text();
-    throw new Error(`Open-Meteo error: ${res.status} ${text}`);
+    throw new Error(`WeatherAPI error: ${res.status} ${text}`);
   }
+
   const data = await res.json();
+  const current = data.current;
+  const today = data.forecast.forecastday[0];
+  const tomorrow = data.forecast.forecastday[1];
 
-  if (!data.hourly?.temperature_2m) {
-    throw new Error("Open-Meteo returned unexpected data shape");
-  }
-
-  const currentHourIndex = getCurrentHourInTimezone("America/Los_Angeles");
-
-  // Build hourly array — every 2 hours from current hour, wrapping into tomorrow
+  // Build hourly — every 2 hours from next hour, wrapping into tomorrow
+  const lastUpdated = new Date(current.last_updated);
+  const nowHour = lastUpdated.getMinutes() > 0 ? lastUpdated.getHours() + 1 : lastUpdated.getHours();
+  const allHours = [...today.hour, ...(tomorrow?.hour || [])];
   const hourly = [];
-  for (let i = currentHourIndex; hourly.length < 8; i += 2) {
-    if (i >= data.hourly.time.length) break;
-    const code = data.hourly.weather_code?.[i] ?? data.hourly.weathercode?.[i];
+  for (let i = nowHour; hourly.length < 8; i += 2) {
+    if (i >= allHours.length) break;
+    const h = allHours[i];
     hourly.push({
-      time: formatHour(data.hourly.time[i]),
-      temp: Math.round(data.hourly.temperature_2m[i]),
-      icon: WMO_ICONS[code] || "☀️",
+      time: formatHour(h.time),
+      temp: Math.round(h.temp_f),
+      icon: getIcon(h.condition.code, h.is_day),
     });
   }
 
-  const currentCode = data.hourly.weather_code?.[currentHourIndex] ?? data.hourly.weathercode?.[currentHourIndex] ?? 0;
-  const description = WMO_DESCRIPTIONS[currentCode] || "Clear";
-
   const result = {
-    temp: Math.round(data.hourly.temperature_2m[currentHourIndex]),
-    high: Math.round(data.daily.temperature_2m_max[0]),
-    low: Math.round(data.daily.temperature_2m_min[0]),
-    summary: `${description}. High of ${Math.round(data.daily.temperature_2m_max[0])}°F, low of ${Math.round(data.daily.temperature_2m_min[0])}°F.`,
+    temp: Math.round(current.temp_f),
+    high: Math.round(today.day.maxtemp_f),
+    low: Math.round(today.day.mintemp_f),
+    summary: `${current.condition.text}. High of ${Math.round(today.day.maxtemp_f)}°F, low of ${Math.round(today.day.mintemp_f)}°F.`,
     hourly,
   };
 
@@ -101,25 +122,22 @@ export async function fetchWeather(lat, lng) {
   return result;
 }
 
-// Geocode a city name to lat/lng using Open-Meteo's geocoding API
+// Geocode using WeatherAPI's search/autocomplete
 export async function geocodeLocation(query) {
-  const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
-  url.searchParams.set("name", query);
-  url.searchParams.set("count", "5");
-  url.searchParams.set("language", "en");
-  url.searchParams.set("format", "json");
+  if (!WEATHER_API_KEY) throw new Error("WEATHER_API_KEY not set");
 
+  const url = `https://api.weatherapi.com/v1/search.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(query)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Geocoding error: ${res.status}`);
   const data = await res.json();
 
-  if (!data.results?.length) {
+  if (!data.length) {
     throw new Error(`No results found for "${query}"`);
   }
 
-  return data.results.map((r) => ({
-    name: [r.name, r.admin1, r.country].filter(Boolean).join(", "),
-    lat: r.latitude,
-    lng: r.longitude,
+  return data.map((r) => ({
+    name: [r.name, r.region, r.country].filter(Boolean).join(", "),
+    lat: r.lat,
+    lng: r.lon,
   }));
 }

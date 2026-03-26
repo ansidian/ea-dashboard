@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   getAccounts, getSettings, updateSettings,
   getGmailAuthUrl, addICloudAccount, removeAccount, updateAccount,
-  testActualBudget, geocodeLocation,
+  testActualBudget, geocodeLocation, getModels,
 } from "../api";
 
 function Card({ title, children }) {
@@ -123,16 +123,34 @@ export default function Settings() {
   const frozenOrderRef = useRef(null);
   const schedContainerRef = useRef(null);
   const schedRectsRef = useRef({});
+  const prevSortOrderRef = useRef(null);
+  const shouldAnimateRef = useRef(false);
   const [icloudForm, setIcloudForm] = useState({ email: "", password: "", show: false });
   const [actualForm, setActualForm] = useState({ serverUrl: "", password: "", syncId: "" });
   const [weatherForm, setWeatherForm] = useState({ location: "", lat: "", lng: "", geocoding: false, results: null });
   const [lookbackHours, setLookbackHours] = useState(16);
   const [testStatus, setTestStatus] = useState(null);
   const [saveMsg, setSaveMsg] = useState(null);
+  const [models, setModels] = useState([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const modelDropdownRef = useRef(null);
 
   useEffect(() => {
-    Promise.all([getAccounts(), getSettings()])
-      .then(([acc, sett]) => {
+    if (!modelDropdownOpen) return;
+    const handler = (e) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target)) {
+        setModelDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelDropdownOpen]);
+
+  useEffect(() => {
+    Promise.all([getAccounts(), getSettings(), getModels().catch(() => [])])
+      .then(([acc, sett, mdls]) => {
+        setModels(mdls);
         setAccounts(acc.accounts || acc);
         setSettings(sett);
         if (sett.weather_location) {
@@ -306,17 +324,120 @@ export default function Settings() {
         </p>
       </Card>
 
+      {/* Claude Model */}
+      <Card title="Claude Model">
+        {(() => {
+          const [open, setOpen] = [modelDropdownOpen, setModelDropdownOpen];
+          const selected = settings?.claude_model || "claude-haiku-4-5-20251001";
+          const selectedLabel = models.find(m => m.id === selected)?.name || selected;
+          return (
+            <div ref={modelDropdownRef} style={{ position: "relative" }}>
+              <button
+                onClick={() => {
+                  setOpen(!open);
+                  if (models.length === 0 && !modelsLoading) {
+                    setModelsLoading(true);
+                    getModels()
+                      .then(m => setModels(m))
+                      .catch(() => {})
+                      .finally(() => setModelsLoading(false));
+                  }
+                }}
+                style={{
+                  width: "100%", textAlign: "left", fontSize: 13, color: "#e2e8f0",
+                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 8, padding: "8px 12px", cursor: "pointer", display: "flex",
+                  justifyContent: "space-between", alignItems: "center",
+                }}
+              >
+                <span>{modelsLoading ? "Loading models..." : selectedLabel}</span>
+                <span style={{ color: "#64748b", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+              </button>
+              {open && models.length > 0 && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+                  background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
+                  maxHeight: 240, overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                }}>
+                  {models.map(m => (
+                    <div
+                      key={m.id}
+                      onClick={async () => {
+                        setSettings(s => ({ ...s, claude_model: m.id }));
+                        setOpen(false);
+                        await updateSettings({ claude_model: m.id });
+                      }}
+                      style={{
+                        padding: "8px 12px", fontSize: 13, cursor: "pointer",
+                        color: m.id === selected ? "#818cf8" : "#e2e8f0",
+                        background: m.id === selected ? "rgba(129,140,248,0.1)" : "transparent",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={e => { if (m.id !== selected) e.target.style.background = "rgba(255,255,255,0.05)"; }}
+                      onMouseLeave={e => { if (m.id !== selected) e.target.style.background = "transparent"; }}
+                    >
+                      {m.name || m.id}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        <p style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>
+          Model used for briefing generation. Haiku is cheapest, Sonnet is more capable. Models are fetched from your API key.
+        </p>
+      </Card>
+
+      {/* Email Interests */}
+      <Card title="Email Interests">
+        <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>
+          Senders, brands, or keywords that should never be classified as noise. Add as many as you like.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+          {(settings?.email_interests || []).map((tag, i) => (
+            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(99,102,241,0.12)", color: "#a5b4fc", fontSize: 12, fontWeight: 500, padding: "4px 10px", borderRadius: 20 }}>
+              {tag}
+              <button onClick={async () => {
+                const next = settings.email_interests.filter((_, j) => j !== i);
+                setSettings(s => ({ ...s, email_interests: next }));
+                await updateSettings({ email_interests_json: next });
+              }} style={{ background: "none", border: "none", color: "#818cf8", cursor: "pointer", padding: 0, fontSize: 14, lineHeight: 1, marginLeft: 2 }}>×</button>
+            </span>
+          ))}
+        </div>
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          const input = e.target.elements.interest;
+          const val = input.value.trim();
+          if (!val) return;
+          const next = [...(settings?.email_interests || []), val];
+          setSettings(s => ({ ...s, email_interests: next }));
+          input.value = "";
+          await updateSettings({ email_interests_json: next });
+        }} style={{ display: "flex", gap: 8 }}>
+          <input name="interest" placeholder="e.g. Da Vien, Anthropic, GitHub..." className="input" style={{ flex: 1, fontSize: 13, padding: "8px 12px" }} />
+          <button type="submit" className="btn-primary" style={{ padding: "8px 16px", fontSize: 12 }}>Add</button>
+        </form>
+      </Card>
+
       {/* Schedules */}
       <Card title="Briefing Schedules">
         <div ref={schedContainerRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {(() => {
             const items = [...(settings?.schedules || [])].map((s, i) => ({ ...s, _oi: i }));
-            const sorted = items.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+            const sorted = [...items].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+            const sortOrder = sorted.map(s => s._oi).join(",");
             if (editingTimeIdx !== null) {
-              // Freeze: render in the order captured when editing started
-              if (!frozenOrderRef.current) frozenOrderRef.current = sorted.map(s => s._oi);
-              return frozenOrderRef.current.map(oi => items.find(s => s._oi === oi)).filter(Boolean);
+              if (!frozenOrderRef.current) frozenOrderRef.current = sortOrder;
+              const frozen = frozenOrderRef.current.split(",").map(Number);
+              return frozen.map(oi => items.find(s => s._oi === oi)).filter(Boolean);
             }
+            // Detect if sort order changed
+            if (prevSortOrderRef.current && prevSortOrderRef.current !== sortOrder) {
+              shouldAnimateRef.current = true;
+            }
+            prevSortOrderRef.current = sortOrder;
             frozenOrderRef.current = null;
             return sorted;
           })().map((sched) => {
@@ -325,8 +446,7 @@ export default function Settings() {
             <div key={oi} data-sched-idx={oi} ref={el => {
               if (!el) return;
               const prev = schedRectsRef.current[oi];
-              // Only animate when not entering edit mode (i.e. on blur/re-sort)
-              if (prev !== undefined && editingTimeIdx === null) {
+              if (prev !== undefined && shouldAnimateRef.current) {
                 const curr = el.getBoundingClientRect().top;
                 const dy = prev - curr;
                 if (Math.abs(dy) > 1) {
@@ -335,6 +455,7 @@ export default function Settings() {
                   requestAnimationFrame(() => {
                     el.style.transition = "transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)";
                     el.style.transform = "";
+                    shouldAnimateRef.current = false;
                   });
                 }
               }

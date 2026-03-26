@@ -46,7 +46,7 @@ export async function initScheduler() {
 
         activeJobs.push(job);
         console.log(
-          `[EA Scheduler] Scheduled ${schedule.label} briefing at ${schedule.time} ${schedule.tz} for user ${row.user_id}`,
+          `[EA Scheduler] Scheduled ${schedule.label} briefing at ${schedule.time} ${schedule.tz || "America/Los_Angeles"} for user ${row.user_id}`,
         );
       }
     }

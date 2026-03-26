@@ -53,38 +53,47 @@ export async function fetchCalendar(gmailAccounts) {
       const todayEnd = new Date(todayStart);
       todayEnd.setHours(23, 59, 59, 999);
 
-      const url = new URL(
-        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      // Fetch all calendars for this account (with colors)
+      const calListRes = await fetch(
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        { headers: { Authorization: `Bearer ${token}` } },
       );
-      url.searchParams.set("timeMin", todayStart.toISOString());
-      url.searchParams.set("timeMax", todayEnd.toISOString());
-      url.searchParams.set("singleEvents", "true");
-      url.searchParams.set("orderBy", "startTime");
+      const calendars = calListRes.ok
+        ? (await calListRes.json()).items || []
+        : [{ id: "primary" }];
+      const calColorMap = new Map(calendars.map((c) => [c.id, c.backgroundColor]));
+      const calendarIds = calendars.map((c) => c.id);
 
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        console.error(`Calendar fetch failed for ${account.email}: ${res.status}`);
-        continue;
-      }
+      for (const calId of calendarIds) {
+        const url = new URL(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
+        );
+        url.searchParams.set("timeMin", todayStart.toISOString());
+        url.searchParams.set("timeMax", todayEnd.toISOString());
+        url.searchParams.set("singleEvents", "true");
+        url.searchParams.set("orderBy", "startTime");
 
-      const data = await res.json();
-      for (const event of data.items || []) {
-        const start = event.start?.dateTime || event.start?.date;
-        const end = event.end?.dateTime || event.end?.date;
-
-        allEvents.push({
-          time: formatTime(start),
-          duration: formatDuration(start, end),
-          title: event.summary || "(No title)",
-          source: account.label,
-          color: account.color || "#4285f4",
-          flag: null,
-          // Store raw start/end for conflict detection
-          _start: new Date(start).getTime(),
-          _end: new Date(end).getTime(),
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
         });
+        if (!res.ok) continue;
+
+        const data = await res.json();
+        for (const event of data.items || []) {
+          const start = event.start?.dateTime || event.start?.date;
+          const end = event.end?.dateTime || event.end?.date;
+
+          allEvents.push({
+            time: formatTime(start),
+            duration: formatDuration(start, end),
+            title: event.summary || "(No title)",
+            source: account.label,
+            color: calColorMap.get(calId) || account.color || "#4285f4",
+            flag: null,
+            _start: new Date(start).getTime(),
+            _end: new Date(end).getTime(),
+          });
+        }
       }
     } catch (err) {
       console.error(`Calendar error for ${account.email}:`, err.message);
@@ -103,9 +112,13 @@ export async function fetchCalendar(gmailAccounts) {
     }
   }
 
-  // Sort by start time and strip internal fields
+  // Sort by start time, mark passed events, and strip internal fields
+  const nowMs = Date.now();
   allEvents.sort((a, b) => a._start - b._start);
-  return allEvents.map(({ _start, _end, ...event }) => event);
+  return allEvents.map(({ _start, _end, ...event }) => ({
+    ...event,
+    passed: _end <= nowMs,
+  }));
 }
 
 function formatTime(dateStr) {

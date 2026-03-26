@@ -1,4 +1,4 @@
-export default function RefreshBanner() {
+export default function RefreshBanner({ progress }) {
   return (
     <div style={{
       background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))',
@@ -23,8 +23,8 @@ export default function RefreshBanner() {
         <div style={{ fontSize: 13, fontWeight: 600, color: '#c7d2fe' }}>
           Generating fresh briefing...
         </div>
-        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-          Pulling emails, calendar, deadlines
+        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2, transition: 'opacity 0.2s ease' }}>
+          {progress || "Starting up..."}
         </div>
       </div>
     </div>

@@ -31,6 +31,10 @@ export async function fetchCTMDeadlines(userId) {
     return [];
   }
 
+  // Compute date boundaries in Pacific time (SQLite date('now') uses UTC)
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+  const weekOut = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+
   const result = await ctmDb.execute({
     sql: `SELECT e.id, e.title, e.due_date, e.due_time, e.points_possible,
                  e.status, e.event_type, e.description, e.url,
@@ -39,9 +43,9 @@ export async function fetchCTMDeadlines(userId) {
           FROM events e
           LEFT JOIN classes c ON e.class_id = c.id AND c.user_id = e.user_id
           WHERE e.user_id = ? AND e.status IN ('incomplete', 'in_progress')
-            AND e.due_date BETWEEN date('now') AND date('now', '+7 days')
+            AND e.due_date BETWEEN ? AND ?
           ORDER BY e.due_date, e.due_time`,
-    args: [userId],
+    args: [userId, today, weekOut],
   });
 
   return result.rows.map((row) => ({

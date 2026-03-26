@@ -12,6 +12,7 @@ import authRoutes from "./routes/auth.js";
 import briefingRoutes from "./routes/briefing.js";
 import accountsRoutes from "./routes/accounts.js";
 import { initScheduler } from "./briefing/scheduler.js";
+import { migrate } from "./db/migrate.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,9 +41,14 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`EA Dashboard running on http://localhost:${PORT}`);
-  initScheduler().catch((err) =>
-    console.error("[EA Scheduler] Init failed:", err.message),
-  );
+migrate().then(() => {
+  app.listen(PORT, () => {
+    console.log(`EA Dashboard running on http://localhost:${PORT}`);
+    initScheduler().catch((err) =>
+      console.error("[EA Scheduler] Init failed:", err.message),
+    );
+  });
+}).catch((err) => {
+  console.error("Migration failed:", err);
+  process.exit(1);
 });

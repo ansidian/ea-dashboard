@@ -5,6 +5,7 @@ import { encrypt, decrypt } from "../briefing/encryption.js";
 import { getAuthUrl, handleCallback, testConnection as testGmail } from "../briefing/gmail.js";
 import { testConnection as testIcloud } from "../briefing/icloud.js";
 import { geocodeLocation } from "../briefing/weather.js";
+import { listModels } from "../briefing/claude.js";
 
 const router = Router();
 
@@ -151,7 +152,7 @@ router.get("/settings", async (req, res) => {
       await db.execute({ sql: "INSERT INTO ea_settings (user_id) VALUES (?)", args: [userId] });
       result = await db.execute({ sql: "SELECT * FROM ea_settings WHERE user_id = ?", args: [userId] });
     }
-    const { actual_budget_password_encrypted, schedules_json, ...safe } = result.rows[0];
+    const { actual_budget_password_encrypted, schedules_json, email_interests_json, ...safe } = result.rows[0];
     safe.actual_budget_configured = !!actual_budget_password_encrypted;
     safe.schedules = schedules_json
       ? JSON.parse(schedules_json)
@@ -159,6 +160,7 @@ router.get("/settings", async (req, res) => {
           { label: "Morning Briefing", time: "08:00", enabled: false },
           { label: "Evening Briefing", time: "20:00", enabled: false },
         ];
+    safe.email_interests = email_interests_json ? JSON.parse(email_interests_json) : [];
     res.json(safe);
   } catch (err) {
     console.error("Error fetching EA settings:", err);
@@ -168,7 +170,7 @@ router.get("/settings", async (req, res) => {
 
 router.put("/settings", async (req, res) => {
   const userId = process.env.EA_USER_ID;
-  const { schedules_json, email_lookback_hours, weather_lat, weather_lng, weather_location, actual_budget_url, actual_budget_password, actual_budget_sync_id } = req.body;
+  const { schedules_json, email_lookback_hours, weather_lat, weather_lng, weather_location, actual_budget_url, actual_budget_password, actual_budget_sync_id, claude_model, email_interests_json } = req.body;
 
   try {
     await db.execute({ sql: "INSERT OR IGNORE INTO ea_settings (user_id) VALUES (?)", args: [userId] });
@@ -183,6 +185,8 @@ router.put("/settings", async (req, res) => {
     if (actual_budget_url !== undefined) { updates.push("actual_budget_url = ?"); args.push(actual_budget_url); }
     if (actual_budget_password !== undefined) { updates.push("actual_budget_password_encrypted = ?"); args.push(actual_budget_password ? encrypt(actual_budget_password) : null); }
     if (actual_budget_sync_id !== undefined) { updates.push("actual_budget_sync_id = ?"); args.push(actual_budget_sync_id); }
+    if (claude_model !== undefined) { updates.push("claude_model = ?"); args.push(claude_model || null); }
+    if (email_interests_json !== undefined) { updates.push("email_interests_json = ?"); args.push(typeof email_interests_json === "string" ? email_interests_json : JSON.stringify(email_interests_json)); }
 
     if (updates.length > 0) {
       args.push(userId);
@@ -192,6 +196,16 @@ router.put("/settings", async (req, res) => {
   } catch (err) {
     console.error("Error updating EA settings:", err);
     res.status(500).json({ message: "Failed to update settings" });
+  }
+});
+
+router.get("/models", async (req, res) => {
+  try {
+    const models = await listModels();
+    res.json(models);
+  } catch (err) {
+    console.error("Error fetching models:", err.message);
+    res.status(500).json({ message: err.message });
   }
 });
 
