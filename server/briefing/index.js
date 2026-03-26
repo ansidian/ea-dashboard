@@ -132,7 +132,7 @@ function computeCTMStats(deadlines) {
 
 // Fix email accounts: re-group triaged emails by their original account_label,
 // correct unread counts, and ensure no emails land in the wrong account.
-function fixEmailAccounts(briefingJson, inputEmails) {
+export function fixEmailAccounts(briefingJson, inputEmails) {
   if (!briefingJson.emails?.accounts?.length || !inputEmails?.length) return;
 
   // Build lookup: email uid/id → original account info
@@ -182,6 +182,17 @@ function fixEmailAccounts(briefingJson, inputEmails) {
     ...acct,
     unread: acct.important.length,
   }));
+
+  // Invariant check: email count in should equal email count out (per D-01, D-02)
+  const countIn = allTriaged.length;
+  const countOut = briefingJson.emails.accounts.reduce(
+    (sum, acct) => sum + acct.important.length, 0
+  );
+  if (countIn !== countOut) {
+    console.warn(
+      `[Briefing] Email count mismatch in fixEmailAccounts: ${countIn} in, ${countOut} out`
+    );
+  }
 }
 
 // Load dismissed email IDs for this user
