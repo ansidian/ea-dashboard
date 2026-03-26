@@ -45,11 +45,11 @@ Plans:
   3. Delta briefing merge asserts no silent email loss or duplication
   4. Running `npm test` passes tests for Claude parsing, email regrouping, and delta merge logic
   5. Schedule logic in actual.js uses a single shared helper instead of duplicated functions
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 Plans:
 - [x] 02-01-PLAN.md — Claude parseResponse schema validation and tests (TDD)
-- [ ] 02-02-PLAN.md — Email regrouping invariant check and tests (TDD)
+- [x] 02-02-PLAN.md — Email regrouping invariant check and tests (TDD)
 - [ ] 02-03-PLAN.md — Delta merge extraction, invariant check, and tests (TDD)
 - [x] 02-04-PLAN.md — Schedule logic deduplication in actual.js
 
@@ -84,6 +84,6 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | Phase | Plans Complete | Status | Completed |
 |-|-|-|-|
 | 1. Test Foundation & Security | 0/2 | Planned | - |
-| 2. Reliability & Test Coverage | 0/4 | Planned | - |
+| 2. Reliability & Test Coverage | 3/4 | In Progress|  |
 | 3. Actual Budget Performance | 0/? | Not started | - |
 | 4. Component Extraction | 0/? | Not started | - |

@@ -21,7 +21,7 @@
 ### Reliability
 
 - [x] **REL-01**: Claude JSON response parsing validates against expected schema shape after parse; logs failures
-- [ ] **REL-02**: Email regrouping logic (`fixEmailAccounts`) includes invariant check: email count in = email count out
+- [x] **REL-02**: Email regrouping logic (`fixEmailAccounts`) includes invariant check: email count in = email count out
 - [ ] **REL-03**: Delta briefing merge includes invariant check: no silent email loss or duplication
 - [x] **REL-04**: Duplicate schedule logic in `actual.js` consolidated into shared helper function
 
@@ -35,7 +35,7 @@
 - [x] **TEST-01**: Vitest configured with separate `vitest.config.js` for ESM, `npm test` script added
 - [x] **TEST-02**: Encryption module tested: encrypt/decrypt round-trip, CBC->GCM migration, tampered ciphertext rejection, invalid key handling
 - [x] **TEST-03**: Claude `parseResponse()` tested: valid JSON, regex fallback, malformed/empty input
-- [ ] **TEST-04**: `fixEmailAccounts()` tested: correct regrouping, mismatched labels, empty arrays, duplicate IDs
+- [x] **TEST-04**: `fixEmailAccounts()` tested: correct regrouping, mismatched labels, empty arrays, duplicate IDs
 - [ ] **TEST-05**: Delta briefing merge tested: email dedup, dismiss filtering, seenCount tracking, edge cases
 
 ## v2 Requirements
@@ -76,7 +76,7 @@
 | PERF-02 | Phase 3 | Pending |
 | PERF-03 | Phase 3 | Pending |
 | REL-01 | Phase 2 | Complete |
-| REL-02 | Phase 2 | Pending |
+| REL-02 | Phase 2 | Complete |
 | REL-03 | Phase 2 | Pending |
 | REL-04 | Phase 2 | Complete |
 | ARCH-01 | Phase 4 | Pending |
@@ -84,7 +84,7 @@
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 2 | Complete |
-| TEST-04 | Phase 2 | Pending |
+| TEST-04 | Phase 2 | Complete |
 | TEST-05 | Phase 2 | Pending |
 
 **Coverage:**
