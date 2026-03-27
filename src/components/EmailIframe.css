@@ -14,7 +14,7 @@
   border: 1px solid rgba(251,191,36,0.08);
 }
 .email-body-preview-icon { font-size: 11px; margin-top: 1px; }
-.email-body-preview-text { font-size: 12.5px; color: #cbd5e1; line-height: 1.6; }
+.email-body-preview-text { font-size: 12px; color: #cbd5e1; line-height: 1.6; }
 .email-body-loading { display: flex; align-items: center; gap: 8px; padding: 12px 0; }
 .email-body-spinner {
   width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.1);
@@ -22,4 +22,4 @@
 }
 .email-body-loading-text { font-size: 12px; color: #64748b; }
 .email-body-unavailable { font-size: 12px; color: #64748b; padding: 8px 0; }
-.email-body-bill { margin-top: 10px; }
+.email-body-bill { margin-top: 12px; }

@@ -7,7 +7,7 @@
   color: #e2e8f0;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(99,102,241,0.2);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 6px 10px;
   cursor: pointer;
   display: flex;
@@ -28,10 +28,10 @@
   left: 0;
   right: 0;
   z-index: 50;
-  background: #1a1a2e;
+  background: #16161e;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
   overflow: hidden;
 }
 
@@ -46,8 +46,8 @@
   color: #e2e8f0;
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 5px;
-  padding: 5px 8px;
+  border-radius: 6px;
+  padding: 4px 8px;
   outline: none;
   transition: border-color 0.15s ease;
 }
