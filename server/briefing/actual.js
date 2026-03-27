@@ -239,7 +239,7 @@ async function upsertSchedule(billData, targetAccountId) {
   const name = billData.payee;
 
   // Past-date: create posted transaction instead
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
   if (billData.due_date <= today) {
     const txn = { date: billData.due_date, amount: signedAmount, cleared: false };
     const payeeId = await resolvePayee(billData.payee);
@@ -279,7 +279,7 @@ async function upsertTransferSchedule(billData) {
   }
 
   // Past-date: create posted transfer transaction
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
   if (billData.due_date <= today) {
     await actualApi.addTransactions(billData.to_account_id, [{
       date: billData.due_date,

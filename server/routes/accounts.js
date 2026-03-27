@@ -270,18 +270,23 @@ router.post("/schedules/skip", async (req, res) => {
     if (skip === false) {
       delete schedules[index].skipped_until;
     } else {
-      // Skip until midnight tonight in the schedule's timezone
+      // Skip until midnight tomorrow in the schedule's timezone, stored as UTC
       const tz = schedules[index].tz || "America/Los_Angeles";
-      const now = new Date();
-      const tomorrow = new Date(now.toLocaleString("en-US", { timeZone: tz }));
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
-      // Convert back to UTC ISO string
-      const midnightLocal = new Date(tomorrow.toLocaleString("en-US", { timeZone: tz }));
-      // Build a proper midnight timestamp in the schedule's timezone
+      // Get tomorrow's date in the schedule's timezone
       const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
       const tomorrowDate = formatter.format(new Date(Date.now() + 86400000));
-      schedules[index].skipped_until = `${tomorrowDate}T00:00:00`;
+      // Parse midnight-tomorrow in the target timezone by finding the UTC offset
+      const midnight = new Date(`${tomorrowDate}T00:00:00`);
+      // Get the offset: format a known instant in the target tz, then compute the difference
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+      }).formatToParts(midnight);
+      const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+      const asLocal = new Date(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`);
+      const offsetMs = midnight.getTime() - asLocal.getTime();
+      const midnightUtc = new Date(midnight.getTime() + offsetMs);
+      schedules[index].skipped_until = midnightUtc.toISOString();
     }
 
     await db.execute({

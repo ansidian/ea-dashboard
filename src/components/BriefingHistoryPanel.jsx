@@ -3,25 +3,25 @@ import { createPortal } from "react-dom";
 import { getBriefingHistory, getBriefingById } from "../api";
 import { transformBriefing } from "../transform";
 
+const TZ = "America/Los_Angeles";
+const dateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
+
 function groupByDate(items) {
   const groups = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
+  const todayStr = dateFmt.format(new Date());
+  const yesterdayStr = dateFmt.format(new Date(Date.now() - 86400000));
 
   let currentLabel = null;
   let currentItems = [];
 
   for (const item of items) {
     const d = new Date(item.generated_at + "Z");
-    const itemDate = new Date(d);
-    itemDate.setHours(0, 0, 0, 0);
+    const itemDateStr = dateFmt.format(d);
 
     let label;
-    if (itemDate.getTime() === today.getTime()) label = "Today";
-    else if (itemDate.getTime() === yesterday.getTime()) label = "Yesterday";
-    else label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    if (itemDateStr === todayStr) label = "Today";
+    else if (itemDateStr === yesterdayStr) label = "Yesterday";
+    else label = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZ });
 
     if (label !== currentLabel) {
       if (currentLabel !== null) groups.push({ label: currentLabel, items: currentItems });
@@ -137,7 +137,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
         overflow: "hidden",
         background: "#16161e",
         border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 16,
+        borderRadius: 12,
         boxShadow: "0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04) inset",
         zIndex: 9999,
         animation: "historyFadeIn 0.25s cubic-bezier(0.16,1,0.3,1)",
@@ -168,7 +168,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
 
       {/* Header — fixed above scroll area */}
       <div style={{
-        padding: "16px 18px 12px",
+        padding: "16px 20px 12px",
         borderBottom: "1px solid rgba(255,255,255,0.08)",
         background: "#16161e",
         display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -189,7 +189,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
 
         {/* Loading state */}
         {!history && !error && (
-          <div style={{ padding: "32px 18px", textAlign: "center" }}>
+          <div style={{ padding: "32px 20px", textAlign: "center" }}>
             <div style={{
               width: 18, height: 18, border: "2px solid rgba(255,255,255,0.08)",
               borderTopColor: "#818cf8", borderRadius: "50%",
@@ -202,14 +202,14 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
 
         {/* Error state */}
         {error && (
-          <div style={{ padding: "20px 18px", fontSize: 12, color: "#fca5a5", textAlign: "center" }}>
+          <div style={{ padding: "20px 20px", fontSize: 12, color: "#fca5a5", textAlign: "center" }}>
             {error}
           </div>
         )}
 
         {/* Empty state */}
         {history && groups.length === 0 && (
-          <div style={{ padding: "32px 18px", textAlign: "center" }}>
+          <div style={{ padding: "32px 20px", textAlign: "center" }}>
             <div style={{ fontSize: 24, marginBottom: 8 }}>📋</div>
             <div style={{ fontSize: 12, color: "#64748b" }}>No past briefings yet</div>
           </div>
@@ -221,7 +221,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
           <div key={group.label}>
             <div style={{
               fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase",
-              color: "#64748b", fontWeight: 600, padding: "14px 18px 6px",
+              color: "#64748b", fontWeight: 600, padding: "14px 20px 6px",
             }}>
               {group.label}
             </div>
@@ -229,7 +229,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
               const isActive = item.id === activeId;
               const isLoading = loadingId === item.id;
               const time = item._date.toLocaleTimeString("en-US", {
-                hour: "numeric", minute: "2-digit", hour12: true,
+                hour: "numeric", minute: "2-digit", hour12: true, timeZone: TZ,
               });
               const genTime = item.generation_time_ms
                 ? `${(item.generation_time_ms / 1000).toFixed(1)}s`
@@ -242,13 +242,13 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                   data-active={isActive}
                   onClick={() => handleSelect(item)}
                   style={{
-                    padding: "14px 18px",
+                    padding: "14px 20px",
                     margin: "2px 8px",
-                    borderRadius: 10,
+                    borderRadius: 8,
                     borderLeft: isActive ? "3px solid #6366f1" : "3px solid transparent",
                     cursor: isActive ? "default" : isLoading ? "wait" : "pointer",
                     display: "flex", alignItems: "center", justifyContent: "space-between",
-                    gap: 10,
+                    gap: 12,
                     background: isActive ? "rgba(99,102,241,0.1)" : "transparent",
                   }}
                 >

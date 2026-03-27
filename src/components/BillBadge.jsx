@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { sendToActualBudget } from "../api";
 import { ensureMetadataLoaded, _metadataCache } from "../lib/actualMetadata.js";
+import { formatRelativeDate } from "../lib/dashboard-helpers";
 import SearchableDropdown from "./SearchableDropdown";
 import "./BillBadge.css";
 
@@ -20,7 +21,6 @@ const typeHints = {
 
 function formatModelName(model) {
   if (!model) return "Claude";
-  // Extract family and version: "claude-sonnet-4-6" → "Sonnet 4.6"
   const match = model.match(/(opus|sonnet|haiku)-(\d+)-?(\d+)?/i);
   if (match) {
     const family = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
@@ -28,26 +28,6 @@ function formatModelName(model) {
     return `${family} ${version}`;
   }
   return "Claude";
-}
-
-function parseDueDate(dateStr) {
-  // Handle both "2026-03-30" and "2026-03-30T06:59:59Z" formats
-  const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T00:00:00");
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function formatRelativeDate(dateStr) {
-  if (!dateStr) return dateStr;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = parseDueDate(dateStr);
-  const diff = Math.floor((due - today) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return `Overdue (${Math.abs(diff)}d)`;
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  if (diff < 6) return due.toLocaleDateString("en-US", { weekday: "long" });
-  return due.toLocaleDateString("en-US", { month: "long", day: "numeric" });
 }
 
 export default function BillBadge({ bill, model }) {
@@ -214,7 +194,7 @@ export default function BillBadge({ bill, model }) {
           </div>
           <div className="bill-badge-actions">
             {state === "error" && <div className="bill-badge-error">Failed to send — check fields and try again.</div>}
-            <button onClick={handleSend} disabled={!canSend} className="bill-send-btn" style={{ background: canSend ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "rgba(99,102,241,0.2)", color: canSend ? "#fff" : "#64748b", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 600, cursor: canSend ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center", transition: "all 0.2s ease" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Send to Actual Budget</button>
+            <button onClick={handleSend} disabled={!canSend} className="bill-send-btn" style={{ background: canSend ? "linear-gradient(135deg,#6366f1,#8b5cf6)" : "rgba(99,102,241,0.2)", color: canSend ? "#fff" : "#64748b", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 600, cursor: canSend ? "pointer" : "not-allowed", display: "flex", alignItems: "center", gap: 6, width: "100%", justifyContent: "center", transition: "all 0.2s ease" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Send to Actual Budget</button>
           </div>
         </>
       )}

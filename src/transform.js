@@ -52,8 +52,9 @@ export function transformBriefing(raw) {
 }
 
 function computeCTMStats(deadlines) {
-  const today = new Date().toISOString().split('T')[0];
-  const weekOut = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
+  const today = fmt.format(new Date());
+  const weekOut = fmt.format(new Date(Date.now() + 7 * 86400000));
   return {
     incomplete: deadlines.length,
     dueToday: deadlines.filter(d => d.due_date === today).length,
@@ -65,7 +66,8 @@ function computeCTMStats(deadlines) {
 function formatGeneratedAt(isoString) {
   if (!isoString) return "";
   const d = new Date(isoString);
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const tz = "America/Los_Angeles";
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+  const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: tz });
   return `${time} · ${date}`;
 }

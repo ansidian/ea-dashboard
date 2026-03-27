@@ -117,8 +117,9 @@ function nowPacific() {
 
 // Compute CTM stats from deadlines array (so quick refresh can rebuild them)
 function computeCTMStats(deadlines) {
-  const today = new Date().toISOString().slice(0, 10);
-  const weekFromNow = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
+  const today = fmt.format(new Date());
+  const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
   let totalPoints = 0;
   let dueToday = 0;
   let dueThisWeek = 0;
@@ -464,7 +465,7 @@ export async function generateBriefing(userId) {
     });
 
     // Async: embed this briefing's chunks for future RAG (fire-and-forget)
-    const sourceDate = new Date().toISOString().slice(0, 10);
+    const sourceDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
     embedAndStore({ userId, briefingId, briefingJson, sourceDate }).catch(err => {
       console.warn(`[EA] Embedding failed for briefing ${briefingId}:`, err.message);
     });

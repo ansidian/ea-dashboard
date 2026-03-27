@@ -51,7 +51,9 @@ export async function fetchCTMDeadlines(userId) {
   return result.rows.map((row) => ({
     id: row.id,
     title: row.title,
-    due_date: row.due_date,
+    due_date: row.due_date?.includes("T")
+      ? new Date(row.due_date).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" })
+      : row.due_date,
     due_time: formatTime12h(row.due_time ? row.due_time : row.due_date),
     class_name: row.class_name || "Uncategorized",
     class_color: row.class_color || "#6b7280",

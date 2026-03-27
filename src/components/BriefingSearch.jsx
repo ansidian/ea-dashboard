@@ -288,13 +288,12 @@ export default function BriefingSearch({ onNavigateToEmail }) {
 
   function formatDate(dateStr) {
     const d = new Date(dateStr + "T12:00:00");
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diff = Math.floor((today - d) / 86400000);
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+    const diff = Math.round((new Date(todayStr + "T12:00:00") - d) / 86400000);
     if (diff === 0) return "Today";
     if (diff === 1) return "Yesterday";
-    if (diff < 7) return d.toLocaleDateString("en-US", { weekday: "long" });
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    if (diff < 7) return d.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Los_Angeles" });
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
   }
 
   const showDropdown = open && (results !== null || searching || error);
