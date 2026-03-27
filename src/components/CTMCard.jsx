@@ -1,4 +1,5 @@
-import { todayPacific, toPacificDate } from "../lib/dashboard-helpers";
+import { todayPacific, toPacificDate, formatFullDate } from "../lib/dashboard-helpers";
+import Tooltip from "./Tooltip";
 import "./CTMCard.css";
 
 function getDaysUntil(dateStr) {
@@ -58,7 +59,9 @@ export default function CTMCard({ task, expanded, onToggle }) {
           )}
         </div>
         <div className="ctm-card-meta">
-          <div className="ctm-card-days">{daysLabel}</div>
+          <Tooltip text={formatFullDate(task.due_date)}>
+            <div className="ctm-card-days">{daysLabel}</div>
+          </Tooltip>
           <div className="ctm-card-time">{task.due_time}</div>
           {task.points_possible && (
             <div className="ctm-card-points">{task.points_possible} pts</div>

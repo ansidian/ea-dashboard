@@ -37,6 +37,26 @@ export function parseDueDate(dateStr) {
   return new Date(dateStr);
 }
 
+export function formatFullDate(dateStr) {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr || "";
+  const hasTime = /T\d{2}:\d{2}/.test(dateStr) && !/T00:00:00/.test(dateStr) && !/T12:00:00/.test(dateStr);
+  if (hasTime) {
+    const d = new Date(dateStr);
+    if (isNaN(d)) return dateStr;
+    return d.toLocaleString("en-US", {
+      weekday: "long", month: "long", day: "numeric",
+      hour: "numeric", minute: "2-digit", hour12: true, timeZone: TZ,
+    });
+  }
+  // Date-only: use toPacificDate to avoid UTC shift, then format from the Pacific date
+  const pacificStr = toPacificDate(dateStr);
+  const d = new Date(pacificStr + "T12:00:00");
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric", timeZone: TZ,
+  });
+}
+
 export function formatRelativeDate(dateStr) {
   if (!dateStr) return dateStr;
   // If not a parseable date (e.g. "Tomorrow EOD"), return as-is

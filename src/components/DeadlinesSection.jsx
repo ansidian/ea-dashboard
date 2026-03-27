@@ -1,5 +1,6 @@
 import Section from "./Section";
-import { urgencyStyles, formatRelativeDate, parseDueDate } from "../lib/dashboard-helpers";
+import Tooltip from "./Tooltip";
+import { urgencyStyles, formatRelativeDate, formatFullDate, parseDueDate } from "../lib/dashboard-helpers";
 import CTMCard from "./CTMCard";
 
 export default function DeadlinesSection({
@@ -206,9 +207,11 @@ export default function DeadlinesSection({
                   {dl.source}
                 </div>
               </div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: s.text }}>
-                {formatRelativeDate(dateStr)}
-              </div>
+              <Tooltip text={formatFullDate(dateStr)}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: s.text }}>
+                  {formatRelativeDate(dateStr)}
+                </div>
+              </Tooltip>
             </div>
           );
         })}
