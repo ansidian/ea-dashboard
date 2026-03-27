@@ -7,6 +7,8 @@ import { fetchWeather } from "./weather.js";
 import { fetchCTMDeadlines } from "./ctm-events.js";
 import { callClaude } from "./claude.js";
 import { getCategories } from "./actual.js";
+import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../embeddings/index.js";
+import { chunkBriefing } from "../embeddings/chunker.js";
 
 // Shared: load accounts + settings, return them
 async function loadUserConfig(userId) {
@@ -395,12 +397,26 @@ export async function generateBriefing(userId) {
     // merge results with previous triage
     const model = settings.claude_model || undefined;
     const emailInterests = settings.email_interests_json ? JSON.parse(settings.email_interests_json) : [];
+
+    // RAG: retrieve historical context from past briefing embeddings
+    let historicalContext = null;
+    if (isEmbeddingAvailable()) {
+      try {
+        historicalContext = await getContextForBriefing(userId);
+        if (historicalContext) console.log(`[EA] Injecting historical context (${historicalContext.length} chars)`);
+      } catch (err) {
+        console.warn("[EA] Historical context retrieval failed:", err.message);
+      }
+    } else {
+      console.warn("[EA] OPENAI_API_KEY not set — briefing will lack historical context");
+    }
+
     let briefingJson;
     if (newEmails.length > 0 && newEmails.length < emails.length && prevBriefing) {
       await updateProgress(briefingId, `Sending ${newEmails.length} new email${newEmails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Delta generation: ${newEmails.length} new emails (${emails.length - newEmails.length} previously triaged)`);
       const ctmStats = computeCTMStats(ctmDeadlines);
-      briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories });
+      briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext });
 
       // Merge previous triage with new triage using pure function
       const allEmailIds = new Set(emails.map(e => e.id));
@@ -411,7 +427,7 @@ export async function generateBriefing(userId) {
       await updateProgress(briefingId, `Sending ${emails.length} email${emails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Full generation: ${emails.length} emails`);
       const ctmStats = computeCTMStats(ctmDeadlines);
-      briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories });
+      briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext });
       // Tag all emails with seenCount 1
       for (const acct of briefingJson.emails?.accounts || []) {
         acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
@@ -439,11 +455,18 @@ export async function generateBriefing(userId) {
     briefingJson.generatedAt = nowPacific();
     briefingJson.dataUpdatedAt = new Date().toISOString();
     briefingJson.aiGeneratedAt = new Date().toISOString();
+    if (!isEmbeddingAvailable()) briefingJson.ragUnavailable = true;
 
     const elapsed = Date.now() - startTime;
     await db.execute({
       sql: `UPDATE ea_briefings SET status = 'ready', briefing_json = ?, generation_time_ms = ? WHERE id = ?`,
       args: [JSON.stringify(briefingJson), elapsed, briefingId],
+    });
+
+    // Async: embed this briefing's chunks for future RAG (fire-and-forget)
+    const sourceDate = new Date().toISOString().slice(0, 10);
+    embedAndStore({ userId, briefingId, briefingJson, sourceDate }).catch(err => {
+      console.warn(`[EA] Embedding failed for briefing ${briefingId}:`, err.message);
     });
 
     return { id: briefingId, briefingJson };

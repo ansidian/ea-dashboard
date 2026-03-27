@@ -7,6 +7,7 @@ import { fetchEmailBody as fetchIcloudBody } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
 import { generateMockBriefing, generateMockHistory } from "../db/dev-fixture.js";
+import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -94,12 +95,14 @@ router.get("/latest", async (req, res) => {
 
     // ?mock=1 forces mock briefing in dev (useful when real briefings exist)
     if (req.query.mock && process.env.NODE_ENV !== "production") {
+      seedEmbeddings().catch(err => console.warn("[EA] Dev embedding seed failed:", err.message));
       return res.json({ id: 0, status: "ready", briefing: generateMockBriefing(), generated_at: new Date().toISOString(), generation_time_ms: 0 });
     }
 
     if (!result.rows.length) {
       // In dev, return a dynamic mock briefing so the UI is always usable
       if (process.env.NODE_ENV !== "production") {
+        seedEmbeddings().catch(err => console.warn("[EA] Dev embedding seed failed:", err.message));
         return res.json({ id: 0, status: "ready", briefing: generateMockBriefing(), generated_at: new Date().toISOString(), generation_time_ms: 0 });
       }
       return res.json({ briefing: null });

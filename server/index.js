@@ -11,6 +11,7 @@ import { dirname, join } from "path";
 import authRoutes from "./routes/auth.js";
 import briefingRoutes from "./routes/briefing.js";
 import accountsRoutes from "./routes/accounts.js";
+import searchRoutes from "./routes/search.js";
 import { initScheduler } from "./briefing/scheduler.js";
 import { migrate } from "./db/migrate.js";
 
@@ -27,6 +28,7 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/briefing", briefingRoutes);
 app.use("/api/ea", accountsRoutes);
+app.use("/api/search", searchRoutes);
 
 // Serve static frontend in production
 if (process.env.NODE_ENV === "production") {

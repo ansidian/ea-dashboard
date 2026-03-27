@@ -389,6 +389,41 @@ export default function Settings() {
         </p>
       </Card>
 
+      {/* RAG / Embeddings Status */}
+      <Card title="Search & Historical Context">
+        <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
+          <p style={{ margin: "0 0 8px 0" }}>
+            Briefings use vector embeddings to retrieve relevant historical context (bill trends, recurring senders, deadline patterns).
+            Search lets you query past briefing data.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: settings?.openai_available ? "#34d399" : "#f59e0b",
+                flexShrink: 0,
+              }} />
+              <span>
+                OpenAI Embeddings: {settings?.openai_available
+                  ? <span style={{ color: "#34d399" }}>Connected</span>
+                  : <span style={{ color: "#f59e0b" }}>Not configured (set OPENAI_API_KEY)</span>
+                }
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: settings?.embedding_count > 0 ? "#34d399" : "#64748b",
+                flexShrink: 0,
+              }} />
+              <span>
+                Indexed chunks: {settings?.embedding_count ?? 0}
+              </span>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* Email Interests */}
       <Card title="Email Interests">
         <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>

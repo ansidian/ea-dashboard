@@ -16,6 +16,7 @@ import RefreshBanner from "../components/RefreshBanner";
 import BriefingHistoryPanel from "../components/BriefingHistoryPanel";
 import CTMCard from "../components/CTMCard";
 import EmailBody from "../components/EmailBody";
+import BriefingSearch from "../components/BriefingSearch";
 
 const urgencyStyles = {
   high: { bg: "rgba(239,68,68,0.1)", border: "#ef4444", text: "#fca5a5", dot: "#ef4444" },
@@ -920,6 +921,52 @@ export default function Dashboard() {
           >
             Back to latest
           </button>
+        </div>
+      )}
+
+      {/* Search */}
+      <div style={{ opacity: loaded ? 1 : 0, transform: loaded ? "translateY(0)" : "translateY(12px)", transition: "all 0.6s cubic-bezier(0.16,1,0.3,1) 100ms" }}>
+        <BriefingSearch onNavigateToEmail={({ briefing: navBriefing, briefingId, generated_at, emailId, accountName }) => {
+          // Preserve current briefing for "Back to latest"
+          if (!latestBriefing) setLatestBriefing(briefing);
+
+          // Load the target briefing
+          setBriefing(navBriefing);
+          if (briefingId !== latestId) {
+            setViewingPast({ id: briefingId, generated_at });
+          }
+
+          // Find the right account tab and email
+          const accts = navBriefing.emails?.accounts || [];
+          const acctIdx = accts.findIndex(a => a.name === accountName);
+          if (acctIdx >= 0) setActiveAccount(acctIdx);
+
+          // Find and select the email, then scroll to it
+          const targetAcct = accts[acctIdx >= 0 ? acctIdx : 0];
+          const email = (targetAcct?.important || []).find(e => e.id === emailId);
+          if (email) {
+            setSelectedEmail(email);
+            requestAnimationFrame(() => {
+              emailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          }
+        }} />
+      </div>
+
+      {/* RAG unavailable warning */}
+      {d.ragUnavailable && (
+        <div style={{
+          fontSize: 11,
+          color: "#f59e0b",
+          background: "rgba(245,158,11,0.06)",
+          border: "1px solid rgba(245,158,11,0.15)",
+          borderRadius: 6,
+          padding: "6px 10px",
+          marginBottom: 16,
+          opacity: loaded ? 1 : 0,
+          transition: "opacity 0.4s ease 200ms",
+        }}>
+          Historical context unavailable — insights based on current data only
         </div>
       )}
 

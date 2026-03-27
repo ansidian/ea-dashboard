@@ -8,6 +8,7 @@ import { testConnection as testIcloud } from "../briefing/icloud.js";
 import { geocodeLocation } from "../briefing/weather.js";
 import { listModels } from "../briefing/claude.js";
 import { initScheduler } from "../briefing/scheduler.js";
+import { isEmbeddingAvailable } from "../embeddings/index.js";
 
 const router = Router();
 
@@ -202,6 +203,16 @@ router.get("/settings", async (req, res) => {
           { label: "Evening Briefing", time: "20:00", enabled: false },
         ];
     safe.email_interests = email_interests_json ? JSON.parse(email_interests_json) : [];
+
+    // Embedding/RAG status
+    safe.openai_available = isEmbeddingAvailable();
+    try {
+      const countResult = await db.execute({ sql: "SELECT COUNT(*) as count FROM ea_embeddings WHERE user_id = ?", args: [userId] });
+      safe.embedding_count = countResult.rows[0].count;
+    } catch {
+      safe.embedding_count = 0;
+    }
+
     res.json(safe);
   } catch (err) {
     console.error("Error fetching EA settings:", err);

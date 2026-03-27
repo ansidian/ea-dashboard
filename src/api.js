@@ -54,3 +54,12 @@ export const updateSettings = (data) => apiFetch("/api/ea/settings", { method: "
 export const geocodeLocation = (q) => apiFetch(`/api/ea/geocode?q=${encodeURIComponent(q)}`);
 export const skipSchedule = (index, skip = true) => apiFetch("/api/ea/schedules/skip", { method: "POST", body: JSON.stringify({ index, skip }) });
 export const getModels = () => apiFetch("/api/ea/models");
+
+// Search
+export const searchBriefings = (query, options = {}) => {
+  const params = new URLSearchParams({ q: query });
+  if (options.types) params.set("types", options.types);
+  if (options.limit) params.set("limit", options.limit);
+  return apiFetch(`/api/search?${params}`);
+};
+export const analyzeSearchResults = (query, results) => apiFetch("/api/search/analyze", { method: "POST", body: JSON.stringify({ query, results }) });

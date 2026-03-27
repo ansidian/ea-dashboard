@@ -28,6 +28,12 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
 
 3. GENERATE INSIGHTS (2-4 items): Connect dots across emails, calendar, and deadlines. Be specific and actionable.
    Calendar events with "passed": true already ended — skip them. Focus on what's ahead.
+   When Historical Context is provided, USE it:
+   - Compare current bills/transactions to historical amounts (note increases, decreases, trends)
+   - Flag recurring senders or threads that span multiple briefings
+   - Note deadline patterns (submission timing habits, approaching due dates mentioned before)
+   - Reference what previous briefings flagged if it connects to today's data
+   If no historical context is provided, generate insights from current data only.
 
 4. EXTRACT DEADLINES: Non-academic deadlines from emails only. Use ONLY dates explicitly stated in the email — never infer or fabricate.
 
@@ -55,7 +61,7 @@ RULES:
 - "unread" MUST equal the length of "important" array. Do NOT fabricate emails.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.`;
 
-export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories }) {
+export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext }) {
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
 
   const selectedModel = model || PREFERRED_MODELS[0];
@@ -107,7 +113,7 @@ ${calendarSummary || "No events"}
 ## Academic Deadlines (for insights only — do NOT include in output)
 ${ctmSummary}
 
-## Now: ${now}${interestsNote}${categoriesNote}`;
+## Now: ${now}${interestsNote}${categoriesNote}${historicalContext ? `\n\n## Historical Context (from your previous briefings — use for trends, comparisons, continuity)\n${historicalContext}` : ""}`;
 
   console.log(`[EA] Calling Claude API with model: ${selectedModel}`);
 
