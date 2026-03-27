@@ -52,4 +52,5 @@ export const removeAccount = (id) => apiFetch(`/api/ea/accounts/${id}`, { method
 export const getSettings = () => apiFetch("/api/ea/settings");
 export const updateSettings = (data) => apiFetch("/api/ea/settings", { method: "PUT", body: JSON.stringify(data) });
 export const geocodeLocation = (q) => apiFetch(`/api/ea/geocode?q=${encodeURIComponent(q)}`);
+export const skipSchedule = (index, skip = true) => apiFetch("/api/ea/schedules/skip", { method: "POST", body: JSON.stringify({ index, skip }) });
 export const getModels = () => apiFetch("/api/ea/models");

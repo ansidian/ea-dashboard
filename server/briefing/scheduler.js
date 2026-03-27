@@ -26,6 +26,24 @@ export async function initScheduler() {
         const job = cron.schedule(
           cronExpr,
           async () => {
+            // Check if this schedule is skipped (re-read from DB for freshness)
+            try {
+              const fresh = await db.execute({
+                sql: "SELECT schedules_json FROM ea_settings WHERE user_id = ?",
+                args: [row.user_id],
+              });
+              const freshSchedules = JSON.parse(fresh.rows[0]?.schedules_json || "[]");
+              const match = freshSchedules.find(s => s.time === schedule.time && s.label === schedule.label);
+              if (match?.skipped_until && new Date(match.skipped_until) > new Date()) {
+                console.log(
+                  `[EA Scheduler] Skipping ${schedule.label} briefing — skipped until ${match.skipped_until}`,
+                );
+                return;
+              }
+            } catch (err) {
+              console.error("[EA Scheduler] Error checking skip status:", err.message);
+            }
+
             console.log(
               `[EA Scheduler] Generating ${schedule.label} briefing for user ${row.user_id}`,
             );

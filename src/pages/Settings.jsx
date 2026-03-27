@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   getAccounts, getSettings, updateSettings,
   getGmailAuthUrl, addICloudAccount, removeAccount, updateAccount,
-  testActualBudget, geocodeLocation, getModels,
+  testActualBudget, geocodeLocation, getModels, skipSchedule,
 } from "../api";
 
 function Card({ title, children }) {
@@ -507,6 +507,22 @@ export default function Settings() {
                   left: sched.enabled ? 21 : 3,
                 }} />
               </button>
+              {sched.enabled && (
+                <button onClick={async () => {
+                  const isSkipped = sched.skipped_until && new Date(sched.skipped_until) > new Date();
+                  const result = await skipSchedule(oi, !isSkipped);
+                  if (result.schedules) setSettings(s => ({ ...s, schedules: result.schedules }));
+                }} title={sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "Unskip this schedule" : "Skip today's run"}
+                style={{
+                  background: sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.08)"}`,
+                  borderRadius: 6, padding: "3px 8px", fontSize: 10, fontWeight: 500, cursor: "pointer",
+                  color: sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "#fbbf24" : "#64748b",
+                  transition: "all 0.2s", fontFamily: "inherit", whiteSpace: "nowrap",
+                }}>
+                  {sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "Skipped" : "Skip Today"}
+                </button>
+              )}
               <button onClick={async () => {
                 if (schedContainerRef.current) {
                   schedContainerRef.current.querySelectorAll("[data-sched-idx]").forEach(el => {

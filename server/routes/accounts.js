@@ -246,6 +246,45 @@ router.put("/settings", async (req, res) => {
   }
 });
 
+router.post("/schedules/skip", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { index, skip } = req.body;
+  if (index === undefined) return res.status(400).json({ message: "index is required" });
+
+  try {
+    const result = await db.execute({ sql: "SELECT schedules_json FROM ea_settings WHERE user_id = ?", args: [userId] });
+    const schedules = JSON.parse(result.rows[0]?.schedules_json || "[]");
+    if (index < 0 || index >= schedules.length) return res.status(400).json({ message: "Invalid schedule index" });
+
+    if (skip === false) {
+      delete schedules[index].skipped_until;
+    } else {
+      // Skip until midnight tonight in the schedule's timezone
+      const tz = schedules[index].tz || "America/Los_Angeles";
+      const now = new Date();
+      const tomorrow = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      // Convert back to UTC ISO string
+      const midnightLocal = new Date(tomorrow.toLocaleString("en-US", { timeZone: tz }));
+      // Build a proper midnight timestamp in the schedule's timezone
+      const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
+      const tomorrowDate = formatter.format(new Date(Date.now() + 86400000));
+      schedules[index].skipped_until = `${tomorrowDate}T00:00:00`;
+    }
+
+    await db.execute({
+      sql: "UPDATE ea_settings SET schedules_json = ? WHERE user_id = ?",
+      args: [JSON.stringify(schedules), userId],
+    });
+
+    res.json({ success: true, schedules });
+  } catch (err) {
+    console.error("Error toggling schedule skip:", err);
+    res.status(500).json({ message: "Failed to update schedule" });
+  }
+});
+
 router.get("/models", async (req, res) => {
   try {
     const models = await listModels();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getSettings, dismissEmail } from "../api";
+import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getSettings, dismissEmail, skipSchedule } from "../api";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -95,6 +95,9 @@ export default function Dashboard() {
   const [viewingPast, setViewingPast] = useState(null); // { id, generated_at } when viewing a past briefing
   const [latestBriefing, setLatestBriefing] = useState(null); // preserved so "Back to latest" is instant
   const [latestId, setLatestId] = useState(null); // id of the most recent briefing
+  const [schedules, setSchedules] = useState([]); // user's briefing schedules
+  const [nextBriefingHover, setNextBriefingHover] = useState(false);
+  const [refreshHover, setRefreshHover] = useState(false);
   const holdTimerRef = useRef(null);
   const [holdProgress, setHoldProgress] = useState(0); // 0-100 for progress bar
   const holdProgressRef = useRef(null);
@@ -119,6 +122,7 @@ export default function Dashboard() {
           )
           .replace(/(\w+)$/, (m) => m.charAt(0).toUpperCase() + m.slice(1));
         setModelLabel(`Claude ${name}`);
+        if (s?.schedules) setSchedules(s.schedules);
       })
       .catch(() => {});
 
@@ -373,6 +377,45 @@ export default function Dashboard() {
     );
 
   const d = briefing;
+
+  // Compute next upcoming briefing from schedules (both active and skipped)
+  const { nextBriefing, nextSkipped } = (() => {
+    const now = new Date();
+    const enabled = schedules
+      .map((s, i) => ({ ...s, _idx: i }))
+      .filter(s => s.enabled)
+      .map(s => {
+        const [h, m] = s.time.split(":").map(Number);
+        const target = new Date();
+        target.setHours(h, m, 0, 0);
+        if (target <= now) target.setDate(target.getDate() + 1);
+        const isSkipped = s.skipped_until && new Date(s.skipped_until) > now;
+        return { ...s, targetTime: target, msUntil: target - now, isSkipped };
+      })
+      .sort((a, b) => a.msUntil - b.msUntil);
+    const active = enabled.find(s => !s.isSkipped) || null;
+    const skipped = enabled.find(s => s.isSkipped) || null;
+    // Show whichever comes first — if the soonest schedule is skipped, show that
+    const soonest = enabled[0] || null;
+    if (soonest?.isSkipped) return { nextBriefing: null, nextSkipped: soonest };
+    return { nextBriefing: active, nextSkipped: skipped };
+  })();
+
+  const briefingIndicator = nextBriefing || nextSkipped;
+
+  const nextBriefingLabel = (() => {
+    if (!briefingIndicator) return null;
+    const hrs = Math.floor(briefingIndicator.msUntil / 3600000);
+    const mins = Math.round((briefingIndicator.msUntil % 3600000) / 60000);
+    if (hrs === 0) return `${mins}m`;
+    if (mins === 0) return `${hrs}h`;
+    return `${hrs}h ${mins}m`;
+  })();
+
+  const nextBriefingFullTime = briefingIndicator
+    ? briefingIndicator.targetTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+    : null;
+
   const emailAccounts = d.emails?.accounts || [];
   const billEmails = emailAccounts.flatMap((acc, accIdx) =>
     (acc.important || [])
@@ -504,92 +547,116 @@ export default function Dashboard() {
                 {d.aiGeneratedAt &&
                   ` · AI analysis from ${formatShortTime(d.aiGeneratedAt)}`}
               </p>
-              <button
-                className="btn-header"
-                onPointerDown={onPointerDown}
-                onPointerUp={onPointerUp}
-                onPointerLeave={onPointerLeave}
-                disabled={refreshing || generating}
-                title="Tap to refresh data · Hold to regenerate AI briefing · Hotkey: R"
-                style={{
-                  position: "relative",
-                  overflow: "hidden",
-                  background: refreshing
-                    ? "rgba(99,102,241,0.12)"
-                    : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${refreshing ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.08)"}`,
-                  borderRadius: 6,
-                  padding: "4px 10px",
-                  fontSize: 11,
-                  color: refreshing ? "#a5b4fc" : "#94a3b8",
-                  cursor: refreshing || generating ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  opacity: refreshing || generating ? 0.7 : 1,
-                  fontWeight: 500,
-                  transition: "all 0.2s ease",
-                  userSelect: "none",
-                  touchAction: "none",
-                  fontFamily: "inherit",
-                }}
-                onMouseEnter={(e) => {
-                  if (!refreshing && !generating) {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
-                    e.currentTarget.style.color = "#e2e8f0";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!refreshing && !generating) {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
-                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
-                    e.currentTarget.style.color = "#94a3b8";
-                  }
-                }}
+              <div
+                style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={() => setRefreshHover(true)}
+                onMouseLeave={() => setRefreshHover(false)}
               >
-                {holdProgress > 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: `${holdProgress}%`,
-                      background:
-                        "linear-gradient(90deg, rgba(99,102,241,0.2), rgba(139,92,246,0.3))",
-                      transition: "none",
-                      borderRadius: 6,
-                    }}
-                  />
-                )}
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                <button
+                  className="btn-header"
+                  onPointerDown={onPointerDown}
+                  onPointerUp={onPointerUp}
+                  onPointerLeave={onPointerLeave}
+                  disabled={refreshing || generating}
                   style={{
-                    animation: refreshing
-                      ? "spin 0.8s linear infinite"
-                      : "none",
                     position: "relative",
+                    overflow: "hidden",
+                    background: refreshing
+                      ? "rgba(99,102,241,0.12)"
+                      : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${refreshing ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.08)"}`,
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    color: refreshing ? "#a5b4fc" : "#94a3b8",
+                    cursor: refreshing || generating ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    opacity: refreshing || generating ? 0.7 : 1,
+                    fontWeight: 500,
+                    transition: "all 0.2s ease",
+                    userSelect: "none",
+                    touchAction: "none",
+                    fontFamily: "inherit",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!refreshing && !generating) {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+                      e.currentTarget.style.color = "#e2e8f0";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!refreshing && !generating) {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                      e.currentTarget.style.color = "#94a3b8";
+                    }
                   }}
                 >
-                  <polyline points="23 4 23 10 17 10" />
-                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                </svg>
-                <span style={{ position: "relative" }}>
-                  {holdProgress > 0
-                    ? "Hold for new briefing..."
-                    : refreshing
-                      ? "Updating..."
-                      : "Refresh"}
-                </span>
-              </button>
+                  {holdProgress > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: `${holdProgress}%`,
+                        background:
+                          "linear-gradient(90deg, rgba(99,102,241,0.2), rgba(139,92,246,0.3))",
+                        transition: "none",
+                        borderRadius: 6,
+                      }}
+                    />
+                  )}
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      animation: refreshing
+                        ? "spin 0.8s linear infinite"
+                        : "none",
+                      position: "relative",
+                    }}
+                  >
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                  <span style={{ position: "relative" }}>
+                    {holdProgress > 0
+                      ? "Hold for new briefing..."
+                      : refreshing
+                        ? "Updating..."
+                        : "Refresh"}
+                  </span>
+                </button>
+                {refreshHover && !refreshing && !generating && (
+                  <div style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "#1e293b",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 6,
+                    padding: "6px 10px",
+                    fontSize: 11,
+                    color: "#e2e8f0",
+                    whiteSpace: "nowrap",
+                    zIndex: 50,
+                    pointerEvents: "none",
+                  }}>
+                    Tap to refresh data · Hold to regenerate AI briefing · Hotkey: R
+                  </div>
+                )}
+              </div>
               <div ref={historyTriggerRef} style={{ position: "relative" }}>
                 <button
                   className="btn-header"
@@ -653,6 +720,87 @@ export default function Dashboard() {
                   />
                 )}
               </div>
+              {briefingIndicator && (
+                <div
+                  style={{ position: "relative", display: "inline-block" }}
+                  onMouseEnter={() => setNextBriefingHover(true)}
+                  onMouseLeave={() => setNextBriefingHover(false)}
+                >
+                  <button
+                    className="btn-header"
+                    onClick={async () => {
+                      const result = await skipSchedule(briefingIndicator._idx, !briefingIndicator.isSkipped);
+                      if (result.schedules) setSchedules(result.schedules);
+                    }}
+                    style={{
+                      background: briefingIndicator.isSkipped ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${briefingIndicator.isSkipped ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.08)"}`,
+                      borderRadius: 6,
+                      padding: "4px 10px",
+                      fontSize: 11,
+                      color: briefingIndicator.isSkipped ? "#fbbf24" : "#94a3b8",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
+                      fontWeight: 500,
+                      transition: "all 0.2s ease",
+                      fontFamily: "inherit",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (briefingIndicator.isSkipped) {
+                        e.currentTarget.style.background = "rgba(99,102,241,0.1)";
+                        e.currentTarget.style.borderColor = "rgba(99,102,241,0.25)";
+                        e.currentTarget.style.color = "#a5b4fc";
+                      } else {
+                        e.currentTarget.style.background = "rgba(245,158,11,0.08)";
+                        e.currentTarget.style.borderColor = "rgba(245,158,11,0.2)";
+                        e.currentTarget.style.color = "#fbbf24";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (briefingIndicator.isSkipped) {
+                        e.currentTarget.style.background = "rgba(245,158,11,0.08)";
+                        e.currentTarget.style.borderColor = "rgba(245,158,11,0.2)";
+                        e.currentTarget.style.color = "#fbbf24";
+                      } else {
+                        e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                        e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                        e.currentTarget.style.color = "#94a3b8";
+                      }
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span>{briefingIndicator.isSkipped
+                      ? `${briefingIndicator.label} skipped`
+                      : `Next in ${nextBriefingLabel}`}</span>
+                  </button>
+                  {nextBriefingHover && (
+                    <div style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      background: "#1e293b",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 6,
+                      padding: "6px 10px",
+                      fontSize: 11,
+                      color: "#e2e8f0",
+                      whiteSpace: "nowrap",
+                      zIndex: 50,
+                      pointerEvents: "none",
+                    }}>
+                      {briefingIndicator.isSkipped
+                        ? `${briefingIndicator.label} at ${nextBriefingFullTime} · Click to unskip`
+                        : `${briefingIndicator.label} at ${nextBriefingFullTime} · Click to skip`}
+                    </div>
+                  )}
+                </div>
+              )}
               <a
                 href="/settings"
                 className="btn-header"
