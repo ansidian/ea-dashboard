@@ -3,16 +3,25 @@ import getCtmDb from "../db/ctm-connection.js";
 function formatTime12h(timeStr) {
   if (!timeStr) return "11:59 PM";
   if (timeStr.includes("T")) {
-    // ISO string — convert to Pacific time
-    const d = new Date(timeStr);
-    return d.toLocaleTimeString("en-US", {
-      timeZone: "America/Los_Angeles",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
+    // CTM stores ISO strings in Pacific time (no Z suffix).
+    // Strings with Z/offset are already UTC — parse directly.
+    // Bare strings like "2026-03-27T13:00:00" — extract the time portion.
+    if (/[Z+\-]\d{0,4}$/.test(timeStr)) {
+      return new Date(timeStr).toLocaleTimeString("en-US", {
+        timeZone: "America/Los_Angeles",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    }
+    // Bare ISO — time is already Pacific, extract HH:MM directly
+    const timePart = timeStr.split("T")[1];
+    let [h, m] = timePart.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
   }
-  // "HH:MM" format
+  // "HH:MM" format — assume already in Pacific
   let [h, m] = timeStr.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
@@ -52,7 +61,9 @@ export async function fetchCTMDeadlines(userId) {
     id: row.id,
     title: row.title,
     due_date: row.due_date?.includes("T")
-      ? new Date(row.due_date).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" })
+      ? /[Z+\-]\d{0,4}$/.test(row.due_date)
+        ? new Date(row.due_date).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" })
+        : row.due_date.split("T")[0]
       : row.due_date,
     due_time: formatTime12h(row.due_time ? row.due_time : row.due_date),
     class_name: row.class_name || "Uncategorized",
