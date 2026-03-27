@@ -23,22 +23,24 @@ export function todayPacific() {
 // and plain "2026-03-28" → "2026-03-28" (pass-through)
 export function toPacificDate(dateStr) {
   if (!dateStr) return dateStr;
-  if (!dateStr.includes("T")) return dateStr.slice(0, 10);
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(dateStr));
+  // Only treat as ISO timestamp if it matches "YYYY-MM-DDTHH" pattern
+  if (/^\d{4}-\d{2}-\d{2}T/.test(dateStr)) {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date(dateStr));
+  }
+  // Plain date "2026-03-28" or human-readable string — return as-is
+  return dateStr.slice(0, 10);
 }
 
 export function parseDueDate(dateStr) {
-  // For date-only strings like "2026-03-30", interpret as that calendar date in Pacific time
-  if (!dateStr.includes("T")) {
-    // Return a Date whose local calendar date matches the Pacific date
-    // by parsing as noon UTC (safe from DST edge cases)
-    return new Date(dateStr + "T12:00:00");
-  }
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return new Date(NaN);
+  if (!/T/.test(dateStr)) return new Date(dateStr + "T12:00:00");
   return new Date(dateStr);
 }
 
 export function formatRelativeDate(dateStr) {
   if (!dateStr) return dateStr;
+  // If not a parseable date (e.g. "Tomorrow EOD"), return as-is
+  if (!/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr;
   const todayStr = todayPacific();
   const dueStr = toPacificDate(dateStr);
   // Compare as date strings to avoid timezone drift
