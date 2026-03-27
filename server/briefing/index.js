@@ -362,7 +362,7 @@ export async function generateBriefing(userId) {
     ]);
 
     // Optimization #2: Skip if nothing new (also exclude dismissed emails)
-    const newEmails = emails.filter(e => !triagedIds.has(e.id) && !dismissedIds.has(e.id));
+    const newEmails = emails.filter(e => !triagedIds.has(e.id || e.uid) && !dismissedIds.has(e.id || e.uid));
     const calendarChanged = prevBriefing ? hasCalendarChanged(prevBriefing, calendar) : true;
 
     await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${newEmails.length} new · Analyzing...`);
@@ -420,7 +420,7 @@ export async function generateBriefing(userId) {
       briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext });
 
       // Merge previous triage with new triage using pure function
-      const allEmailIds = new Set(emails.map(e => e.id));
+      const allEmailIds = new Set(emails.map(e => e.id || e.uid));
       const mergedAccounts = mergeDeltaBriefing(prevBriefing, briefingJson, dismissedIds, allEmailIds);
       briefingJson.emails.accounts = mergedAccounts;
     } else {
