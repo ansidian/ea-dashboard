@@ -3,7 +3,6 @@ import { chunkBriefing } from "./chunker.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_DIMS = 1536;
 const CONTEXT_BRIEFING_LIMIT = 7;
 const CONTEXT_TOP_K = 10;
 

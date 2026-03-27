@@ -12,7 +12,10 @@ async function apiFetch(path, options = {}) {
     throw new Error("Not authenticated");
   }
 
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message || `API error: ${res.status}`);
+  }
   return res.json();
 }
 

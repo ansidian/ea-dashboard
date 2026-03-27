@@ -32,7 +32,9 @@ router.get("/", async (req, res) => {
     res.json({ results, query: q });
   } catch (err) {
     console.error("[EA] Search error:", err.message);
-    res.status(500).json({ message: err.message });
+    const status = err.message.includes("429") ? 429 : 500;
+    const message = status === 429 ? "Embedding API quota exceeded — check OpenAI billing" : err.message;
+    res.status(status).json({ message });
   }
 });
 
