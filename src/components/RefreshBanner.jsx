@@ -4,7 +4,7 @@ export default function RefreshBanner({ progress }) {
       background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.08))',
       border: '1px solid rgba(99,102,241,0.2)',
       borderRadius: 12,
-      padding: '14px 20px',
+      padding: '12px 20px',
       marginBottom: 20,
       display: 'flex',
       alignItems: 'center',

@@ -300,7 +300,7 @@ export default function Settings() {
           </button>
         </div>
         {icloudForm.show && (
-          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
             <input type="email" placeholder="iCloud email" value={icloudForm.email} onChange={e => setIcloudForm(f => ({ ...f, email: e.target.value }))} className="input" />
             <input type="password" placeholder="App-specific password" value={icloudForm.password} onChange={e => setIcloudForm(f => ({ ...f, password: e.target.value }))} className="input" />
             <button onClick={handleAddICloud} className="btn-primary" style={{ alignSelf: "flex-start" }}>Connect iCloud</button>
@@ -356,8 +356,8 @@ export default function Settings() {
               {open && models.length > 0 && (
                 <div style={{
                   position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
-                  background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
-                  maxHeight: 240, overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                  background: "#16161e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
+                  maxHeight: 240, overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
                 }}>
                   {models.map(m => (
                     <div
@@ -396,7 +396,7 @@ export default function Settings() {
             Briefings use vector embeddings to retrieve relevant historical context (bill trends, recurring senders, deadline patterns).
             Search lets you query past briefing data.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{
                 width: 8, height: 8, borderRadius: "50%",
@@ -429,7 +429,7 @@ export default function Settings() {
         <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>
           Senders, brands, or keywords that should never be classified as noise. Add as many as you like.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
           {(settings?.email_interests || []).map((tag, i) => (
             <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(99,102,241,0.12)", color: "#a5b4fc", fontSize: 12, fontWeight: 500, padding: "4px 10px", borderRadius: 20 }}>
               {tag}
@@ -458,7 +458,7 @@ export default function Settings() {
 
       {/* Schedules */}
       <Card title="Briefing Schedules">
-        <div ref={schedContainerRef} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div ref={schedContainerRef} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {(() => {
             const items = [...(settings?.schedules || [])].map((s, i) => ({ ...s, _oi: i }));
             const sorted = [...items].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
@@ -590,7 +590,7 @@ export default function Settings() {
 
       {/* Weather Location */}
       <Card title="Weather Location">
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
             <label className="label">City Name</label>
             <div style={{ display: "flex", gap: 8 }}>
@@ -629,7 +629,7 @@ export default function Settings() {
 
       {/* Actual Budget */}
       <Card title="Actual Budget">
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
             <label className="label">Server URL</label>
             <input type="url" placeholder="https://actual.yourdomain.com" value={actualForm.serverUrl} onChange={e => setActualForm(f => ({ ...f, serverUrl: e.target.value }))} className="input" />

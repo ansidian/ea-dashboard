@@ -16,7 +16,7 @@ export default function ErrorState({ message, onRetry }) {
         }}>
           Something went wrong
         </h2>
-        <p style={{ fontSize: 13.5, color: '#94a3b8', lineHeight: 1.6, margin: '0 0 20px 0' }}>
+        <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.6, margin: '0 0 20px 0' }}>
           {message || 'Failed to load your morning briefing.'}
         </p>
         {onRetry && (

@@ -11,9 +11,9 @@ export default function LoadingSkeleton() {
   );
 
   const section = (titleWidth, lines, delay) => (
-    <div style={{ marginBottom: 28, opacity: 0, animation: `fadeIn 0.4s ease ${delay}ms forwards` }}>
+    <div style={{ marginBottom: 24, opacity: 0, animation: `fadeIn 0.4s ease ${delay}ms forwards` }}>
       {bar(titleWidth, 11, 12)}
-      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {lines.map((w, i) => <div key={i}>{bar(w, 14)}</div>)}
       </div>
     </div>
@@ -33,7 +33,7 @@ export default function LoadingSkeleton() {
           {bar(260, 36, 6)}
           {bar(200, 13)}
         </div>
-        <div style={{ ...shimmer, width: 100, height: 100, borderRadius: 16 }} />
+        <div style={{ ...shimmer, width: 100, height: 100, borderRadius: 12 }} />
       </div>
 
       {section('100px', ['100%', '90%', '95%', '80%', '85%'], 100)}
