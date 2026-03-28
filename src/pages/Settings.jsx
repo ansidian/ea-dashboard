@@ -12,19 +12,19 @@ import { Input } from "@/components/ui/input";
 function SettingsCard({ title, children }) {
   return (
     <div className="bg-surface border border-border rounded-xl p-4 px-5 mb-6">
-      <h3 className="text-[11px] tracking-[2.5px] uppercase text-text-muted font-semibold mb-3">{title}</h3>
+      <h3 className="text-[11px] tracking-[2.5px] uppercase text-muted-foreground font-semibold mb-3">{title}</h3>
       {children}
     </div>
   );
 }
 
 const EMOJI_OPTIONS = ["📧", "🍎", "💼", "🏫", "🎓", "🏠", "💰", "🛒", "🔔", "🎮", "🎵", "📱", "🖥️", "🔧", "⭐", "🚀"];
-const COLOR_OPTIONS = ["#818cf8", "#6366f1", "#a78bfa", "#f472b6", "#fb923c", "#fbbf24", "#34d399", "#22d3ee", "#ef4444", "#64748b"];
+const COLOR_OPTIONS = ["#cba6da", "#b4befe", "#f38ba8", "#f5c2e7", "#fab387", "#f9e2af", "#a6e3a1", "#89dceb", "#89b4fa", "#6c7086"];
 
 function AccountRow({ acc, accounts, setAccounts, onRemove }) {
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(acc.label || acc.email);
-  const [color, setColor] = useState(acc.color || "#818cf8");
+  const [color, setColor] = useState(acc.color || "#cba6da");
   const [icon, setIcon] = useState(acc.icon || (acc.type === "icloud" ? "🍎" : "📧"));
   const [saving, setSaving] = useState(false);
 
@@ -43,9 +43,9 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-            <div className="text-[13px] font-medium text-text-body overflow-hidden text-ellipsis whitespace-nowrap">{label}</div>
+            <div className="text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap">{label}</div>
           </div>
-          <div className="text-[11px] text-text-muted">{acc.email} · {acc.type}</div>
+          <div className="text-[11px] text-muted-foreground">{acc.email} · {acc.type}</div>
         </div>
         <Button variant="ghost" size="xs" onClick={() => setEditing(!editing)}>
           {editing ? "Cancel" : "Edit"}
@@ -63,7 +63,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
               "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-all",
               acc.calendar_enabled
                 ? "bg-[#cba6da]/15 border border-[#cba6da]/30 text-[#cba6da]"
-                : "bg-input-bg border border-white/[0.08] text-text-muted"
+                : "bg-input-bg border border-white/[0.08] text-muted-foreground"
             )}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -75,24 +75,24 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
       {editing && (
         <div className="px-3.5 py-3 border-t border-border bg-white/[0.01] flex flex-col gap-3 animate-[fadeIn_0.15s_ease]">
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Display Name</label>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Display Name</label>
             <Input value={label} onChange={e => setLabel(e.target.value)} placeholder={acc.email} />
           </div>
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Icon</label>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Icon</label>
             <div className="flex gap-1 flex-wrap">
               {EMOJI_OPTIONS.map(e => (
                 <button key={e} onClick={() => setIcon(e)} className={cn(
                   "text-lg px-1.5 py-1 rounded-md cursor-pointer border transition-all",
                   icon === e
-                    ? "bg-accent/15 border-accent/40"
+                    ? "bg-primary/[0.12] border-primary/30"
                     : "bg-white/[0.03] border-border hover:bg-white/[0.06]"
                 )} aria-label={`Select icon ${e}`}>{e}</button>
               ))}
             </div>
           </div>
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Color</label>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Color</label>
             <div className="flex gap-1.5 items-center">
               {COLOR_OPTIONS.map(c => (
                 <button key={c} onClick={() => setColor(c)} className="w-[22px] h-[22px] rounded-full cursor-pointer transition-all" style={{
@@ -269,20 +269,20 @@ export default function Settings() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-white/10 border-t-accent-light rounded-full animate-spin" />
+        <div className="w-5 h-5 border-[1.5px] border-white/[0.06] border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen text-text-body font-sans p-6 max-w-[900px] mx-auto">
+    <div className="min-h-screen text-foreground font-sans p-6 max-w-[900px] mx-auto">
 
       <div className="flex items-center gap-3 mb-8">
-        <Link to="/" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px] font-medium text-text-secondary hover:bg-surface-hover hover:text-text-body transition-colors no-underline">
+        <Link to="/" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px] font-medium text-muted-foreground/70 hover:bg-white/[0.04] hover:text-foreground transition-colors no-underline">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
           Dashboard
         </Link>
-        <h1 className="font-serif text-[28px] font-normal m-0 text-text-primary">Settings</h1>
+        <h1 className="font-serif text-[28px] font-normal m-0 text-foreground">Settings</h1>
       </div>
 
       {/* Connected Accounts */}
@@ -294,7 +294,7 @@ export default function Settings() {
             ))}
           </div>
         ) : (
-          <p className="text-[13px] text-text-muted mb-4">No accounts connected yet.</p>
+          <p className="text-[13px] text-muted-foreground mb-4">No accounts connected yet.</p>
         )}
         <div className="flex gap-2 flex-wrap">
           <Button onClick={handleAddGmail}>Add Gmail</Button>
@@ -314,15 +314,15 @@ export default function Settings() {
       {/* Email Lookback */}
       <SettingsCard title="Email Lookback">
         <div className="flex items-center gap-3">
-          <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium whitespace-nowrap">Fetch emails from the last</label>
+          <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium whitespace-nowrap">Fetch emails from the last</label>
           <Input
             type="number" min="1" max="72" value={lookbackHours}
             onChange={e => setLookbackHours(Math.max(1, Math.min(72, parseInt(e.target.value) || 16)))}
             className="w-[70px] text-center"
           />
-          <span className="text-[13px] text-text-secondary">hours</span>
+          <span className="text-[13px] text-muted-foreground/70">hours</span>
         </div>
-        <p className="text-[11px] text-text-muted mt-2">
+        <p className="text-[11px] text-muted-foreground mt-2">
           Controls how far back to look for emails during briefing generation. Default: 16 hours.
         </p>
       </SettingsCard>
@@ -346,11 +346,11 @@ export default function Settings() {
                       .finally(() => setModelsLoading(false));
                   }
                 }}
-                className="w-full text-left text-[13px] text-text-body bg-input-bg border border-white/[0.08] rounded-lg px-3 py-2 cursor-pointer flex justify-between items-center hover:bg-surface-hover transition-colors"
+                className="w-full text-left text-[13px] text-foreground bg-input-bg border border-white/[0.08] rounded-lg px-3 py-2 cursor-pointer flex justify-between items-center hover:bg-white/[0.04] transition-colors"
                 aria-label="Select Claude model"
               >
                 <span>{modelsLoading ? "Loading models..." : selectedLabel}</span>
-                <span className="text-text-muted text-[10px]">{open ? "▲" : "▼"}</span>
+                <span className="text-muted-foreground text-[10px]">{open ? "▲" : "▼"}</span>
               </button>
               {open && models.length > 0 && (
                 <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-elevated border border-white/10 rounded-lg max-h-60 overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.7)]">
@@ -363,10 +363,10 @@ export default function Settings() {
                         await updateSettings({ claude_model: m.id });
                       }}
                       className={cn(
-                        "px-3 py-2 text-[13px] cursor-pointer transition-colors",
+                        "px-3 py-2 text-[13px] cursor-pointer transition-all duration-150",
                         m.id === selected
-                          ? "text-accent-light bg-accent-light/10"
-                          : "text-text-body hover:bg-surface-hover"
+                          ? "text-primary bg-primary/10"
+                          : "text-foreground hover:bg-white/[0.04] hover:text-foreground hover:pl-4"
                       )}
                     >
                       {m.name || m.id}
@@ -377,14 +377,14 @@ export default function Settings() {
             </div>
           );
         })()}
-        <p className="text-[11px] text-text-muted mt-2">
+        <p className="text-[11px] text-muted-foreground mt-2">
           Model used for briefing generation. Haiku is cheapest, Sonnet is more capable. Models are fetched from your API key.
         </p>
       </SettingsCard>
 
       {/* RAG / Embeddings Status */}
       <SettingsCard title="Search & Historical Context">
-        <div className="text-xs text-text-secondary leading-relaxed">
+        <div className="text-xs text-muted-foreground/70 leading-relaxed">
           <p className="mb-2">
             Briefings use vector embeddings to retrieve relevant historical context (bill trends, recurring senders, deadline patterns).
             Search lets you query past briefing data.
@@ -417,18 +417,18 @@ export default function Settings() {
 
       {/* Email Interests */}
       <SettingsCard title="Email Interests">
-        <p className="text-xs text-text-secondary mb-3">
+        <p className="text-xs text-muted-foreground/70 mb-3">
           Senders, brands, or keywords that should never be classified as noise. Add as many as you like.
         </p>
         <div className="flex flex-wrap gap-1.5 mb-3">
           {(settings?.email_interests || []).map((tag, i) => (
-            <span key={i} className="inline-flex items-center gap-1 bg-accent/[0.12] text-accent-lighter text-xs font-medium px-2.5 py-1 rounded-full">
+            <span key={i} className="inline-flex items-center gap-1 bg-primary/[0.08] text-primary text-xs font-medium px-2.5 py-1 rounded-full">
               {tag}
               <button onClick={async () => {
                 const next = settings.email_interests.filter((_, j) => j !== i);
                 setSettings(s => ({ ...s, email_interests: next }));
                 await updateSettings({ email_interests_json: next });
-              }} className="bg-transparent border-none text-accent-light cursor-pointer p-0 text-sm leading-none ml-0.5" aria-label={`Remove ${tag}`}>×</button>
+              }} className="bg-transparent border-none text-primary/60 cursor-pointer p-0 text-sm leading-none ml-0.5 hover:text-primary" aria-label={`Remove ${tag}`}>×</button>
             </span>
           ))}
         </div>
@@ -496,7 +496,7 @@ export default function Settings() {
                   setSettings(s => ({ ...s, schedules: updated }));
                 }}
                 onBlur={() => updateSettings({ schedules_json: settings.schedules })}
-                className="flex-1 text-[13px] font-medium text-text-body bg-transparent border-none outline-none p-0"
+                className="flex-1 text-[13px] font-medium text-foreground bg-transparent border-none outline-none p-0"
               />
               <input
                 type="time" value={sched.time || "08:00"}
@@ -516,7 +516,7 @@ export default function Settings() {
                   updated[oi] = { ...updated[oi], time: e.target.value };
                   setSettings(s => ({ ...s, schedules: updated }));
                 }}
-                className="text-xs text-text-secondary bg-transparent border border-white/[0.08] rounded-md px-2 py-1 [color-scheme:dark]"
+                className="text-xs text-muted-foreground/70 bg-transparent border border-white/[0.08] rounded-md px-2 py-1 [color-scheme:dark]"
               />
               <button onClick={async () => {
                 const updated = [...settings.schedules];
@@ -541,8 +541,8 @@ export default function Settings() {
                 className={cn(
                   "rounded-md px-2 py-[3px] text-[10px] font-medium cursor-pointer transition-all font-[inherit] whitespace-nowrap",
                   isSkipped
-                    ? "bg-warning/[0.12] border border-warning/25 text-[#fbbf24]"
-                    : "bg-input-bg border border-white/[0.08] text-text-muted hover:bg-surface-hover hover:text-text-secondary hover:border-white/15"
+                    ? "bg-[#f9e2af]/[0.08] border border-[#f9e2af]/20 text-[#f9e2af]"
+                    : "bg-input-bg border border-white/[0.08] text-muted-foreground hover:bg-white/[0.04] hover:text-muted-foreground/70 hover:border-white/15"
                 )}>
                   {isSkipped ? "Skipped" : "Skip Today"}
                 </button>
@@ -556,7 +556,7 @@ export default function Settings() {
                 const updated = settings.schedules.filter((_, j) => j !== oi);
                 setSettings(s => ({ ...s, schedules: updated }));
                 await updateSettings({ schedules_json: updated });
-              }} className="bg-transparent border-none cursor-pointer text-text-muted text-base px-1 opacity-60 hover:opacity-100 transition-opacity" aria-label="Remove schedule">×</button>
+              }} className="bg-transparent border-none cursor-pointer text-muted-foreground text-base px-1 opacity-60 hover:opacity-100 transition-opacity" aria-label="Remove schedule">×</button>
             </div>
             );
           })}
@@ -564,7 +564,7 @@ export default function Settings() {
             const updated = [...(settings?.schedules || []), { label: "New Schedule", time: "08:00", enabled: false }];
             setSettings(s => ({ ...s, schedules: updated }));
             await updateSettings({ schedules_json: updated });
-          }} className="bg-input-bg border border-dashed border-white/10 rounded-lg px-3.5 py-2 text-text-muted text-xs cursor-pointer transition-all hover:border-white/20 hover:text-text-secondary">
+          }} className="bg-input-bg border border-dashed border-white/10 rounded-lg px-3.5 py-2 text-muted-foreground text-xs cursor-pointer transition-all hover:border-white/20 hover:text-muted-foreground/70">
             + Add Schedule
           </button>
         </div>
@@ -574,7 +574,7 @@ export default function Settings() {
       <SettingsCard title="Weather Location">
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">City Name</label>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">City Name</label>
             <div className="flex gap-2">
               <Input type="text" placeholder="El Monte, CA" value={weatherForm.location}
                 onChange={e => setWeatherForm(f => ({ ...f, location: e.target.value }))}
@@ -588,14 +588,14 @@ export default function Settings() {
           {weatherForm.results && (
             <div className="flex flex-col gap-1">
               {weatherForm.results.map((r, i) => (
-                <button key={i} onClick={() => selectLocation(r)} className="bg-surface border border-border rounded-lg px-3 py-2 text-xs text-text-body cursor-pointer text-left transition-colors hover:bg-surface-hover">
-                  {r.name} <span className="text-text-muted text-[11px]">({r.lat.toFixed(4)}, {r.lng.toFixed(4)})</span>
+                <button key={i} onClick={() => selectLocation(r)} className="bg-surface border border-border rounded-lg px-3 py-2 text-xs text-foreground cursor-pointer text-left transition-colors hover:bg-white/[0.04]">
+                  {r.name} <span className="text-muted-foreground text-[11px]">({r.lat.toFixed(4)}, {r.lng.toFixed(4)})</span>
                 </button>
               ))}
             </div>
           )}
           {weatherForm.lat && weatherForm.lng && (
-            <p className="text-[11px] text-text-muted m-0">
+            <p className="text-[11px] text-muted-foreground m-0">
               Coordinates: {weatherForm.lat}, {weatherForm.lng}
             </p>
           )}
@@ -606,15 +606,15 @@ export default function Settings() {
       <SettingsCard title="Actual Budget">
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Server URL</label>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Server URL</label>
             <Input type="url" placeholder="https://actual.yourdomain.com" value={actualForm.serverUrl} onChange={e => setActualForm(f => ({ ...f, serverUrl: e.target.value }))} />
           </div>
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Password</label>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Password</label>
             <Input type="password" placeholder="Actual Budget password" value={actualForm.password} onChange={e => setActualForm(f => ({ ...f, password: e.target.value }))} />
           </div>
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Sync ID</label>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Sync ID</label>
             <Input type="text" placeholder="Budget sync ID" value={actualForm.syncId} onChange={e => setActualForm(f => ({ ...f, syncId: e.target.value }))} />
           </div>
           <div className="flex gap-2 items-center mt-1">

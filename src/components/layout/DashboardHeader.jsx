@@ -1,5 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "motion/react";
 import { skipSchedule } from "../../api";
 import { getGreeting, timeAgo, formatShortTime } from "../../lib/dashboard-helpers";
 import Tooltip from "../shared/Tooltip";
@@ -7,9 +8,9 @@ import BriefingHistoryPanel from "../briefing/BriefingHistoryPanel";
 import BriefingSearch from "../briefing/BriefingSearch";
 import WeatherTooltip from "../shared/WeatherTooltip";
 
-const btnHeader = "bg-input-bg border border-white/[0.08] rounded-md px-2.5 py-1 text-[11px] text-text-secondary font-medium transition-all flex items-center gap-1 cursor-pointer font-[inherit] select-none hover:bg-surface-hover hover:border-white/15 hover:text-text-body active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed";
+const btnHeader = "bg-input-bg border border-white/[0.08] rounded-md px-2.5 py-1 text-[11px] text-muted-foreground font-medium transition-all flex items-center gap-1 cursor-pointer font-[inherit] select-none hover:bg-white/[0.06] hover:border-white/15 hover:text-foreground/80 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed";
 
-const btnHeaderActive = "bg-accent/12 border-accent/25 text-accent-lighter hover:bg-accent/12 hover:border-accent/25 hover:text-accent-lighter";
+const btnHeaderActive = "bg-primary/[0.08] border-primary/20 text-primary hover:bg-primary/[0.08] hover:border-primary/20 hover:text-primary";
 
 export default function DashboardHeader({
   d, loaded,
@@ -25,9 +26,15 @@ export default function DashboardHeader({
   modelLabel,
   onNavigateToEmail,
 }) {
+  const greeting = useMemo(() => getGreeting(d.scheduleLabel), [d.scheduleLabel]);
   const weatherRef = useRef(null);
   const weatherLeaveTimer = useRef(null);
   const [weatherHover, setWeatherHover] = useState(false);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Compute next upcoming briefing
   const { nextBriefing, nextSkipped } = (() => {
@@ -77,31 +84,41 @@ export default function DashboardHeader({
   return (
     <>
       {/* Full generation confirm dialog */}
-      {holdConfirm && (
-        <div className="bg-gradient-to-br from-accent/12 to-accent-secondary/[0.08] border border-accent/25 rounded-xl px-5 py-3.5 mb-5 flex items-center gap-3 animate-in fade-in duration-200">
-          <span className="text-base">🧠</span>
-          <div className="flex-1">
-            <div className="text-[13px] font-semibold text-accent-lightest">
-              Generate fresh AI briefing?
-            </div>
-            <div className="text-xs text-text-secondary mt-0.5">
-              Re-fetches new emails and analyzes with {modelLabel} (uses an API call)
-            </div>
-          </div>
-          <button
-            className="bg-gradient-to-br from-accent to-accent-secondary text-white border-none rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer transition-all hover:brightness-115 hover:-translate-y-px hover:shadow-[0_4px_16px_rgba(99,102,241,0.3)] active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed font-[inherit]"
-            onClick={onGenerate}
+      <AnimatePresence>
+        {holdConfirm && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -8, height: 0 }}
+            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+            style={{ overflow: "hidden" }}
           >
-            Generate
-          </button>
-          <button
-            className="bg-white/[0.06] text-text-secondary border border-white/10 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all font-[inherit] hover:bg-white/10 hover:text-text-body hover:border-white/20"
-            onClick={() => setHoldConfirm(false)}
-          >
-            Cancel
-          </button>
-        </div>
-      )}
+            <div className="border rounded-xl px-5 py-3.5 mb-5 flex items-center gap-3" style={{ background: "rgba(203,166,218,0.06)", borderColor: "rgba(203,166,218,0.15)" }}>
+              <span className="text-base">🧠</span>
+              <div className="flex-1">
+                <div className="text-[13px] font-semibold text-foreground/90">
+                  Generate fresh AI briefing?
+                </div>
+                <div className="text-xs text-muted-foreground/60 mt-0.5">
+                  Re-fetches new emails and analyzes with {modelLabel} (uses an API call)
+                </div>
+              </div>
+              <button
+                className="bg-[#cba6da] text-[#1e1e2e] border-none rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer transition-all hover:bg-[#d4b3e2] hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed font-[inherit]"
+                onClick={onGenerate}
+              >
+                Generate
+              </button>
+              <button
+                className="bg-white/[0.06] text-muted-foreground border border-white/10 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all font-[inherit] hover:bg-white/10 hover:text-foreground/80 hover:border-white/20"
+                onClick={() => setHoldConfirm(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header */}
       <div
@@ -112,14 +129,14 @@ export default function DashboardHeader({
       >
         <div className="flex justify-between items-start">
           <div>
-            <div className="text-[11px] tracking-[3px] uppercase text-text-muted mb-2 font-semibold">
-              {getGreeting().label}
+            <div className="text-[11px] tracking-[3px] uppercase text-muted-foreground mb-2 font-semibold">
+              {greeting.label}
             </div>
             <h1 className="font-serif text-4xl font-normal m-0 text-white/95 leading-tight">
-              {getGreeting().greeting}
+              {greeting.greeting}
             </h1>
             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-              <p className="text-text-muted text-[13px] m-0">
+              <p className="text-muted-foreground text-[13px] m-0">
                 {d.dataUpdatedAt
                   ? `Data updated ${timeAgo(d.dataUpdatedAt)}`
                   : d.generatedAt}
@@ -141,7 +158,7 @@ export default function DashboardHeader({
                 >
                   {holdProgress > 0 && (
                     <div
-                      className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-accent/20 to-accent-secondary/30 rounded-md"
+                      className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-primary/20 to-primary/10 rounded-md"
                       style={{ width: `${holdProgress}%` }}
                     />
                   )}
@@ -204,8 +221,8 @@ export default function DashboardHeader({
                     className={cn(
                       btnHeader,
                       briefingIndicator.isSkipped
-                        ? "bg-warning/[0.08] border-warning/20 text-amber-300 hover:bg-accent/10 hover:border-accent/25 hover:text-accent-lighter"
-                        : "hover:bg-warning/[0.08] hover:border-warning/20 hover:text-amber-300",
+                        ? "bg-[#f9e2af]/[0.08] border-[#f9e2af]/20 text-[#f9e2af] hover:bg-primary/[0.08] hover:border-primary/20 hover:text-primary"
+                        : "hover:bg-[#f9e2af]/[0.08] hover:border-[#f9e2af]/20 hover:text-[#f9e2af]",
                     )}
                     onClick={async () => {
                       const result = await skipSchedule(briefingIndicator._idx, !briefingIndicator.isSkipped);
@@ -248,7 +265,7 @@ export default function DashboardHeader({
             <div className="text-[28px] font-light text-white mt-1">
               {d.weather.temp}°
             </div>
-            <div className="text-[11px] text-text-muted mt-0.5">
+            <div className="text-[11px] text-muted-foreground mt-0.5">
               {d.weather.high}° / {d.weather.low}°
             </div>
           </div>
@@ -264,13 +281,19 @@ export default function DashboardHeader({
       </div>
 
       {/* Viewing past briefing banner */}
-      {viewingPast && (
-        <div className="bg-accent/[0.06] border border-accent/15 rounded-lg px-4 py-2.5 mb-5 flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <AnimatePresence>
+        {viewingPast && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="rounded-lg px-4 py-2.5 mb-5 flex items-center gap-2" style={{ background: "rgba(203,166,218,0.05)", border: "1px solid rgba(203,166,218,0.12)" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#cba6da" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
-          <span className="text-xs text-accent-lighter">
+          <span className="text-xs text-[#cba6da]/80">
             Viewing briefing from{" "}
             {(() => {
               const d2 = new Date(viewingPast.generated_at + "Z");
@@ -286,12 +309,13 @@ export default function DashboardHeader({
           </span>
           <button
             onClick={onBackToLatest}
-            className="bg-transparent border-none text-accent-light text-xs font-medium cursor-pointer p-0 underline underline-offset-2 transition-colors hover:text-accent-lighter"
+            className="bg-transparent border-none text-[#cba6da] text-xs font-medium cursor-pointer p-0 underline underline-offset-2 transition-colors hover:text-[#d4b3e2]"
           >
             Back to latest
           </button>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search */}
       <div
