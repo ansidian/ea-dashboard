@@ -286,8 +286,9 @@ export async function fetchMessagesIndividually(token, messageIds) {
 // --- Full email body (for detail view) ---
 
 export async function fetchEmailBody(account, uid) {
-  // Strip the gmail-{accountId}- prefix to get the raw Gmail message ID
-  const messageId = uid.replace(/^gmail-\d+-/, "");
+  // Strip the "gmail-{accountId}-" prefix to get the raw Gmail message ID
+  const prefix = `gmail-${account.id}-`;
+  const messageId = uid.startsWith(prefix) ? uid.slice(prefix.length) : uid;
   const token = await getValidToken(account);
 
   // Fetch raw RFC 2822 message and parse with mailparser for reliable decoding
