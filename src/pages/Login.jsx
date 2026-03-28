@@ -25,11 +25,11 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center text-text-body">
+    <div className="min-h-screen flex items-center justify-center text-foreground">
       <form className="w-full max-w-[340px] p-8 text-center" onSubmit={handleSubmit}>
         <div className="text-5xl mb-6">☀️</div>
         <h1 className="font-serif text-[28px] font-normal text-white/95 mb-2">EA Dashboard</h1>
-        <p className="text-sm text-text-muted mb-6">Enter your password to continue</p>
+        <p className="text-sm text-muted-foreground mb-6">Enter your password to continue</p>
 
         <Input
           type="password"

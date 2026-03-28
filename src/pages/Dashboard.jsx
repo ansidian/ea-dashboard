@@ -221,12 +221,12 @@ export default function Dashboard() {
     return <ErrorState message={error} onRetry={() => window.location.reload()} />;
   if (!briefing)
     return (
-      <div className="min-h-screen text-text-body font-sans flex flex-col items-center justify-center gap-4 p-6">
+      <div className="min-h-screen text-foreground font-sans flex flex-col items-center justify-center gap-4 p-6">
         <div className="text-5xl">☀️</div>
         <h1 className="font-serif text-[28px] font-normal text-[#f8fafc] m-0">
           No briefings yet
         </h1>
-        <p className="text-sm text-text-muted m-0 text-center max-w-[400px]">
+        <p className="text-sm text-muted-foreground m-0 text-center max-w-[400px]">
           Connect your email accounts in Settings, then generate your first briefing.
         </p>
         <div className="flex gap-3 mt-2">
@@ -340,7 +340,7 @@ function DashboardMain({
   }
 
   return (
-    <div className="min-h-screen text-text-body font-sans p-6 max-w-[1200px] mx-auto">
+    <div className="min-h-screen text-foreground font-sans p-6 max-w-[1200px] mx-auto">
       {generating && <RefreshBanner progress={genProgress} />}
 
       <DashboardHeader
@@ -409,7 +409,7 @@ function DashboardMain({
       </div>
 
       <div className={`text-center pt-8 pb-4 transition-opacity duration-1000 delay-[1200ms] ${loaded ? "opacity-40" : "opacity-0"}`}>
-        <div className="text-[11px] text-[#475569] tracking-[1px]">
+        <div className="text-[11px] text-muted-foreground/40 tracking-[1px]">
           TAP REFRESH FOR DATA · HOLD FOR AI ANALYSIS
         </div>
       </div>
