@@ -1,9 +1,9 @@
 export default function ErrorState({ message, onRetry }) {
   return (
-    <div className="min-h-screen text-text-body font-['DM_Sans','Helvetica_Neue',sans-serif] flex items-center justify-center">
+    <div className="min-h-screen text-text-body font-sans flex items-center justify-center">
       <div className="text-center max-w-[400px] p-6">
         <div className="text-[48px] mb-4">⚠️</div>
-        <h2 className="font-['DM_Serif_Display',Georgia,serif] text-[24px] font-normal mb-2 text-text-primary">
+        <h2 className="font-serif text-[24px] font-normal mb-2 text-text-primary">
           Something went wrong
         </h2>
         <p className="text-sm text-text-secondary leading-relaxed mb-5">

@@ -6,7 +6,7 @@ export default function SummaryBar({ stats, loaded }) {
   const items = [
     stats.urgentEmails > 0 && {
       dot: "#ef4444",
-      text: `${stats.urgentEmails} email${stats.urgentEmails !== 1 ? "s" : ""} need action`,
+      text: `${stats.urgentEmails} email${stats.urgentEmails !== 1 ? "s" : ""} need${stats.urgentEmails !== 1 ? "" : "s"} action`,
     },
     stats.billCount > 0 && {
       dot: "#6366f1",

@@ -23,7 +23,7 @@ function SkeletonSection({ titleWidth, lines, delay }) {
 
 export default function LoadingSkeleton() {
   return (
-    <div className="min-h-screen text-text-body font-['DM_Sans','Helvetica_Neue',sans-serif] p-6 max-w-[900px] mx-auto">
+    <div className="min-h-screen text-text-body font-sans p-6 max-w-[900px] mx-auto">
       <style>{`
         @keyframes fadeIn { to { opacity: 1; } }
       `}</style>

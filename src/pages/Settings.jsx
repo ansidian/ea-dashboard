@@ -62,7 +62,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
             className={cn(
               "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-all",
               acc.calendar_enabled
-                ? "bg-accent/10 border border-accent/30 text-accent-lighter"
+                ? "bg-[#cba6da]/15 border border-[#cba6da]/30 text-[#cba6da]"
                 : "bg-input-bg border border-white/[0.08] text-text-muted"
             )}
           >
@@ -275,14 +275,14 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen text-text-body font-['DM_Sans','Helvetica_Neue',sans-serif] p-6 max-w-[900px] mx-auto">
+    <div className="min-h-screen text-text-body font-sans p-6 max-w-[900px] mx-auto">
 
       <div className="flex items-center gap-3 mb-8">
         <Link to="/" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px] font-medium text-text-secondary hover:bg-surface-hover hover:text-text-body transition-colors no-underline">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
           Dashboard
         </Link>
-        <h1 className="font-['DM_Serif_Display',Georgia,serif] text-[28px] font-normal m-0 text-text-primary">Settings</h1>
+        <h1 className="font-serif text-[28px] font-normal m-0 text-text-primary">Settings</h1>
       </div>
 
       {/* Connected Accounts */}
@@ -298,7 +298,7 @@ export default function Settings() {
         )}
         <div className="flex gap-2 flex-wrap">
           <Button onClick={handleAddGmail}>Add Gmail</Button>
-          <Button variant="secondary" onClick={() => setIcloudForm(f => ({ ...f, show: !f.show }))}>
+          <Button className="bg-[#a6d4c8] text-[#1e1e2e] hover:bg-[#b3ddd2]" onClick={() => setIcloudForm(f => ({ ...f, show: !f.show }))}>
             {icloudForm.show ? "Cancel" : "Add iCloud"}
           </Button>
         </div>
@@ -525,7 +525,7 @@ export default function Settings() {
                 await updateSettings({ schedules_json: updated });
               }} className={cn(
                 "w-10 h-[22px] rounded-full border-none cursor-pointer relative transition-colors",
-                sched.enabled ? "bg-accent" : "bg-white/10"
+                sched.enabled ? "bg-[#cba6da]" : "bg-white/10"
               )} aria-label={sched.enabled ? "Disable schedule" : "Enable schedule"}>
                 <div className={cn(
                   "w-4 h-4 rounded-full bg-white absolute top-[3px] transition-[left]",
@@ -542,7 +542,7 @@ export default function Settings() {
                   "rounded-md px-2 py-[3px] text-[10px] font-medium cursor-pointer transition-all font-[inherit] whitespace-nowrap",
                   isSkipped
                     ? "bg-warning/[0.12] border border-warning/25 text-[#fbbf24]"
-                    : "bg-input-bg border border-white/[0.08] text-text-muted hover:text-text-secondary"
+                    : "bg-input-bg border border-white/[0.08] text-text-muted hover:bg-surface-hover hover:text-text-secondary hover:border-white/15"
                 )}>
                   {isSkipped ? "Skipped" : "Skip Today"}
                 </button>
