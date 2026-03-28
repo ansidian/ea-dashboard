@@ -5,11 +5,14 @@ import {
   getGmailAuthUrl, addICloudAccount, removeAccount, updateAccount,
   testActualBudget, geocodeLocation, getModels, skipSchedule,
 } from "../api";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-function Card({ title, children }) {
+function SettingsCard({ title, children }) {
   return (
-    <div className="card">
-      <h3 className="card-title">{title}</h3>
+    <div className="bg-surface border border-border rounded-xl p-4 px-5 mb-6">
+      <h3 className="text-[11px] tracking-[2.5px] uppercase text-text-muted font-semibold mb-3">{title}</h3>
       {children}
     </div>
   );
@@ -34,19 +37,19 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
   }
 
   return (
-    <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}>
-        <span style={{ fontSize: 16, cursor: "pointer" }} onClick={() => setEditing(!editing)} title="Edit">{icon}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
-            <div style={{ fontSize: 13, fontWeight: 500, color: "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
+    <div className="bg-surface rounded-lg border border-border overflow-hidden">
+      <div className="flex items-center gap-3 px-3.5 py-2.5">
+        <span className="text-base cursor-pointer" onClick={() => setEditing(!editing)} title="Edit">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+            <div className="text-[13px] font-medium text-text-body overflow-hidden text-ellipsis whitespace-nowrap">{label}</div>
           </div>
-          <div style={{ fontSize: 11, color: "#64748b" }}>{acc.email} · {acc.type}</div>
+          <div className="text-[11px] text-text-muted">{acc.email} · {acc.type}</div>
         </div>
-        <button onClick={() => setEditing(!editing)} className="btn-header" style={{ fontSize: 11 }}>
+        <Button variant="ghost" size="xs" onClick={() => setEditing(!editing)}>
           {editing ? "Cancel" : "Edit"}
-        </button>
+        </Button>
         {acc.type === "gmail" && (
           <button
             onClick={async () => {
@@ -55,59 +58,59 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
               setAccounts(accounts.map(a => a.id === acc.id ? { ...a, calendar_enabled: newVal ? 1 : 0 } : a));
             }}
             title={acc.calendar_enabled ? "Calendar sync enabled" : "Calendar sync disabled"}
-            style={{
-              background: acc.calendar_enabled ? "rgba(99,102,241,0.1)" : "rgba(255,255,255,0.04)",
-              border: `1px solid ${acc.calendar_enabled ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.08)"}`,
-              borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer",
-              color: acc.calendar_enabled ? "#a5b4fc" : "#64748b",
-              display: "flex", alignItems: "center", gap: 4, transition: "all 0.2s ease",
-            }}
+            aria-label={acc.calendar_enabled ? "Disable calendar sync" : "Enable calendar sync"}
+            className={cn(
+              "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-all",
+              acc.calendar_enabled
+                ? "bg-accent/10 border border-accent/30 text-accent-lighter"
+                : "bg-input-bg border border-white/[0.08] text-text-muted"
+            )}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             {acc.calendar_enabled ? "Calendar on" : "Calendar off"}
           </button>
         )}
-        <button onClick={() => onRemove(acc.id)} className="btn-danger">Remove</button>
+        <Button variant="destructive" size="xs" onClick={() => onRemove(acc.id)}>Remove</Button>
       </div>
       {editing && (
-        <div style={{ padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.01)", display: "flex", flexDirection: "column", gap: 12, animation: "fadeIn 0.15s ease" }}>
+        <div className="px-3.5 py-3 border-t border-border bg-white/[0.01] flex flex-col gap-3 animate-[fadeIn_0.15s_ease]">
           <div>
-            <label className="label">Display Name</label>
-            <input className="input" value={label} onChange={e => setLabel(e.target.value)} placeholder={acc.email} />
+            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Display Name</label>
+            <Input value={label} onChange={e => setLabel(e.target.value)} placeholder={acc.email} />
           </div>
           <div>
-            <label className="label">Icon</label>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Icon</label>
+            <div className="flex gap-1 flex-wrap">
               {EMOJI_OPTIONS.map(e => (
-                <button key={e} onClick={() => setIcon(e)} style={{
-                  fontSize: 18, padding: "4px 6px", borderRadius: 6, cursor: "pointer", border: "1px solid",
-                  background: icon === e ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.03)",
-                  borderColor: icon === e ? "rgba(99,102,241,0.4)" : "rgba(255,255,255,0.06)",
-                  transition: "all 0.15s ease",
-                }}>{e}</button>
+                <button key={e} onClick={() => setIcon(e)} className={cn(
+                  "text-lg px-1.5 py-1 rounded-md cursor-pointer border transition-all",
+                  icon === e
+                    ? "bg-accent/15 border-accent/40"
+                    : "bg-white/[0.03] border-border hover:bg-white/[0.06]"
+                )} aria-label={`Select icon ${e}`}>{e}</button>
               ))}
             </div>
           </div>
           <div>
-            <label className="label">Color</label>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Color</label>
+            <div className="flex gap-1.5 items-center">
               {COLOR_OPTIONS.map(c => (
-                <button key={c} onClick={() => setColor(c)} style={{
-                  width: 22, height: 22, borderRadius: "50%", background: c, cursor: "pointer",
+                <button key={c} onClick={() => setColor(c)} className="w-[22px] h-[22px] rounded-full cursor-pointer transition-all" style={{
+                  background: c,
                   border: color === c ? "2px solid #fff" : "2px solid transparent",
                   boxShadow: color === c ? `0 0 0 2px ${c}` : "none",
-                  transition: "all 0.15s ease",
-                }} />
+                }} aria-label={`Select color ${c}`} />
               ))}
               <input type="color" value={color} onChange={e => setColor(e.target.value)}
-                style={{ width: 22, height: 22, borderRadius: "50%", border: "none", cursor: "pointer", background: "transparent" }}
+                className="w-[22px] h-[22px] rounded-full border-none cursor-pointer bg-transparent"
                 title="Custom color"
+                aria-label="Pick custom color"
               />
             </div>
           </div>
-          <button onClick={handleSave} disabled={saving} className="btn-primary" style={{ alignSelf: "flex-start", padding: "6px 16px", fontSize: 12 }}>
+          <Button onClick={handleSave} disabled={saving} size="sm" className="self-start">
             {saving ? "Saving..." : "Save"}
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -265,73 +268,73 @@ export default function Settings() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 20, height: 20, border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "#818cf8", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-white/10 border-t-accent-light rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", color: "#e2e8f0", fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif", padding: 24, maxWidth: 900, margin: "0 auto" }}>
+    <div className="min-h-screen text-text-body font-['DM_Sans','Helvetica_Neue',sans-serif] p-6 max-w-[900px] mx-auto">
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
-        <Link to="/" className="btn-header" style={{ textDecoration: "none" }}>
+      <div className="flex items-center gap-3 mb-8">
+        <Link to="/" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px] font-medium text-text-secondary hover:bg-surface-hover hover:text-text-body transition-colors no-underline">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
           Dashboard
         </Link>
-        <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 28, fontWeight: 400, margin: 0, color: "#f8fafc" }}>Settings</h1>
+        <h1 className="font-['DM_Serif_Display',Georgia,serif] text-[28px] font-normal m-0 text-text-primary">Settings</h1>
       </div>
 
       {/* Connected Accounts */}
-      <Card title="Connected Accounts">
+      <SettingsCard title="Connected Accounts">
         {accounts.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          <div className="flex flex-col gap-2 mb-4">
             {accounts.map(acc => (
               <AccountRow key={acc.id} acc={acc} accounts={accounts} setAccounts={setAccounts} onRemove={handleRemoveAccount} />
             ))}
           </div>
         ) : (
-          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>No accounts connected yet.</p>
+          <p className="text-[13px] text-text-muted mb-4">No accounts connected yet.</p>
         )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={handleAddGmail} className="btn-primary">Add Gmail</button>
-          <button onClick={() => setIcloudForm(f => ({ ...f, show: !f.show }))} className="btn-secondary">
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={handleAddGmail}>Add Gmail</Button>
+          <Button variant="secondary" onClick={() => setIcloudForm(f => ({ ...f, show: !f.show }))}>
             {icloudForm.show ? "Cancel" : "Add iCloud"}
-          </button>
+          </Button>
         </div>
         {icloudForm.show && (
-          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-            <input type="email" placeholder="iCloud email" value={icloudForm.email} onChange={e => setIcloudForm(f => ({ ...f, email: e.target.value }))} className="input" />
-            <input type="password" placeholder="App-specific password" value={icloudForm.password} onChange={e => setIcloudForm(f => ({ ...f, password: e.target.value }))} className="input" />
-            <button onClick={handleAddICloud} className="btn-primary" style={{ alignSelf: "flex-start" }}>Connect iCloud</button>
+          <div className="mt-4 flex flex-col gap-3">
+            <Input type="email" placeholder="iCloud email" value={icloudForm.email} onChange={e => setIcloudForm(f => ({ ...f, email: e.target.value }))} />
+            <Input type="password" placeholder="App-specific password" value={icloudForm.password} onChange={e => setIcloudForm(f => ({ ...f, password: e.target.value }))} />
+            <Button onClick={handleAddICloud} className="self-start">Connect iCloud</Button>
           </div>
         )}
-      </Card>
+      </SettingsCard>
 
       {/* Email Lookback */}
-      <Card title="Email Lookback">
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <label className="label" style={{ margin: 0, whiteSpace: "nowrap" }}>Fetch emails from the last</label>
-          <input
+      <SettingsCard title="Email Lookback">
+        <div className="flex items-center gap-3">
+          <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium whitespace-nowrap">Fetch emails from the last</label>
+          <Input
             type="number" min="1" max="72" value={lookbackHours}
             onChange={e => setLookbackHours(Math.max(1, Math.min(72, parseInt(e.target.value) || 16)))}
-            className="input" style={{ width: 70, textAlign: "center" }}
+            className="w-[70px] text-center"
           />
-          <span style={{ fontSize: 13, color: "#94a3b8" }}>hours</span>
+          <span className="text-[13px] text-text-secondary">hours</span>
         </div>
-        <p style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>
+        <p className="text-[11px] text-text-muted mt-2">
           Controls how far back to look for emails during briefing generation. Default: 16 hours.
         </p>
-      </Card>
+      </SettingsCard>
 
       {/* Claude Model */}
-      <Card title="Claude Model">
+      <SettingsCard title="Claude Model">
         {(() => {
           const [open, setOpen] = [modelDropdownOpen, setModelDropdownOpen];
           const selected = settings?.claude_model || "claude-haiku-4-5-20251001";
           const selectedLabel = models.find(m => m.id === selected)?.name || selected;
           return (
-            <div ref={modelDropdownRef} style={{ position: "relative" }}>
+            <div ref={modelDropdownRef} className="relative">
               <button
                 onClick={() => {
                   setOpen(!open);
@@ -343,22 +346,14 @@ export default function Settings() {
                       .finally(() => setModelsLoading(false));
                   }
                 }}
-                style={{
-                  width: "100%", textAlign: "left", fontSize: 13, color: "#e2e8f0",
-                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 8, padding: "8px 12px", cursor: "pointer", display: "flex",
-                  justifyContent: "space-between", alignItems: "center",
-                }}
+                className="w-full text-left text-[13px] text-text-body bg-input-bg border border-white/[0.08] rounded-lg px-3 py-2 cursor-pointer flex justify-between items-center hover:bg-surface-hover transition-colors"
+                aria-label="Select Claude model"
               >
                 <span>{modelsLoading ? "Loading models..." : selectedLabel}</span>
-                <span style={{ color: "#64748b", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+                <span className="text-text-muted text-[10px]">{open ? "▲" : "▼"}</span>
               </button>
               {open && models.length > 0 && (
-                <div style={{
-                  position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
-                  background: "#16161e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
-                  maxHeight: 240, overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
-                }}>
+                <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-elevated border border-white/10 rounded-lg max-h-60 overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.7)]">
                   {models.map(m => (
                     <div
                       key={m.id}
@@ -367,14 +362,12 @@ export default function Settings() {
                         setOpen(false);
                         await updateSettings({ claude_model: m.id });
                       }}
-                      style={{
-                        padding: "8px 12px", fontSize: 13, cursor: "pointer",
-                        color: m.id === selected ? "#818cf8" : "#e2e8f0",
-                        background: m.id === selected ? "rgba(129,140,248,0.1)" : "transparent",
-                        transition: "background 0.15s",
-                      }}
-                      onMouseEnter={e => { if (m.id !== selected) e.target.style.background = "rgba(255,255,255,0.05)"; }}
-                      onMouseLeave={e => { if (m.id !== selected) e.target.style.background = "transparent"; }}
+                      className={cn(
+                        "px-3 py-2 text-[13px] cursor-pointer transition-colors",
+                        m.id === selected
+                          ? "text-accent-light bg-accent-light/10"
+                          : "text-text-body hover:bg-surface-hover"
+                      )}
                     >
                       {m.name || m.id}
                     </div>
@@ -384,60 +377,58 @@ export default function Settings() {
             </div>
           );
         })()}
-        <p style={{ fontSize: 11, color: "#64748b", marginTop: 8 }}>
+        <p className="text-[11px] text-text-muted mt-2">
           Model used for briefing generation. Haiku is cheapest, Sonnet is more capable. Models are fetched from your API key.
         </p>
-      </Card>
+      </SettingsCard>
 
       {/* RAG / Embeddings Status */}
-      <Card title="Search & Historical Context">
-        <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
-          <p style={{ margin: "0 0 8px 0" }}>
+      <SettingsCard title="Search & Historical Context">
+        <div className="text-xs text-text-secondary leading-relaxed">
+          <p className="mb-2">
             Briefings use vector embeddings to retrieve relevant historical context (bill trends, recurring senders, deadline patterns).
             Search lets you query past briefing data.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: settings?.openai_available ? "#34d399" : "#f59e0b",
-                flexShrink: 0,
-              }} />
+          <div className="flex flex-col gap-1.5 mt-3">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "w-2 h-2 rounded-full shrink-0",
+                settings?.openai_available ? "bg-success" : "bg-warning"
+              )} />
               <span>
                 OpenAI Embeddings: {settings?.openai_available
-                  ? <span style={{ color: "#34d399" }}>Connected</span>
-                  : <span style={{ color: "#f59e0b" }}>Not configured (set OPENAI_API_KEY)</span>
+                  ? <span className="text-success">Connected</span>
+                  : <span className="text-warning">Not configured (set OPENAI_API_KEY)</span>
                 }
               </span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: settings?.embedding_count > 0 ? "#34d399" : "#64748b",
-                flexShrink: 0,
-              }} />
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "w-2 h-2 rounded-full shrink-0",
+                settings?.embedding_count > 0 ? "bg-success" : "bg-text-muted"
+              )} />
               <span>
                 Indexed chunks: {settings?.embedding_count ?? 0}
               </span>
             </div>
           </div>
         </div>
-      </Card>
+      </SettingsCard>
 
       {/* Email Interests */}
-      <Card title="Email Interests">
-        <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>
+      <SettingsCard title="Email Interests">
+        <p className="text-xs text-text-secondary mb-3">
           Senders, brands, or keywords that should never be classified as noise. Add as many as you like.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {(settings?.email_interests || []).map((tag, i) => (
-            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(99,102,241,0.12)", color: "#a5b4fc", fontSize: 12, fontWeight: 500, padding: "4px 10px", borderRadius: 20 }}>
+            <span key={i} className="inline-flex items-center gap-1 bg-accent/[0.12] text-accent-lighter text-xs font-medium px-2.5 py-1 rounded-full">
               {tag}
               <button onClick={async () => {
                 const next = settings.email_interests.filter((_, j) => j !== i);
                 setSettings(s => ({ ...s, email_interests: next }));
                 await updateSettings({ email_interests_json: next });
-              }} style={{ background: "none", border: "none", color: "#818cf8", cursor: "pointer", padding: 0, fontSize: 14, lineHeight: 1, marginLeft: 2 }}>×</button>
+              }} className="bg-transparent border-none text-accent-light cursor-pointer p-0 text-sm leading-none ml-0.5" aria-label={`Remove ${tag}`}>×</button>
             </span>
           ))}
         </div>
@@ -450,15 +441,15 @@ export default function Settings() {
           setSettings(s => ({ ...s, email_interests: next }));
           input.value = "";
           await updateSettings({ email_interests_json: next });
-        }} style={{ display: "flex", gap: 8 }}>
-          <input name="interest" placeholder="e.g. Da Vien, Anthropic, GitHub..." className="input" style={{ flex: 1, fontSize: 13, padding: "8px 12px" }} />
-          <button type="submit" className="btn-primary" style={{ padding: "8px 16px", fontSize: 12 }}>Add</button>
+        }} className="flex gap-2">
+          <Input name="interest" placeholder="e.g. Da Vien, Anthropic, GitHub..." className="flex-1" />
+          <Button type="submit" size="sm">Add</Button>
         </form>
-      </Card>
+      </SettingsCard>
 
       {/* Schedules */}
-      <Card title="Briefing Schedules">
-        <div ref={schedContainerRef} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <SettingsCard title="Briefing Schedules">
+        <div ref={schedContainerRef} className="flex flex-col gap-3">
           {(() => {
             const items = [...(settings?.schedules || [])].map((s, i) => ({ ...s, _oi: i }));
             const sorted = [...items].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
@@ -477,6 +468,7 @@ export default function Settings() {
             return sorted;
           })().map((sched) => {
             const oi = sched._oi;
+            const isSkipped = sched.skipped_until && new Date(sched.skipped_until) > new Date();
             return (
             <div key={oi} data-sched-idx={oi} ref={el => {
               if (!el) return;
@@ -495,7 +487,7 @@ export default function Settings() {
                 }
               }
               schedRectsRef.current[oi] = el.getBoundingClientRect().top;
-            }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" }}>
+            }} className="flex items-center gap-3 px-3.5 py-2.5 bg-surface rounded-lg border border-border">
               <input
                 type="text" value={sched.label || ""} placeholder="Label"
                 onChange={e => {
@@ -504,7 +496,7 @@ export default function Settings() {
                   setSettings(s => ({ ...s, schedules: updated }));
                 }}
                 onBlur={() => updateSettings({ schedules_json: settings.schedules })}
-                style={{ flex: 1, fontSize: 13, fontWeight: 500, color: "#e2e8f0", background: "transparent", border: "none", outline: "none", padding: 0 }}
+                className="flex-1 text-[13px] font-medium text-text-body bg-transparent border-none outline-none p-0"
               />
               <input
                 type="time" value={sched.time || "08:00"}
@@ -524,38 +516,35 @@ export default function Settings() {
                   updated[oi] = { ...updated[oi], time: e.target.value };
                   setSettings(s => ({ ...s, schedules: updated }));
                 }}
-                style={{ fontSize: 12, color: "#94a3b8", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, padding: "4px 8px", colorScheme: "dark" }}
+                className="text-xs text-text-secondary bg-transparent border border-white/[0.08] rounded-md px-2 py-1 [color-scheme:dark]"
               />
               <button onClick={async () => {
                 const updated = [...settings.schedules];
                 updated[oi] = { ...updated[oi], enabled: !updated[oi].enabled };
                 setSettings(s => ({ ...s, schedules: updated }));
                 await updateSettings({ schedules_json: updated });
-              }} style={{
-                width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
-                background: sched.enabled ? "#6366f1" : "rgba(255,255,255,0.1)",
-                position: "relative", transition: "background 0.2s",
-              }}>
-                <div style={{
-                  width: 16, height: 16, borderRadius: "50%", background: "#fff",
-                  position: "absolute", top: 3, transition: "left 0.2s",
-                  left: sched.enabled ? 21 : 3,
-                }} />
+              }} className={cn(
+                "w-10 h-[22px] rounded-full border-none cursor-pointer relative transition-colors",
+                sched.enabled ? "bg-accent" : "bg-white/10"
+              )} aria-label={sched.enabled ? "Disable schedule" : "Enable schedule"}>
+                <div className={cn(
+                  "w-4 h-4 rounded-full bg-white absolute top-[3px] transition-[left]",
+                  sched.enabled ? "left-[21px]" : "left-[3px]"
+                )} />
               </button>
               {sched.enabled && (
                 <button onClick={async () => {
-                  const isSkipped = sched.skipped_until && new Date(sched.skipped_until) > new Date();
                   const result = await skipSchedule(oi, !isSkipped);
                   if (result.schedules) setSettings(s => ({ ...s, schedules: result.schedules }));
-                }} title={sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "Unskip this schedule" : "Skip today's run"}
-                style={{
-                  background: sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.04)",
-                  border: `1px solid ${sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.08)"}`,
-                  borderRadius: 6, padding: "3px 8px", fontSize: 10, fontWeight: 500, cursor: "pointer",
-                  color: sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "#fbbf24" : "#64748b",
-                  transition: "all 0.2s", fontFamily: "inherit", whiteSpace: "nowrap",
-                }}>
-                  {sched.skipped_until && new Date(sched.skipped_until) > new Date() ? "Skipped" : "Skip Today"}
+                }} title={isSkipped ? "Unskip this schedule" : "Skip today's run"}
+                aria-label={isSkipped ? "Unskip this schedule" : "Skip today's run"}
+                className={cn(
+                  "rounded-md px-2 py-[3px] text-[10px] font-medium cursor-pointer transition-all font-[inherit] whitespace-nowrap",
+                  isSkipped
+                    ? "bg-warning/[0.12] border border-warning/25 text-[#fbbf24]"
+                    : "bg-input-bg border border-white/[0.08] text-text-muted hover:text-text-secondary"
+                )}>
+                  {isSkipped ? "Skipped" : "Skip Today"}
                 </button>
               )}
               <button onClick={async () => {
@@ -567,10 +556,7 @@ export default function Settings() {
                 const updated = settings.schedules.filter((_, j) => j !== oi);
                 setSettings(s => ({ ...s, schedules: updated }));
                 await updateSettings({ schedules_json: updated });
-              }} style={{
-                background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 16, padding: "0 4px",
-                opacity: 0.6, transition: "opacity 0.2s",
-              }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0.6}>×</button>
+              }} className="bg-transparent border-none cursor-pointer text-text-muted text-base px-1 opacity-60 hover:opacity-100 transition-opacity" aria-label="Remove schedule">×</button>
             </div>
             );
           })}
@@ -578,72 +564,61 @@ export default function Settings() {
             const updated = [...(settings?.schedules || []), { label: "New Schedule", time: "08:00", enabled: false }];
             setSettings(s => ({ ...s, schedules: updated }));
             await updateSettings({ schedules_json: updated });
-          }} style={{
-            background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 8,
-            padding: "8px 14px", color: "#64748b", fontSize: 12, cursor: "pointer", transition: "all 0.2s",
-          }} onMouseEnter={e => { e.target.style.borderColor = "rgba(255,255,255,0.2)"; e.target.style.color = "#94a3b8"; }}
-             onMouseLeave={e => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; e.target.style.color = "#64748b"; }}>
+          }} className="bg-input-bg border border-dashed border-white/10 rounded-lg px-3.5 py-2 text-text-muted text-xs cursor-pointer transition-all hover:border-white/20 hover:text-text-secondary">
             + Add Schedule
           </button>
         </div>
-      </Card>
+      </SettingsCard>
 
       {/* Weather Location */}
-      <Card title="Weather Location">
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <SettingsCard title="Weather Location">
+        <div className="flex flex-col gap-3">
           <div>
-            <label className="label">City Name</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input type="text" placeholder="El Monte, CA" value={weatherForm.location}
+            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">City Name</label>
+            <div className="flex gap-2">
+              <Input type="text" placeholder="El Monte, CA" value={weatherForm.location}
                 onChange={e => setWeatherForm(f => ({ ...f, location: e.target.value }))}
                 onKeyDown={e => { if (e.key === "Enter") handleGeocode(); }}
-                className="input" style={{ flex: 1 }} />
-              <button onClick={handleGeocode} disabled={weatherForm.geocoding || !weatherForm.location} className="btn-secondary" style={{ whiteSpace: "nowrap" }}>
+                className="flex-1" />
+              <Button variant="secondary" onClick={handleGeocode} disabled={weatherForm.geocoding || !weatherForm.location} className="whitespace-nowrap">
                 {weatherForm.geocoding ? "Looking up..." : "Look up"}
-              </button>
+              </Button>
             </div>
           </div>
           {weatherForm.results && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div className="flex flex-col gap-1">
               {weatherForm.results.map((r, i) => (
-                <button key={i} onClick={() => selectLocation(r)} style={{
-                  background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
-                  borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#e2e8f0",
-                  cursor: "pointer", textAlign: "left", transition: "background 0.15s",
-                }}
-                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
-                >
-                  {r.name} <span style={{ color: "#64748b", fontSize: 11 }}>({r.lat.toFixed(4)}, {r.lng.toFixed(4)})</span>
+                <button key={i} onClick={() => selectLocation(r)} className="bg-surface border border-border rounded-lg px-3 py-2 text-xs text-text-body cursor-pointer text-left transition-colors hover:bg-surface-hover">
+                  {r.name} <span className="text-text-muted text-[11px]">({r.lat.toFixed(4)}, {r.lng.toFixed(4)})</span>
                 </button>
               ))}
             </div>
           )}
           {weatherForm.lat && weatherForm.lng && (
-            <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>
+            <p className="text-[11px] text-text-muted m-0">
               Coordinates: {weatherForm.lat}, {weatherForm.lng}
             </p>
           )}
         </div>
-      </Card>
+      </SettingsCard>
 
       {/* Actual Budget */}
-      <Card title="Actual Budget">
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <SettingsCard title="Actual Budget">
+        <div className="flex flex-col gap-3">
           <div>
-            <label className="label">Server URL</label>
-            <input type="url" placeholder="https://actual.yourdomain.com" value={actualForm.serverUrl} onChange={e => setActualForm(f => ({ ...f, serverUrl: e.target.value }))} className="input" />
+            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Server URL</label>
+            <Input type="url" placeholder="https://actual.yourdomain.com" value={actualForm.serverUrl} onChange={e => setActualForm(f => ({ ...f, serverUrl: e.target.value }))} />
           </div>
           <div>
-            <label className="label">Password</label>
-            <input type="password" placeholder="Actual Budget password" value={actualForm.password} onChange={e => setActualForm(f => ({ ...f, password: e.target.value }))} className="input" />
+            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Password</label>
+            <Input type="password" placeholder="Actual Budget password" value={actualForm.password} onChange={e => setActualForm(f => ({ ...f, password: e.target.value }))} />
           </div>
           <div>
-            <label className="label">Sync ID</label>
-            <input type="text" placeholder="Budget sync ID" value={actualForm.syncId} onChange={e => setActualForm(f => ({ ...f, syncId: e.target.value }))} className="input" />
+            <label className="text-[11px] tracking-[1.5px] uppercase text-text-muted font-medium mb-1 block">Sync ID</label>
+            <Input type="text" placeholder="Budget sync ID" value={actualForm.syncId} onChange={e => setActualForm(f => ({ ...f, syncId: e.target.value }))} />
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
-            <button onClick={async () => {
+          <div className="flex gap-2 items-center mt-1">
+            <Button variant="secondary" onClick={async () => {
               setTestStatus("testing");
               try {
                 const result = await testActualBudget();
@@ -651,29 +626,31 @@ export default function Settings() {
               } catch {
                 setTestStatus("fail");
               }
-            }} disabled={testStatus === "testing"} className="btn-secondary">
+            }} disabled={testStatus === "testing"}>
               {testStatus === "testing" ? "Testing..." : "Test Connection"}
-            </button>
+            </Button>
             {testStatus && testStatus !== "testing" && (
-              <span style={{ fontSize: 12, color: testStatus === "ok" ? "#34d399" : "#ef4444" }}>
+              <span className={cn(
+                "text-xs",
+                testStatus === "ok" ? "text-success" : "text-danger"
+              )}>
                 {testStatus === "ok" ? "Connected!" : "Failed"}
               </span>
             )}
           </div>
         </div>
-      </Card>
+      </SettingsCard>
 
       {/* Global Save */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 0" }}>
-        <button onClick={handleSaveSettings} disabled={saving} className="btn-primary">
+      <div className="flex items-center gap-3 py-4">
+        <Button onClick={handleSaveSettings} disabled={saving}>
           {saving ? "Saving..." : "Save All Settings"}
-        </button>
+        </Button>
         {saveMsg && (
-          <span style={{
-            fontSize: 12, fontWeight: 500,
-            color: saveMsg.includes("Failed") ? "#ef4444" : "#34d399",
-            animation: "fadeIn 0.2s ease",
-          }}>
+          <span className={cn(
+            "text-xs font-medium animate-[fadeIn_0.2s_ease]",
+            saveMsg.includes("Failed") ? "text-danger" : "text-success"
+          )}>
             {saveMsg}
           </span>
         )}

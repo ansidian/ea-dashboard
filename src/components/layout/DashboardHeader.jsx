@@ -1,0 +1,319 @@
+import { useState, useRef } from "react";
+import { cn } from "@/lib/utils";
+import { skipSchedule } from "../../api";
+import { getGreeting, timeAgo, formatShortTime } from "../../lib/dashboard-helpers";
+import Tooltip from "../shared/Tooltip";
+import BriefingHistoryPanel from "../briefing/BriefingHistoryPanel";
+import BriefingSearch from "../briefing/BriefingSearch";
+import WeatherTooltip from "../shared/WeatherTooltip";
+
+const btnHeader = "bg-input-bg border border-white/[0.08] rounded-md px-2.5 py-1 text-[11px] text-text-secondary font-medium transition-all flex items-center gap-1 cursor-pointer font-[inherit] select-none hover:bg-surface-hover hover:border-white/15 hover:text-text-body active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed";
+
+const btnHeaderActive = "bg-accent/12 border-accent/25 text-accent-lighter hover:bg-accent/12 hover:border-accent/25 hover:text-accent-lighter";
+
+export default function DashboardHeader({
+  d, loaded,
+  refreshing, generating,
+  holdProgress, holdConfirm,
+  onPointerDown, onPointerUp, onPointerLeave,
+  onGenerate, setHoldConfirm,
+  historyOpen, setHistoryOpen,
+  historyTriggerRef,
+  viewingPast, latestId,
+  onSelectHistory, onBackToLatest,
+  schedules, setSchedules,
+  modelLabel,
+  onNavigateToEmail,
+}) {
+  const weatherRef = useRef(null);
+  const weatherLeaveTimer = useRef(null);
+  const [weatherHover, setWeatherHover] = useState(false);
+
+  // Compute next upcoming briefing
+  const { nextBriefing, nextSkipped } = (() => {
+    const now = new Date();
+    const enabled = schedules
+      .map((s, i) => ({ ...s, _idx: i }))
+      .filter(s => s.enabled)
+      .map(s => {
+        const tz = s.tz || "America/Los_Angeles";
+        const [h, m] = s.time.split(":").map(Number);
+        const todayParts = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(now);
+        const naive = new Date(`${todayParts}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+        }).formatToParts(naive);
+        const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+        const asLocal = new Date(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`);
+        const target = new Date(naive.getTime() + (naive.getTime() - asLocal.getTime()));
+        if (target <= now) target.setTime(target.getTime() + 86400000);
+        const isSkipped = s.skipped_until && new Date(s.skipped_until) > now;
+        return { ...s, targetTime: target, msUntil: target - now, isSkipped };
+      })
+      .sort((a, b) => a.msUntil - b.msUntil);
+    const active = enabled.find(s => !s.isSkipped) || null;
+    const skipped = enabled.find(s => s.isSkipped) || null;
+    const soonest = enabled[0] || null;
+    if (soonest?.isSkipped) return { nextBriefing: null, nextSkipped: soonest };
+    return { nextBriefing: active, nextSkipped: skipped };
+  })();
+
+  const briefingIndicator = nextBriefing || nextSkipped;
+
+  const nextBriefingLabel = (() => {
+    if (!briefingIndicator) return null;
+    const hrs = Math.floor(briefingIndicator.msUntil / 3600000);
+    const mins = Math.round((briefingIndicator.msUntil % 3600000) / 60000);
+    if (hrs === 0) return `${mins}m`;
+    if (mins === 0) return `${hrs}h`;
+    return `${hrs}h ${mins}m`;
+  })();
+
+  const nextBriefingFullTime = briefingIndicator
+    ? briefingIndicator.targetTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles" })
+    : null;
+
+  return (
+    <>
+      {/* Full generation confirm dialog */}
+      {holdConfirm && (
+        <div className="bg-gradient-to-br from-accent/12 to-accent-secondary/[0.08] border border-accent/25 rounded-xl px-5 py-3.5 mb-5 flex items-center gap-3 animate-in fade-in duration-200">
+          <span className="text-base">🧠</span>
+          <div className="flex-1">
+            <div className="text-[13px] font-semibold text-accent-lightest">
+              Generate fresh AI briefing?
+            </div>
+            <div className="text-xs text-text-secondary mt-0.5">
+              Re-fetches new emails and analyzes with {modelLabel} (uses an API call)
+            </div>
+          </div>
+          <button
+            className="bg-gradient-to-br from-accent to-accent-secondary text-white border-none rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer transition-all hover:brightness-115 hover:-translate-y-px hover:shadow-[0_4px_16px_rgba(99,102,241,0.3)] active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed font-[inherit]"
+            onClick={onGenerate}
+          >
+            Generate
+          </button>
+          <button
+            className="bg-white/[0.06] text-text-secondary border border-white/10 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all font-[inherit] hover:bg-white/10 hover:text-text-body hover:border-white/20"
+            onClick={() => setHoldConfirm(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Header */}
+      <div
+        className={cn(
+          "mb-8 transition-all duration-600 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
+        )}
+      >
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="text-[11px] tracking-[3px] uppercase text-text-muted mb-2 font-semibold">
+              {getGreeting().label}
+            </div>
+            <h1 className="font-serif text-4xl font-normal m-0 text-white/95 leading-tight">
+              {getGreeting().greeting}
+            </h1>
+            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+              <p className="text-text-muted text-[13px] m-0">
+                {d.dataUpdatedAt
+                  ? `Data updated ${timeAgo(d.dataUpdatedAt)}`
+                  : d.generatedAt}
+                {d.aiGeneratedAt &&
+                  ` · AI analysis from ${formatShortTime(d.aiGeneratedAt)}`}
+              </p>
+              <Tooltip text={!refreshing && !generating ? "Tap to refresh data · Hold to regenerate AI briefing · Hotkey: R" : null}>
+                <button
+                  className={cn(
+                    btnHeader,
+                    "relative overflow-hidden touch-none",
+                    (refreshing || generating) && btnHeaderActive,
+                    (refreshing || generating) && "opacity-70 cursor-not-allowed",
+                  )}
+                  onPointerDown={onPointerDown}
+                  onPointerUp={onPointerUp}
+                  onPointerLeave={onPointerLeave}
+                  disabled={refreshing || generating}
+                >
+                  {holdProgress > 0 && (
+                    <div
+                      className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-accent/20 to-accent-secondary/30 rounded-md"
+                      style={{ width: `${holdProgress}%` }}
+                    />
+                  )}
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="relative"
+                    style={{
+                      animation: refreshing ? "spin 0.8s linear infinite" : "none",
+                    }}
+                  >
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                  <span className="relative">
+                    {holdProgress > 0
+                      ? "Hold for new briefing..."
+                      : refreshing
+                        ? "Updating..."
+                        : "Refresh"}
+                  </span>
+                </button>
+              </Tooltip>
+              <div ref={historyTriggerRef} className="relative">
+                <button
+                  className={cn(
+                    btnHeader,
+                    historyOpen && btnHeaderActive,
+                  )}
+                  onClick={() => setHistoryOpen((v) => !v)}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  History
+                </button>
+                {historyOpen && (
+                  <BriefingHistoryPanel
+                    activeId={viewingPast?.id ?? latestId}
+                    triggerRef={historyTriggerRef}
+                    onSelect={onSelectHistory}
+                    onClose={() => setHistoryOpen(false)}
+                  />
+                )}
+              </div>
+              {briefingIndicator && (
+                <Tooltip
+                  text={briefingIndicator.isSkipped
+                    ? `${briefingIndicator.label} at ${nextBriefingFullTime} · Click to unskip`
+                    : `${briefingIndicator.label} at ${nextBriefingFullTime} · Click to skip`}
+                >
+                  <button
+                    className={cn(
+                      btnHeader,
+                      briefingIndicator.isSkipped
+                        ? "bg-warning/[0.08] border-warning/20 text-amber-300 hover:bg-accent/10 hover:border-accent/25 hover:text-accent-lighter"
+                        : "hover:bg-warning/[0.08] hover:border-warning/20 hover:text-amber-300",
+                    )}
+                    onClick={async () => {
+                      const result = await skipSchedule(briefingIndicator._idx, !briefingIndicator.isSkipped);
+                      if (result.schedules) setSchedules(result.schedules);
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span>{briefingIndicator.isSkipped
+                      ? `${briefingIndicator.label} skipped`
+                      : `Next in ${nextBriefingLabel}`}</span>
+                  </button>
+                </Tooltip>
+              )}
+              <a
+                href="/settings"
+                className={cn(btnHeader, "no-underline")}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg>
+              </a>
+            </div>
+          </div>
+          <div
+            ref={weatherRef}
+            onMouseEnter={() => {
+              clearTimeout(weatherLeaveTimer.current);
+              setWeatherHover(true);
+            }}
+            onMouseLeave={() => {
+              weatherLeaveTimer.current = setTimeout(() => setWeatherHover(false), 150);
+            }}
+            className="bg-input-bg border border-border rounded-xl p-4 px-5 text-center min-w-[100px] cursor-default transition-all hover:bg-surface-hover hover:border-white/10"
+          >
+            <div className="text-4xl leading-none">☀️</div>
+            <div className="text-[28px] font-light text-white mt-1">
+              {d.weather.temp}°
+            </div>
+            <div className="text-[11px] text-text-muted mt-0.5">
+              {d.weather.high}° / {d.weather.low}°
+            </div>
+          </div>
+          {weatherHover && (
+            <WeatherTooltip
+              weather={d.weather}
+              triggerRef={weatherRef}
+              onMouseEnter={() => clearTimeout(weatherLeaveTimer.current)}
+              onMouseLeave={() => setWeatherHover(false)}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Viewing past briefing banner */}
+      {viewingPast && (
+        <div className="bg-accent/[0.06] border border-accent/15 rounded-lg px-4 py-2.5 mb-5 flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <span className="text-xs text-accent-lighter">
+            Viewing briefing from{" "}
+            {(() => {
+              const d2 = new Date(viewingPast.generated_at + "Z");
+              return d2.toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+                timeZone: "America/Los_Angeles",
+              });
+            })()}
+          </span>
+          <button
+            onClick={onBackToLatest}
+            className="bg-transparent border-none text-accent-light text-xs font-medium cursor-pointer p-0 underline underline-offset-2 transition-colors hover:text-accent-lighter"
+          >
+            Back to latest
+          </button>
+        </div>
+      )}
+
+      {/* Search */}
+      <div
+        className={cn(
+          "transition-all duration-600 ease-[cubic-bezier(0.16,1,0.3,1)] delay-100",
+          loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
+        )}
+      >
+        <BriefingSearch onNavigateToEmail={onNavigateToEmail} />
+      </div>
+
+      {/* RAG unavailable warning */}
+      {d.ragUnavailable && (
+        <div
+          className={cn(
+            "text-[11px] text-warning bg-warning/[0.06] border border-warning/15 rounded-md px-2.5 py-1.5 mb-4 transition-opacity duration-400 delay-200",
+            loaded ? "opacity-100" : "opacity-0"
+          )}
+        >
+          Historical context unavailable — insights based on current data only
+        </div>
+      )}
+    </>
+  );
+}

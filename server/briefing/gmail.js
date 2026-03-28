@@ -182,7 +182,7 @@ export async function fetchEmails(account, hoursBack) {
     const amounts = extractAmounts(extractBodyText(msg.payload));
 
     return {
-      uid: msg.id,
+      uid: `gmail-${account.id}-${msg.id}`,
       account_id: account.id,
       account_label: account.label,
       account_email: account.email,
@@ -285,7 +285,9 @@ export async function fetchMessagesIndividually(token, messageIds) {
 
 // --- Full email body (for detail view) ---
 
-export async function fetchEmailBody(account, messageId) {
+export async function fetchEmailBody(account, uid) {
+  // Strip the gmail-{accountId}- prefix to get the raw Gmail message ID
+  const messageId = uid.replace(/^gmail-\d+-/, "");
   const token = await getValidToken(account);
 
   // Fetch raw RFC 2822 message and parse with mailparser for reliable decoding

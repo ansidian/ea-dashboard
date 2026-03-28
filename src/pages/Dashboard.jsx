@@ -1,18 +1,19 @@
 import { useState, useEffect, useRef } from "react";
-import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getSettings, dismissEmail } from "../api";
+import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getSettings } from "../api";
 import { transformBriefing } from "../transform";
-import LoadingSkeleton from "../components/LoadingSkeleton";
-import ErrorState from "../components/ErrorState";
-import RefreshBanner from "../components/RefreshBanner";
-import DashboardHeader from "../components/DashboardHeader";
-import InsightsSection from "../components/InsightsSection";
-import ScheduleSection from "../components/ScheduleSection";
-import DeadlinesSection from "../components/DeadlinesSection";
-import BillsSection from "../components/BillsSection";
-import EmailSection from "../components/EmailSection";
-import SummaryBar from "../components/SummaryBar";
+import LoadingSkeleton from "../components/layout/LoadingSkeleton";
+import ErrorState from "../components/layout/ErrorState";
+import RefreshBanner from "../components/layout/RefreshBanner";
+import DashboardHeader from "../components/layout/DashboardHeader";
+import InsightsSection from "../components/briefing/InsightsSection";
+import ScheduleSection from "../components/calendar/ScheduleSection";
+import DeadlinesSection from "../components/deadlines/DeadlinesSection";
+import BillsSection from "../components/bills/BillsSection";
+import EmailSection from "../components/email/EmailSection";
+import SummaryBar from "../components/layout/SummaryBar";
 import { parseDueDate } from "../lib/dashboard-helpers";
-import useMediaQuery from "../hooks/useMediaQuery";
+import { DashboardProvider, useDashboard } from "../context/DashboardContext";
+import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const [briefing, setBriefing] = useState(null);
@@ -20,12 +21,7 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const [activeAccount, setActiveAccount] = useState(0);
   const [loaded, setLoaded] = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState(null);
-  const [loadingBillId, setLoadingBillId] = useState(null);
-  const [confirmDismissId, setConfirmDismissId] = useState(null);
-  const [expandedTask, setExpandedTask] = useState(null);
   const [holdConfirm, setHoldConfirm] = useState(false);
   const [modelLabel, setModelLabel] = useState("Claude");
   const [genProgress, setGenProgress] = useState(null);
@@ -37,7 +33,6 @@ export default function Dashboard() {
   const [holdProgress, setHoldProgress] = useState(0);
   const holdTimerRef = useRef(null);
   const holdProgressRef = useRef(null);
-  const emailSectionRef = useRef(null);
   const historyTriggerRef = useRef(null);
 
   // --- Data fetching ---
@@ -100,19 +95,6 @@ export default function Dashboard() {
   }, []);
 
   // --- Actions ---
-
-  async function handleDismiss(emailId) {
-    dismissEmail(emailId).catch(() => {});
-    if (selectedEmail?.id === emailId) setSelectedEmail(null);
-    setBriefing(prev => {
-      const updated = JSON.parse(JSON.stringify(prev));
-      for (const acct of updated.emails?.accounts || []) {
-        acct.important = acct.important.filter(e => e.id !== emailId);
-        acct.unread = acct.important.length;
-      }
-      return updated;
-    });
-  }
 
   async function handleQuickRefresh() {
     if (refreshing || generating) return;
@@ -232,10 +214,6 @@ export default function Dashboard() {
     };
   });
 
-  const isWide = useMediaQuery("(min-width: 768px)");
-  const halfStyle = isWide ? { flex: "1 1 calc(50% - 12px)", minWidth: 0, marginBottom: 0 } : {};
-  const fullStyle = isWide ? { flex: "1 1 100%", marginBottom: 0 } : {};
-
   // --- Loading / error / empty states ---
 
   if (loading) return <LoadingSkeleton />;
@@ -243,137 +221,40 @@ export default function Dashboard() {
     return <ErrorState message={error} onRetry={() => window.location.reload()} />;
   if (!briefing)
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          color: "#e2e8f0",
-          fontFamily: "'DM Sans', sans-serif",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 16,
-          padding: 24,
-        }}
-      >
-        <div style={{ fontSize: 48 }}>☀️</div>
-        <h1
-          style={{
-            fontFamily: "'DM Serif Display', Georgia, serif",
-            fontSize: 28,
-            fontWeight: 400,
-            color: "#f8fafc",
-            margin: 0,
-          }}
-        >
+      <div className="min-h-screen text-text-body font-sans flex flex-col items-center justify-center gap-4 p-6">
+        <div className="text-5xl">☀️</div>
+        <h1 className="font-serif text-[28px] font-normal text-[#f8fafc] m-0">
           No briefings yet
         </h1>
-        <p
-          style={{
-            fontSize: 14,
-            color: "#64748b",
-            margin: 0,
-            textAlign: "center",
-            maxWidth: 400,
-          }}
-        >
+        <p className="text-sm text-text-muted m-0 text-center max-w-[400px]">
           Connect your email accounts in Settings, then generate your first briefing.
         </p>
-        <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-          <button onClick={handleFullGeneration} className="btn-primary">
+        <div className="flex gap-3 mt-2">
+          <Button onClick={handleFullGeneration}>
             Generate First Briefing
-          </button>
-          <a href="/settings" className="btn-secondary">
-            Settings
-          </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/settings">Settings</a>
+          </Button>
         </div>
         {generating && (
-          <div style={{ marginTop: 16 }}>
+          <div className="mt-4">
             <RefreshBanner progress={genProgress} />
           </div>
         )}
       </div>
     );
 
-  // --- Derived data ---
-
-  const d = briefing;
-  const emailAccounts = d.emails?.accounts || [];
-  const billEmails = emailAccounts.flatMap((acc, accIdx) =>
-    (acc.important || [])
-      .filter((e) => e.hasBill)
-      .map((e) => ({ ...e, accountColor: acc.color, _accIdx: accIdx })),
-  );
-  const totalBills = billEmails.reduce(
-    (sum, e) => sum + (e.extractedBill?.amount || 0),
-    0,
-  );
-  const currentAccount = emailAccounts[activeAccount] || {
-    important: [],
-    name: "",
-    icon: "",
-    color: "#818cf8",
-    unread: 0,
-  };
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const summaryStats = {
-    urgentEmails: emailAccounts.flatMap(a => a.important || []).filter(e => e.urgency === "high").length,
-    billCount: billEmails.length,
-    billTotal: totalBills,
-    dueToday: (d.ctm?.stats?.dueToday || 0) +
-      (d.deadlines || []).filter(dl => {
-        const dateStr = dl.due_date || dl.due;
-        if (!dateStr) return false;
-        const due = parseDueDate(dateStr);
-        return due.getTime() === today.getTime();
-      }).length,
-    meetings: d.calendar?.length || 0,
-    temp: d.weather?.temp,
-  };
-
-  // --- Search navigation handler ---
-
-  function handleNavigateToEmail({ briefing: navBriefing, briefingId, generated_at, emailId, accountName }) {
-    if (!latestBriefing) setLatestBriefing(briefing);
-    setBriefing(navBriefing);
-    if (briefingId !== latestId) {
-      setViewingPast({ id: briefingId, generated_at });
-    }
-    const accts = navBriefing.emails?.accounts || [];
-    const acctIdx = accts.findIndex(a => a.name === accountName);
-    if (acctIdx >= 0) setActiveAccount(acctIdx);
-    const targetAcct = accts[acctIdx >= 0 ? acctIdx : 0];
-    const email = (targetAcct?.important || []).find(e => e.id === emailId);
-    if (email) {
-      setSelectedEmail(email);
-      requestAnimationFrame(() => {
-        emailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    }
-  }
-
   // --- Render ---
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        color: "#e2e8f0",
-        fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
-        padding: "24px",
-        maxWidth: 1200,
-        margin: "0 auto",
-      }}
-    >
-      {generating && <RefreshBanner progress={genProgress} />}
-
-      <DashboardHeader
-        d={d}
+    <DashboardProvider briefing={briefing} setBriefing={setBriefing}>
+      <DashboardMain
+        d={briefing}
         loaded={loaded}
         refreshing={refreshing}
         generating={generating}
+        genProgress={genProgress}
         holdProgress={holdProgress}
         holdConfirm={holdConfirm}
         onPointerDown={onPointerDown}
@@ -395,6 +276,92 @@ export default function Dashboard() {
           setBriefing(latestBriefing);
           setViewingPast(null);
         }}
+        onNavigateToEmail={({ briefing: navBriefing, briefingId, generated_at, emailId, accountName }) => {
+          if (!latestBriefing) setLatestBriefing(briefing);
+          setBriefing(navBriefing);
+          if (briefingId !== latestId) {
+            setViewingPast({ id: briefingId, generated_at });
+          }
+          return { navBriefing, emailId, accountName };
+        }}
+        schedules={schedules}
+        setSchedules={setSchedules}
+        modelLabel={modelLabel}
+      />
+    </DashboardProvider>
+  );
+}
+
+function DashboardMain({
+  d, loaded, refreshing, generating, genProgress,
+  holdProgress, holdConfirm, onPointerDown, onPointerUp, onPointerLeave,
+  onGenerate, setHoldConfirm, historyOpen, setHistoryOpen, historyTriggerRef,
+  viewingPast, latestId, onSelectHistory, onBackToLatest, onNavigateToEmail,
+  schedules, setSchedules, modelLabel,
+}) {
+  const {
+    emailAccounts, billEmails, totalBills, emailSectionRef,
+    setActiveAccount, setSelectedEmail,
+  } = useDashboard();
+
+  const halfClass = "";
+  const fullClass = "md:col-span-2";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const summaryStats = {
+    urgentEmails: emailAccounts.flatMap(a => a.important || []).filter(e => e.urgency === "high").length,
+    billCount: billEmails.length,
+    billTotal: totalBills,
+    dueToday: (d.ctm?.stats?.dueToday || 0) +
+      (d.deadlines || []).filter(dl => {
+        const dateStr = dl.due_date || dl.due;
+        if (!dateStr) return false;
+        const due = parseDueDate(dateStr);
+        return due.getTime() === today.getTime();
+      }).length,
+    meetings: d.calendar?.length || 0,
+    temp: d.weather?.temp,
+  };
+
+  function handleNavigateToEmail(params) {
+    const { navBriefing, emailId, accountName } = onNavigateToEmail(params);
+    const accts = navBriefing.emails?.accounts || [];
+    const acctIdx = accts.findIndex(a => a.name === accountName);
+    if (acctIdx >= 0) setActiveAccount(acctIdx);
+    const targetAcct = accts[acctIdx >= 0 ? acctIdx : 0];
+    const email = (targetAcct?.important || []).find(e => e.id === emailId);
+    if (email) {
+      setSelectedEmail(email);
+      requestAnimationFrame(() => {
+        emailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }
+
+  return (
+    <div className="min-h-screen text-text-body font-sans p-6 max-w-[1200px] mx-auto">
+      {generating && <RefreshBanner progress={genProgress} />}
+
+      <DashboardHeader
+        d={d}
+        loaded={loaded}
+        refreshing={refreshing}
+        generating={generating}
+        holdProgress={holdProgress}
+        holdConfirm={holdConfirm}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerLeave}
+        onGenerate={onGenerate}
+        setHoldConfirm={setHoldConfirm}
+        historyOpen={historyOpen}
+        setHistoryOpen={setHistoryOpen}
+        historyTriggerRef={historyTriggerRef}
+        viewingPast={viewingPast}
+        latestId={latestId}
+        onSelectHistory={onSelectHistory}
+        onBackToLatest={onBackToLatest}
         schedules={schedules}
         setSchedules={setSchedules}
         modelLabel={modelLabel}
@@ -403,87 +370,46 @@ export default function Dashboard() {
 
       <SummaryBar stats={summaryStats} loaded={loaded} />
 
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 24,
-        }}
-      >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ScheduleSection
           calendar={d.calendar}
           loaded={loaded}
           delay={200}
-          style={halfStyle}
+          className={halfClass}
         />
 
         <InsightsSection
           insights={d.aiInsights}
           loaded={loaded}
           delay={300}
-          style={halfStyle}
+          className={halfClass}
         />
 
         <DeadlinesSection
           ctm={d.ctm}
           deadlines={d.deadlines}
-          emailAccounts={emailAccounts}
-          expandedTask={expandedTask}
-          setExpandedTask={setExpandedTask}
-          setActiveAccount={setActiveAccount}
-          setSelectedEmail={setSelectedEmail}
           loaded={loaded}
           delay={400}
-          style={halfStyle}
+          className={halfClass}
         />
 
         <BillsSection
-          billEmails={billEmails}
-          totalBills={totalBills}
-          emailAccounts={emailAccounts}
-          selectedEmail={selectedEmail}
-          setSelectedEmail={setSelectedEmail}
-          setActiveAccount={setActiveAccount}
-          loadingBillId={loadingBillId}
-          setLoadingBillId={setLoadingBillId}
-          confirmDismissId={confirmDismissId}
-          setConfirmDismissId={setConfirmDismissId}
-          onDismiss={handleDismiss}
           loaded={loaded}
           delay={500}
-          style={halfStyle}
+          className={halfClass}
         />
 
         <EmailSection
           summary={d.emails?.summary}
-          emailAccounts={emailAccounts}
-          currentAccount={currentAccount}
-          activeAccount={activeAccount}
-          setActiveAccount={setActiveAccount}
-          selectedEmail={selectedEmail}
-          setSelectedEmail={setSelectedEmail}
-          confirmDismissId={confirmDismissId}
-          setConfirmDismissId={setConfirmDismissId}
-          onDismiss={handleDismiss}
-          loadingBillId={loadingBillId}
-          setLoadingBillId={setLoadingBillId}
-          emailSectionRef={emailSectionRef}
           model={d.model}
           loaded={loaded}
           delay={600}
-          style={fullStyle}
+          className={fullClass}
         />
       </div>
 
-      <div
-        style={{
-          textAlign: "center",
-          padding: "32px 0 16px",
-          opacity: loaded ? 0.4 : 0,
-          transition: "opacity 1s ease 1.2s",
-        }}
-      >
-        <div style={{ fontSize: 11, color: "#475569", letterSpacing: 1 }}>
+      <div className={`text-center pt-8 pb-4 transition-opacity duration-1000 delay-[1200ms] ${loaded ? "opacity-40" : "opacity-0"}`}>
+        <div className="text-[11px] text-[#475569] tracking-[1px]">
           TAP REFRESH FOR DATA · HOLD FOR AI ANALYSIS
         </div>
       </div>

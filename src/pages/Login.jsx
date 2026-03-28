@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { login } from "../api";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default function Login({ onLogin }) {
   const [password, setPassword] = useState("");
@@ -23,26 +25,26 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="login-page">
-      <form className="login-form" onSubmit={handleSubmit}>
-        <div className="login-icon">☀️</div>
-        <h1 className="login-title">EA Dashboard</h1>
-        <p className="login-subtitle">Enter your password to continue</p>
+    <div className="min-h-screen flex items-center justify-center text-text-body">
+      <form className="w-full max-w-[340px] p-8 text-center" onSubmit={handleSubmit}>
+        <div className="text-5xl mb-6">☀️</div>
+        <h1 className="font-serif text-[28px] font-normal text-white/95 mb-2">EA Dashboard</h1>
+        <p className="text-sm text-text-muted mb-6">Enter your password to continue</p>
 
-        <input
+        <Input
           type="password"
-          className="input login-input"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoFocus
+          className="mb-4"
         />
 
-        {error && <p className="login-error">{error}</p>}
+        {error && <p className="text-xs text-danger mb-4">{error}</p>}
 
-        <button type="submit" className="btn-primary login-button" disabled={loading || !password}>
+        <Button type="submit" className="w-full" disabled={loading || !password}>
           {loading ? "Signing in..." : "Sign in"}
-        </button>
+        </Button>
       </form>
     </div>
   );

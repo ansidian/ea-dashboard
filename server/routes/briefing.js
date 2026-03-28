@@ -172,15 +172,17 @@ router.get("/email/:uid", async (req, res) => {
       const account = accounts.rows[0];
       const password = decrypt(account.credentials_encrypted);
       return res.json(await fetchIcloudBody(account.email, password, uid));
-    } else {
+    } else if (uid.startsWith("gmail-")) {
+      // Parse account ID from gmail-{accountId}-{messageId} format
+      const accountId = uid.split("-")[1];
       const accounts = await db.execute({
-        sql: "SELECT * FROM ea_accounts WHERE user_id = ? AND type = 'gmail'",
-        args: [userId],
+        sql: "SELECT * FROM ea_accounts WHERE user_id = ? AND type = 'gmail' AND id = ?",
+        args: [userId, accountId],
       });
-      for (const account of accounts.rows) {
-        try { return res.json(await fetchGmailBody(account, uid)); } catch { continue; }
-      }
-      return res.status(404).json({ message: "Email not found in any account" });
+      if (!accounts.rows.length) return res.status(404).json({ message: "Gmail account not found" });
+      return res.json(await fetchGmailBody(accounts.rows[0], uid));
+    } else {
+      return res.status(400).json({ message: "Unknown email uid format" });
     }
   } catch (err) {
     console.error("Error fetching email body:", err);
