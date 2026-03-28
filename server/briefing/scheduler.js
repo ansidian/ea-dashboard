@@ -48,7 +48,7 @@ export async function initScheduler() {
               `[EA Scheduler] Generating ${schedule.label} briefing for user ${row.user_id}`,
             );
             try {
-              await generateBriefing(row.user_id);
+              await generateBriefing(row.user_id, { scheduleLabel: schedule.label });
               console.log(
                 `[EA Scheduler] ${schedule.label} briefing generated successfully`,
               );

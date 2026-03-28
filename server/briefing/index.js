@@ -329,7 +329,7 @@ async function updateProgress(briefingId, progress) {
   });
 }
 
-export async function generateBriefing(userId) {
+export async function generateBriefing(userId, { scheduleLabel } = {}) {
   const insertResult = await db.execute({
     sql: `INSERT INTO ea_briefings (user_id, status, progress) VALUES (?, 'generating', 'Loading settings...')`,
     args: [userId],
@@ -383,6 +383,7 @@ export async function generateBriefing(userId) {
       fixEmailAccounts(cloned, emails, accounts);
       cloned.dataUpdatedAt = new Date().toISOString();
       cloned.generatedAt = nowPacific();
+      if (scheduleLabel) cloned.scheduleLabel = scheduleLabel;
       // Keep previous aiGeneratedAt to indicate AI didn't re-run
       cloned.skippedAI = true;
 
@@ -435,6 +436,15 @@ export async function generateBriefing(userId) {
       }
     }
 
+    // Reattach uid from original emails — Claude only sees/returns `id`, but the
+    // frontend needs the prefixed `uid` (e.g. "gmail-1-abc123") to fetch email bodies.
+    const uidById = new Map(emails.map(e => [e.id || e.uid, e.uid]));
+    for (const acct of briefingJson.emails?.accounts || []) {
+      for (const e of acct.important) {
+        if (!e.uid && uidById.has(e.id)) e.uid = uidById.get(e.id);
+      }
+    }
+
     await updateProgress(briefingId, "Finalizing briefing...");
 
     // Always overwrite CTM stats with server-computed values (Claude may hallucinate these)
@@ -456,6 +466,7 @@ export async function generateBriefing(userId) {
     briefingJson.generatedAt = nowPacific();
     briefingJson.dataUpdatedAt = new Date().toISOString();
     briefingJson.aiGeneratedAt = new Date().toISOString();
+    if (scheduleLabel) briefingJson.scheduleLabel = scheduleLabel;
     if (!isEmbeddingAvailable()) briefingJson.ragUnavailable = true;
 
     const elapsed = Date.now() - startTime;
