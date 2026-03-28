@@ -46,9 +46,12 @@ function timeAgo(date) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, onClose }) {
+export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, onClose, onDelete }) {
   const [history, setHistory] = useState(null);
   const [loadingId, setLoadingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
+  const confirmTimer = useRef(null);
   const [error, setError] = useState(null);
   const [pos, setPos] = useState(null);
   const panelRef = useRef(null);
@@ -119,6 +122,37 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
       setLoadingId(null);
     }
   }
+
+  function handleDeleteClick(e, item) {
+    e.stopPropagation();
+    if (deletingId || item.id === activeId) return;
+    if (confirmId === item.id) {
+      clearTimeout(confirmTimer.current);
+      setConfirmId(null);
+      performDelete(item);
+    } else {
+      setConfirmId(item.id);
+      clearTimeout(confirmTimer.current);
+      confirmTimer.current = setTimeout(() => setConfirmId(null), 2000);
+    }
+  }
+
+  async function performDelete(item) {
+    setDeletingId(item.id);
+    setError(null);
+    try {
+      if (onDelete) await onDelete(item.id);
+      setHistory(prev => prev?.filter(h => h.id !== item.id));
+    } catch (err) {
+      setError(`Failed to delete: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  useEffect(() => {
+    return () => clearTimeout(confirmTimer.current);
+  }, []);
 
   const groups = history ? groupByDate(history.filter((h) => h.status === "ready")) : [];
 
@@ -288,7 +322,11 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                     )}
                     {genTime && !isLoading && (
                       <span
-                        className="text-[9px] font-semibold tracking-wide tabular-nums"
+                        className={cn(
+                          "text-[9px] font-semibold tracking-wide tabular-nums transition-opacity duration-200",
+                          !isActive && "group-hover:opacity-0",
+                          confirmId === item.id && "!opacity-0",
+                        )}
                         style={{
                           color: isActive ? "rgba(203,166,218,0.7)" : "rgba(180,190,254,0.5)",
                           background: isActive ? "rgba(203,166,218,0.08)" : "rgba(180,190,254,0.06)",
@@ -298,6 +336,36 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                       >
                         {genTime}
                       </span>
+                    )}
+                    {!isActive && !isLoading && (
+                      <button
+                        onClick={(e) => handleDeleteClick(e, item)}
+                        className={cn(
+                          "absolute right-0 flex items-center justify-center rounded-md transition-all duration-200",
+                          confirmId === item.id
+                            ? "opacity-100 bg-destructive/[0.12] px-2 py-0.5 gap-1"
+                            : "opacity-0 group-hover:opacity-100 w-6 h-6 bg-transparent hover:bg-destructive/[0.12]",
+                          "active:scale-90",
+                          deletingId === item.id && "opacity-100 pointer-events-none",
+                        )}
+                        title={confirmId === item.id ? "Click again to confirm" : "Delete briefing"}
+                      >
+                        {deletingId === item.id ? (
+                          <div className="w-3 h-3 border-[1.5px] border-destructive/20 border-t-destructive rounded-full animate-spin" />
+                        ) : confirmId === item.id ? (
+                          <>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-destructive">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span className="text-[9px] font-semibold text-destructive">delete?</span>
+                          </>
+                        ) : (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/50 hover:text-destructive transition-colors duration-200">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                          </svg>
+                        )}
+                      </button>
                     )}
                   </div>
                 </div>

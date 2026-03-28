@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
-import { skipSchedule } from "../../api";
+import { skipSchedule, deleteBriefing } from "../../api";
 import { getGreeting, timeAgo, formatShortTime } from "../../lib/dashboard-helpers";
 import Tooltip from "../shared/Tooltip";
 import BriefingHistoryPanel from "../briefing/BriefingHistoryPanel";
@@ -208,6 +208,7 @@ export default function DashboardHeader({
                     triggerRef={historyTriggerRef}
                     onSelect={onSelectHistory}
                     onClose={() => setHistoryOpen(false)}
+                    onDelete={deleteBriefing}
                   />
                 )}
               </div>
