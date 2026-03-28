@@ -58,6 +58,7 @@ export const updateSettings = (data) => apiFetch("/api/ea/settings", { method: "
 export const geocodeLocation = (q) => apiFetch(`/api/ea/geocode?q=${encodeURIComponent(q)}`);
 export const skipSchedule = (index, skip = true) => apiFetch("/api/ea/schedules/skip", { method: "POST", body: JSON.stringify({ index, skip }) });
 export const getModels = () => apiFetch("/api/ea/models");
+export const suspendService = () => apiFetch("/api/ea/suspend", { method: "POST" });
 
 // Search
 export const searchBriefings = (query, options = {}) => {

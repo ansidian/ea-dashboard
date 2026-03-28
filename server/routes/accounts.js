@@ -65,6 +65,39 @@ router.get("/accounts/gmail/callback", async (req, res) => {
 // All other routes require auth
 router.use(requireAuth);
 
+router.post("/suspend", async (req, res) => {
+  const apiKey = process.env.RENDER_API_KEY;
+  const serviceId = process.env.RENDER_SERVICE_ID;
+  if (!apiKey || !serviceId) {
+    return res.status(400).json({ message: "Render API not configured" });
+  }
+  res.json({ ok: true });
+  setTimeout(async () => {
+    try {
+      const resp = await fetch(
+        `https://api.render.com/v1/services/${serviceId}/suspend`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `${apiKey}`,
+          },
+        },
+      );
+      if (!resp.ok)
+        console.error(
+          "[EA] Render suspend HTTP",
+          resp.status,
+          await resp.text().catch(() => ""),
+        );
+      else console.log("[EA] Render service suspended");
+    } catch (err) {
+      console.error("[EA] Render suspend failed:", err.message);
+    }
+  }, 2000);
+});
+
 router.get("/accounts", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
@@ -97,7 +130,10 @@ router.get("/accounts/gmail/auth", async (req, res) => {
 router.post("/accounts/icloud", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const { email, password, label, color } = req.body;
-  if (!email || !password) return res.status(400).json({ message: "email and password (app-specific) are required" });
+  if (!email || !password)
+    return res
+      .status(400)
+      .json({ message: "email and password (app-specific) are required" });
 
   try {
     await testIcloud(email, password);
@@ -108,7 +144,14 @@ router.post("/accounts/icloud", async (req, res) => {
             ON CONFLICT(id) DO UPDATE SET
               credentials_encrypted = excluded.credentials_encrypted, label = excluded.label,
               color = excluded.color, updated_at = datetime('now')`,
-      args: [accountId, userId, email, label || email, color || "#a259ff", encrypt(password)],
+      args: [
+        accountId,
+        userId,
+        email,
+        label || email,
+        color || "#a259ff",
+        encrypt(password),
+      ],
     });
     res.json({ id: accountId, email, label: label || email });
   } catch (err) {
@@ -122,12 +165,15 @@ router.post("/accounts/test/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.execute({
-      sql: "SELECT * FROM ea_accounts WHERE id = ? AND user_id = ?", args: [id, userId],
+      sql: "SELECT * FROM ea_accounts WHERE id = ? AND user_id = ?",
+      args: [id, userId],
     });
-    if (!result.rows.length) return res.status(404).json({ message: "Account not found" });
+    if (!result.rows.length)
+      return res.status(404).json({ message: "Account not found" });
     const account = result.rows[0];
     if (account.type === "gmail") await testGmail(account);
-    else if (account.type === "icloud") await testIcloud(account.email, decrypt(account.credentials_encrypted));
+    else if (account.type === "icloud")
+      await testIcloud(account.email, decrypt(account.credentials_encrypted));
     res.json({ success: true });
   } catch (err) {
     console.error("Error testing account:", err);
@@ -142,10 +188,22 @@ router.patch("/accounts/:id", async (req, res) => {
   try {
     const updates = [];
     const args = [];
-    if (calendar_enabled !== undefined) { updates.push("calendar_enabled = ?"); args.push(calendar_enabled ? 1 : 0); }
-    if (label !== undefined) { updates.push("label = ?"); args.push(label); }
-    if (color !== undefined) { updates.push("color = ?"); args.push(color); }
-    if (icon !== undefined) { updates.push("icon = ?"); args.push(icon || null); }
+    if (calendar_enabled !== undefined) {
+      updates.push("calendar_enabled = ?");
+      args.push(calendar_enabled ? 1 : 0);
+    }
+    if (label !== undefined) {
+      updates.push("label = ?");
+      args.push(label);
+    }
+    if (color !== undefined) {
+      updates.push("color = ?");
+      args.push(color);
+    }
+    if (icon !== undefined) {
+      updates.push("icon = ?");
+      args.push(icon || null);
+    }
     if (updates.length) {
       updates.push("updated_at = datetime('now')");
       args.push(id, userId);
@@ -166,9 +224,11 @@ router.delete("/accounts/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.execute({
-      sql: "DELETE FROM ea_accounts WHERE id = ? AND user_id = ?", args: [id, userId],
+      sql: "DELETE FROM ea_accounts WHERE id = ? AND user_id = ?",
+      args: [id, userId],
     });
-    if (result.rowsAffected === 0) return res.status(404).json({ message: "Account not found" });
+    if (result.rowsAffected === 0)
+      return res.status(404).json({ message: "Account not found" });
     res.json({ success: true });
   } catch (err) {
     console.error("Error deleting account:", err);
@@ -189,12 +249,26 @@ router.get("/geocode", async (req, res) => {
 router.get("/settings", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
-    let result = await db.execute({ sql: "SELECT * FROM ea_settings WHERE user_id = ?", args: [userId] });
+    let result = await db.execute({
+      sql: "SELECT * FROM ea_settings WHERE user_id = ?",
+      args: [userId],
+    });
     if (!result.rows.length) {
-      await db.execute({ sql: "INSERT INTO ea_settings (user_id) VALUES (?)", args: [userId] });
-      result = await db.execute({ sql: "SELECT * FROM ea_settings WHERE user_id = ?", args: [userId] });
+      await db.execute({
+        sql: "INSERT INTO ea_settings (user_id) VALUES (?)",
+        args: [userId],
+      });
+      result = await db.execute({
+        sql: "SELECT * FROM ea_settings WHERE user_id = ?",
+        args: [userId],
+      });
     }
-    const { actual_budget_password_encrypted, schedules_json, email_interests_json, ...safe } = result.rows[0];
+    const {
+      actual_budget_password_encrypted,
+      schedules_json,
+      email_interests_json,
+      ...safe
+    } = result.rows[0];
     safe.actual_budget_configured = !!actual_budget_password_encrypted;
     safe.schedules = schedules_json
       ? JSON.parse(schedules_json)
@@ -202,12 +276,22 @@ router.get("/settings", async (req, res) => {
           { label: "Morning Briefing", time: "08:00", enabled: false },
           { label: "Evening Briefing", time: "20:00", enabled: false },
         ];
-    safe.email_interests = email_interests_json ? JSON.parse(email_interests_json) : [];
+    safe.email_interests = email_interests_json
+      ? JSON.parse(email_interests_json)
+      : [];
+
+    // Render suspend availability
+    safe.render_configured =
+      !!(process.env.RENDER_API_KEY && process.env.RENDER_SERVICE_ID) ||
+      process.env.NODE_ENV !== "production";
 
     // Embedding/RAG status
     safe.openai_available = isEmbeddingAvailable();
     try {
-      const countResult = await db.execute({ sql: "SELECT COUNT(*) as count FROM ea_embeddings WHERE user_id = ?", args: [userId] });
+      const countResult = await db.execute({
+        sql: "SELECT COUNT(*) as count FROM ea_embeddings WHERE user_id = ?",
+        args: [userId],
+      });
       safe.embedding_count = countResult.rows[0].count;
     } catch {
       safe.embedding_count = 0;

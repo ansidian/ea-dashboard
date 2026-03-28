@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { getLatestBriefing, triggerGeneration, quickRefresh, pollStatus, checkInProgress, getSettings } from "../api";
+import {
+  getLatestBriefing,
+  triggerGeneration,
+  quickRefresh,
+  pollStatus,
+  checkInProgress,
+  getSettings,
+  suspendService,
+} from "../api";
 import { transformBriefing } from "../transform";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import ErrorState from "../components/layout/ErrorState";
@@ -34,6 +42,13 @@ export default function Dashboard() {
   const holdTimerRef = useRef(null);
   const holdProgressRef = useRef(null);
   const historyTriggerRef = useRef(null);
+  const [renderConfigured, setRenderConfigured] = useState(false);
+  const [suspendConfirm, setSuspendConfirm] = useState(false);
+  const [suspendHoldProgress, setSuspendHoldProgress] = useState(0);
+  const [suspending, setSuspending] = useState(false);
+  const [suspended, setSuspended] = useState(false);
+  const suspendHoldTimerRef = useRef(null);
+  const suspendHoldProgressRef = useRef(null);
 
   // --- Data fetching ---
 
@@ -52,6 +67,7 @@ export default function Dashboard() {
           .replace(/(\w+)$/, (m) => m.charAt(0).toUpperCase() + m.slice(1));
         setModelLabel(`Claude ${name}`);
         if (s?.schedules) setSchedules(s.schedules);
+        if (s?.render_configured) setRenderConfigured(true);
       })
       .catch(() => {});
 
@@ -158,7 +174,7 @@ export default function Dashboard() {
 
   // --- Long press handlers ---
 
-  const HOLD_DURATION = 600;
+  const HOLD_DURATION = 1500;
   function startHold() {
     if (refreshing || generating) return;
     setHoldProgress(0);
@@ -186,14 +202,68 @@ export default function Dashboard() {
     holdTimerRef.current = null;
     if (!cancel) handleQuickRefresh();
   }
-  function onPointerDown() { startHold(); }
-  function onPointerUp() { endHold(false); }
-  function onPointerLeave() { endHold(true); }
+  function onPointerDown() {
+    startHold();
+  }
+  function onPointerUp() {
+    endHold(false);
+  }
+  function onPointerLeave() {
+    endHold(true);
+  }
+
+  // --- Suspend hold handlers ---
+
+  function startSuspendHold() {
+    if (suspending || suspended) return;
+    setSuspendHoldProgress(0);
+    const start = Date.now();
+    suspendHoldProgressRef.current = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min((elapsed / HOLD_DURATION) * 100, 100);
+      setSuspendHoldProgress(pct);
+    }, 16);
+    suspendHoldTimerRef.current = setTimeout(() => {
+      suspendHoldTimerRef.current = "fired";
+      clearInterval(suspendHoldProgressRef.current);
+      setSuspendHoldProgress(0);
+      setSuspendConfirm(true);
+    }, HOLD_DURATION);
+  }
+  function endSuspendHold() {
+    clearInterval(suspendHoldProgressRef.current);
+    setSuspendHoldProgress(0);
+    if (suspendHoldTimerRef.current === "fired") {
+      suspendHoldTimerRef.current = null;
+      return;
+    }
+    clearTimeout(suspendHoldTimerRef.current);
+    suspendHoldTimerRef.current = null;
+    // No quick action on short tap — intentional
+  }
+  async function handleSuspend() {
+    setSuspendConfirm(false);
+    setSuspending(true);
+    try {
+      await suspendService();
+      setSuspended(true);
+    } catch (err) {
+      console.error("[EA] Suspend failed:", err.message);
+    } finally {
+      setSuspending(false);
+    }
+  }
 
   // R hotkey
   useEffect(() => {
     function onKeyDown(e) {
-      if (e.repeat || e.key !== "r" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (
+        e.repeat ||
+        e.key !== "r" ||
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "TEXTAREA"
+      )
+        return;
       if (holdConfirm) {
         handleFullGeneration();
         return;
@@ -202,7 +272,8 @@ export default function Dashboard() {
     }
     function onKeyUp(e) {
       if (e.key !== "r") return;
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
+        return;
       if (!holdTimerRef.current) return;
       endHold(false);
     }
@@ -218,7 +289,9 @@ export default function Dashboard() {
 
   if (loading) return <LoadingSkeleton />;
   if (error && !briefing)
-    return <ErrorState message={error} onRetry={() => window.location.reload()} />;
+    return (
+      <ErrorState message={error} onRetry={() => window.location.reload()} />
+    );
   if (!briefing)
     return (
       <div className="min-h-screen text-foreground font-sans flex flex-col items-center justify-center gap-4 p-6">
@@ -227,7 +300,8 @@ export default function Dashboard() {
           No briefings yet
         </h1>
         <p className="text-sm text-muted-foreground m-0 text-center max-w-[400px]">
-          Connect your email accounts in Settings, then generate your first briefing.
+          Connect your email accounts in Settings, then generate your first
+          briefing.
         </p>
         <div className="flex gap-3 mt-2">
           <Button onClick={handleFullGeneration}>
@@ -276,7 +350,13 @@ export default function Dashboard() {
           setBriefing(latestBriefing);
           setViewingPast(null);
         }}
-        onNavigateToEmail={({ briefing: navBriefing, briefingId, generated_at, emailId, accountName }) => {
+        onNavigateToEmail={({
+          briefing: navBriefing,
+          briefingId,
+          generated_at,
+          emailId,
+          accountName,
+        }) => {
           if (!latestBriefing) setLatestBriefing(briefing);
           setBriefing(navBriefing);
           if (briefingId !== latestId) {
@@ -287,21 +367,63 @@ export default function Dashboard() {
         schedules={schedules}
         setSchedules={setSchedules}
         modelLabel={modelLabel}
+        renderConfigured={renderConfigured}
+        suspendConfirm={suspendConfirm}
+        setSuspendConfirm={setSuspendConfirm}
+        suspendHoldProgress={suspendHoldProgress}
+        onSuspendPointerDown={() => startSuspendHold()}
+        onSuspendPointerUp={() => endSuspendHold(false)}
+        onSuspendPointerLeave={() => endSuspendHold(true)}
+        onSuspend={handleSuspend}
+        suspending={suspending}
+        suspended={suspended}
       />
     </DashboardProvider>
   );
 }
 
 function DashboardMain({
-  d, loaded, refreshing, generating, genProgress,
-  holdProgress, holdConfirm, onPointerDown, onPointerUp, onPointerLeave,
-  onGenerate, setHoldConfirm, historyOpen, setHistoryOpen, historyTriggerRef,
-  viewingPast, latestId, onSelectHistory, onBackToLatest, onNavigateToEmail,
-  schedules, setSchedules, modelLabel,
+  d,
+  loaded,
+  refreshing,
+  generating,
+  genProgress,
+  holdProgress,
+  holdConfirm,
+  onPointerDown,
+  onPointerUp,
+  onPointerLeave,
+  onGenerate,
+  setHoldConfirm,
+  historyOpen,
+  setHistoryOpen,
+  historyTriggerRef,
+  viewingPast,
+  latestId,
+  onSelectHistory,
+  onBackToLatest,
+  onNavigateToEmail,
+  schedules,
+  setSchedules,
+  modelLabel,
+  renderConfigured,
+  suspendConfirm,
+  setSuspendConfirm,
+  suspendHoldProgress,
+  onSuspendPointerDown,
+  onSuspendPointerUp,
+  onSuspendPointerLeave,
+  onSuspend,
+  suspending,
+  suspended,
 }) {
   const {
-    emailAccounts, billEmails, totalBills, emailSectionRef,
-    setActiveAccount, setSelectedEmail,
+    emailAccounts,
+    billEmails,
+    totalBills,
+    emailSectionRef,
+    setActiveAccount,
+    setSelectedEmail,
   } = useDashboard();
 
   const halfClass = "";
@@ -310,11 +432,14 @@ function DashboardMain({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const summaryStats = {
-    urgentEmails: emailAccounts.flatMap(a => a.important || []).filter(e => e.urgency === "high").length,
+    urgentEmails: emailAccounts
+      .flatMap((a) => a.important || [])
+      .filter((e) => e.urgency === "high").length,
     billCount: billEmails.length,
     billTotal: totalBills,
-    dueToday: (d.ctm?.stats?.dueToday || 0) +
-      (d.deadlines || []).filter(dl => {
+    dueToday:
+      (d.ctm?.stats?.dueToday || 0) +
+      (d.deadlines || []).filter((dl) => {
         const dateStr = dl.due_date || dl.due;
         if (!dateStr) return false;
         const due = parseDueDate(dateStr);
@@ -327,14 +452,17 @@ function DashboardMain({
   function handleNavigateToEmail(params) {
     const { navBriefing, emailId, accountName } = onNavigateToEmail(params);
     const accts = navBriefing.emails?.accounts || [];
-    const acctIdx = accts.findIndex(a => a.name === accountName);
+    const acctIdx = accts.findIndex((a) => a.name === accountName);
     if (acctIdx >= 0) setActiveAccount(acctIdx);
     const targetAcct = accts[acctIdx >= 0 ? acctIdx : 0];
-    const email = (targetAcct?.important || []).find(e => e.id === emailId);
+    const email = (targetAcct?.important || []).find((e) => e.id === emailId);
     if (email) {
       setSelectedEmail(email);
       requestAnimationFrame(() => {
-        emailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        emailSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
       });
     }
   }
@@ -366,6 +494,16 @@ function DashboardMain({
         setSchedules={setSchedules}
         modelLabel={modelLabel}
         onNavigateToEmail={handleNavigateToEmail}
+        renderConfigured={renderConfigured}
+        suspendConfirm={suspendConfirm}
+        setSuspendConfirm={setSuspendConfirm}
+        suspendHoldProgress={suspendHoldProgress}
+        onSuspendPointerDown={onSuspendPointerDown}
+        onSuspendPointerUp={onSuspendPointerUp}
+        onSuspendPointerLeave={onSuspendPointerLeave}
+        onSuspend={onSuspend}
+        suspending={suspending}
+        suspended={suspended}
       />
 
       <SummaryBar stats={summaryStats} loaded={loaded} />
@@ -393,11 +531,7 @@ function DashboardMain({
           className={halfClass}
         />
 
-        <BillsSection
-          loaded={loaded}
-          delay={500}
-          className={halfClass}
-        />
+        <BillsSection loaded={loaded} delay={500} className={halfClass} />
 
         <EmailSection
           summary={d.emails?.summary}
@@ -408,7 +542,9 @@ function DashboardMain({
         />
       </div>
 
-      <div className={`text-center pt-8 pb-4 transition-opacity duration-1000 delay-[1200ms] ${loaded ? "opacity-40" : "opacity-0"}`}>
+      <div
+        className={`text-center pt-8 pb-4 transition-opacity duration-1000 delay-[1200ms] ${loaded ? "opacity-40" : "opacity-0"}`}
+      >
         <div className="text-[11px] text-muted-foreground/40 tracking-[1px]">
           TAP REFRESH FOR DATA · HOLD FOR AI ANALYSIS
         </div>
