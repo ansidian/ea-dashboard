@@ -122,9 +122,9 @@
   --color-info: oklch(0.8467 0.0833 210.2545);
   --color-orange: oklch(0.8237 0.1015 52.6294);
   --color-surface: oklch(0.2429 0.0304 283.9110);
-  --color-surface-hover: oklch(0.2973 0.0294 276.2144);
+  --color-surface-hover: #313244;
   --color-elevated: oklch(0.2973 0.0294 276.2144);
-  --color-input-bg: oklch(0.2973 0.0294 276.2144);
+  --color-input-bg: #313244;
   --color-text-primary: oklch(0.8787 0.0426 272.2767);
   --color-text-body: oklch(0.8787 0.0426 272.2767);
   --color-text-secondary: oklch(0.7510 0.0396 273.9320);

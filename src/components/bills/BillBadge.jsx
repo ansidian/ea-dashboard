@@ -8,10 +8,10 @@ import { formatRelativeDate } from "../../lib/dashboard-helpers";
 import SearchableDropdown from "../shared/SearchableDropdown";
 
 const typeLabels = {
-  transfer: { label: "Card Payment", color: "#818cf8", icon: "\u{1F4B3}" },
-  bill: { label: "Recurring Bill", color: "#34d399", icon: "\u{1F4C4}" },
-  expense: { label: "One-time Expense", color: "#f97316", icon: "\u{1F6D2}" },
-  income: { label: "Income", color: "#22d3ee", icon: "\u{1F4B0}" },
+  transfer: { label: "Card Payment", color: "#b4befe", icon: "\u{1F4B3}" },
+  bill: { label: "Recurring Bill", color: "#a6e3a1", icon: "\u{1F4C4}" },
+  expense: { label: "One-time Expense", color: "#fab387", icon: "\u{1F6D2}" },
+  income: { label: "Income", color: "#89dceb", icon: "\u{1F4B0}" },
 };
 
 const typeHints = {
@@ -108,7 +108,14 @@ export default function BillBadge({ bill, model }) {
   void formatRelativeDate;
 
   return (
-    <div onClick={(e) => e.stopPropagation()} className="bg-[rgba(99,102,241,0.06)] border border-[rgba(99,102,241,0.15)] rounded-lg p-3 px-4 mt-3">
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="rounded-lg p-3 px-4 mt-3"
+      style={{
+        background: "rgba(203,166,218,0.04)",
+        border: "1px solid rgba(203,166,218,0.1)",
+      }}
+    >
       {/* Type selector row */}
       <div className="flex items-center gap-1.5 flex-wrap">
         {Object.entries(typeLabels).map(([key, info]) => (
@@ -117,23 +124,23 @@ export default function BillBadge({ bill, model }) {
             onClick={(e) => { e.stopPropagation(); setEditType(key); }}
             className="text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded-md cursor-pointer transition-all duration-200"
             style={{
-              color: editType === key ? info.color : "#64748b",
-              background: editType === key ? info.color + "18" : "rgba(255,255,255,0.03)",
-              border: `1px solid ${editType === key ? info.color + "40" : "rgba(255,255,255,0.06)"}`,
+              color: editType === key ? info.color : "rgba(205,214,244,0.3)",
+              background: editType === key ? `${info.color}12` : "rgba(255,255,255,0.02)",
+              border: `1px solid ${editType === key ? `${info.color}30` : "rgba(255,255,255,0.04)"}`,
             }}
           >{info.icon} {info.label}</button>
         ))}
-        <span className="text-[11px] text-text-secondary ml-auto">detected by {modelDisplayName}</span>
+        <span className="text-[10px] text-muted-foreground/40 ml-auto">detected by {modelDisplayName}</span>
       </div>
       {/* Behavior hint */}
-      <div className="text-[11px] text-text-muted mt-1.5 italic">
+      <div className="text-[10px] text-muted-foreground/40 mt-1.5 italic">
         {typeHints[editType]}
       </div>
 
       {(state === "idle" || state === "error") && !actualReady && (
         <div className="flex items-center gap-2 py-3">
-          <div className="w-3.5 h-3.5 border-2 border-[rgba(99,102,241,0.3)] border-t-accent-light rounded-full animate-spin" />
-          <span className="text-xs text-text-muted">Loading Actual Budget data...</span>
+          <div className="w-3.5 h-3.5 border-[1.5px] border-white/[0.06] border-t-primary rounded-full animate-spin" />
+          <span className="text-[11px] text-muted-foreground/50">Loading Actual Budget data...</span>
         </div>
       )}
 
@@ -142,7 +149,7 @@ export default function BillBadge({ bill, model }) {
           <div className="flex gap-3 mt-3 animate-[fadeIn_0.25s_ease]">
             {!isTransfer && (
               <div className="flex-[2]">
-                <div className="text-[11px] text-text-muted mb-1">Payee</div>
+                <div className="text-[10px] text-muted-foreground/50 mb-1">Payee</div>
                 {payees.length > 0 ? (
                   <SearchableDropdown
                     options={payees}
@@ -153,26 +160,26 @@ export default function BillBadge({ bill, model }) {
                     onCreateNew={(name) => setEditPayee(name)}
                   />
                 ) : (
-                  <Input value={editPayee} onChange={e => setEditPayee(e.target.value)} placeholder="e.g. Da Vien" className="bg-[rgba(255,255,255,0.06)] border-[rgba(99,102,241,0.2)] text-text-body text-[13px] font-medium" />
+                  <Input value={editPayee} onChange={e => setEditPayee(e.target.value)} placeholder="e.g. Da Vien" className="bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium" />
                 )}
               </div>
             )}
             <div className="flex-1">
-              <div className="text-[11px] text-text-muted mb-1">Amount</div>
+              <div className="text-[10px] text-muted-foreground/50 mb-1">Amount</div>
               <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] text-text-muted pointer-events-none">$</span>
-                <Input type="number" step="0.01" value={editAmount} onChange={e => setEditAmount(e.target.value)} placeholder="0.00" className="pl-[22px] bg-[rgba(255,255,255,0.06)] border-[rgba(99,102,241,0.2)] text-text-body text-[13px] font-medium" />
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground/40 pointer-events-none">$</span>
+                <Input type="number" step="0.01" value={editAmount} onChange={e => setEditAmount(e.target.value)} placeholder="0.00" className="pl-[22px] bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium" />
               </div>
             </div>
             <div className="flex-1">
-              <div className="text-[11px] text-text-muted mb-1">Due</div>
-              <Input type="date" value={editDue} onChange={e => setEditDue(e.target.value)} className="bg-[rgba(255,255,255,0.06)] border-[rgba(99,102,241,0.2)] text-text-body text-[13px] font-medium [color-scheme:dark]" />
+              <div className="text-[10px] text-muted-foreground/50 mb-1">Due</div>
+              <Input type="date" value={editDue} onChange={e => setEditDue(e.target.value)} className="bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium [color-scheme:dark]" />
             </div>
           </div>
           {/* Row 2: Account + Category/ToAccount — swaps based on type */}
           <div className="flex gap-3 mt-2">
             <div className="flex-1">
-              <div className="text-[11px] text-text-muted mb-1">{isTransfer ? "From Account" : "Account"}</div>
+              <div className="text-[10px] text-muted-foreground/50 mb-1">{isTransfer ? "From Account" : "Account"}</div>
               <SearchableDropdown
                 options={accounts}
                 value={isTransfer ? editFromAccount : editAccount}
@@ -183,19 +190,19 @@ export default function BillBadge({ bill, model }) {
             <div className="flex-1">
               {isTransfer ? (
                 <>
-                  <div className="text-[11px] text-text-muted mb-1">To Account</div>
+                  <div className="text-[10px] text-muted-foreground/50 mb-1">To Account</div>
                   <SearchableDropdown options={accounts} value={editToAccount} onChange={setEditToAccount} placeholder="Credit card..." />
                 </>
               ) : (
                 <>
-                  <div className="text-[11px] text-text-muted mb-1">Category</div>
+                  <div className="text-[10px] text-muted-foreground/50 mb-1">Category</div>
                   <SearchableDropdown options={categories} value={editCategory} onChange={setEditCategory} placeholder="Select category..." />
                 </>
               )}
             </div>
           </div>
           <div className="mt-3">
-            {state === "error" && <div className="text-[11px] text-[#fca5a5] mb-1.5">Failed to send — check fields and try again.</div>}
+            {state === "error" && <div className="text-[11px] text-[#f38ba8] mb-1.5">Failed to send — check fields and try again.</div>}
             <Button
               onClick={handleSend}
               disabled={!canSend}
@@ -203,8 +210,8 @@ export default function BillBadge({ bill, model }) {
               className={cn(
                 "w-full gap-1.5 text-xs font-semibold transition-all duration-200",
                 canSend
-                  ? "bg-gradient-to-br from-accent to-accent-secondary text-white border-none hover:brightness-115 hover:-translate-y-px hover:shadow-hover active:translate-y-0 active:shadow-none"
-                  : "bg-[rgba(99,102,241,0.2)] text-text-muted border-none cursor-not-allowed"
+                  ? "bg-[#cba6da] text-[#1e1e2e] border-none hover:bg-[#d4b3e2] hover:-translate-y-px active:translate-y-0"
+                  : "bg-[#cba6da]/20 text-muted-foreground border-none cursor-not-allowed"
               )}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -215,15 +222,19 @@ export default function BillBadge({ bill, model }) {
       )}
 
       {state === "sending" && (
-        <div className="flex items-center justify-center gap-2 p-2 px-4 mt-3 bg-[rgba(99,102,241,0.1)] rounded">
-          <div className="w-3.5 h-3.5 border-2 border-[rgba(99,102,241,0.3)] border-t-accent-light rounded-full animate-spin" />
-          <span className="text-xs text-accent-lighter">Syncing with Actual Budget…</span>
+        <div className="flex items-center justify-center gap-2 p-2 px-4 mt-3 rounded-md"
+          style={{ background: "rgba(203,166,218,0.06)", border: "1px solid rgba(203,166,218,0.1)" }}
+        >
+          <div className="w-3.5 h-3.5 border-[1.5px] border-white/[0.06] border-t-primary rounded-full animate-spin" />
+          <span className="text-[11px] text-[#cba6da] font-medium">Syncing with Actual Budget…</span>
         </div>
       )}
       {state === "sent" && (
-        <div className="flex items-center justify-center gap-1.5 p-2 px-4 mt-3 bg-[rgba(52,211,153,0.08)] border border-[rgba(52,211,153,0.2)] rounded">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-          <span className="text-xs text-success font-semibold">{successMessage}</span>
+        <div className="flex items-center justify-center gap-1.5 p-2 px-4 mt-3 rounded-md"
+          style={{ background: "rgba(166,227,161,0.06)", border: "1px solid rgba(166,227,161,0.15)" }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a6e3a1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+          <span className="text-[11px] font-semibold" style={{ color: "#a6e3a1" }}>{successMessage}</span>
         </div>
       )}
     </div>

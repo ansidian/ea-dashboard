@@ -32,7 +32,7 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
     important: [],
     name: "",
     icon: "",
-    color: "#818cf8",
+    color: "#cba6da",
     unread: 0,
   };
 

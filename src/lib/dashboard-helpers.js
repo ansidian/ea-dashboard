@@ -1,14 +1,14 @@
 export const urgencyStyles = {
-  high: { bg: "rgba(239,68,68,0.1)", border: "#ef4444", text: "#fca5a5", dot: "#ef4444" },
-  medium: { bg: "rgba(245,158,11,0.08)", border: "#f59e0b", text: "#fcd34d", dot: "#f59e0b" },
-  low: { bg: "rgba(107,114,128,0.08)", border: "#6b7280", text: "#9ca3af", dot: "#6b7280" },
+  high: { bg: "rgba(243,139,168,0.06)", border: "#f38ba8", text: "#f38ba8", dot: "#f38ba8" },
+  medium: { bg: "rgba(249,226,175,0.06)", border: "#f9e2af", text: "#f9e2af", dot: "#f9e2af" },
+  low: { bg: "rgba(108,112,134,0.06)", border: "#6c7086", text: "#a6adc8", dot: "#6c7086" },
 };
 
 export const typeLabels = {
-  transfer: { label: "Card Payment", color: "#818cf8", icon: "\u{1F4B3}" },
-  bill: { label: "Recurring Bill", color: "#34d399", icon: "\u{1F4C4}" },
-  expense: { label: "One-time Expense", color: "#f97316", icon: "\u{1F6D2}" },
-  income: { label: "Income", color: "#22d3ee", icon: "\u{1F4B0}" },
+  transfer: { label: "Card Payment", color: "#b4befe", icon: "\u{1F4B3}" },
+  bill: { label: "Recurring Bill", color: "#a6e3a1", icon: "\u{1F4C4}" },
+  expense: { label: "One-time Expense", color: "#fab387", icon: "\u{1F6D2}" },
+  income: { label: "Income", color: "#89dceb", icon: "\u{1F4B0}" },
 };
 
 const TZ = "America/Los_Angeles";
@@ -93,11 +93,40 @@ export function formatShortTime(isoString) {
   });
 }
 
-export function getGreeting() {
+const greetingPools = [
+  { name: "Late Night", max: 5, greetings: [
+    "Burning the midnight oil.", "The world sleeps, but not you.", "Night owl mode activated.",
+    "Stars are out, and so are you.", "Late nights build empires.", "Silence is productive.",
+    "The quiet hours suit you.", "Another late one — respect.", "Peak focus time.",
+    "Nothing good happens before 5 AM — except this.",
+  ]},
+  { name: "Morning", max: 12, greetings: [
+    "Good morning.", "Rise and shine.", "Fresh start today.", "Morning sunshine.",
+    "Let's make today count.", "Coffee first, then the world.", "New day, new priorities.",
+    "Up and at it.", "The early hours are yours.", "Ready to seize the day.",
+  ]},
+  { name: "Afternoon", max: 15, greetings: [
+    "Good afternoon.", "Midday check-in.", "Halfway through the day.", "Afternoon reset.",
+    "How's the day shaping up?", "Keeping the momentum.", "Cruising through the afternoon.",
+    "Lunchtime debrief.", "The day's in full swing.", "Steady as she goes.",
+  ]},
+  { name: "Evening", max: 21, greetings: [
+    "Good evening.", "Winding down.", "Evening debrief time.", "Day's almost done.",
+    "Home stretch.", "Wrapping things up.", "Evening vibes.", "Golden hour briefing.",
+    "Sunset check-in.", "Almost there.",
+  ]},
+  { name: "Night", max: 24, greetings: [
+    "Nearing the finish line.", "Night mode engaged.", "Quiet hours ahead.",
+    "One last look before bed.", "Closing out the day.", "Nightcap briefing.",
+    "The day is yours to review.", "Rest is on the horizon.", "Final thoughts for today.",
+    "Lights dimming soon.",
+  ]},
+];
+
+export function getGreeting(scheduleLabel) {
   const hour = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", hour12: false }).format(new Date()), 10);
-  if (hour >= 0 && hour < 5) return { label: "Late Night Briefing", greeting: "Burning the midnight oil." };
-  if (hour < 12) return { label: "Morning Briefing", greeting: "Good morning." };
-  if (hour < 15) return { label: "Afternoon Briefing", greeting: "Good afternoon." };
-  if (hour < 18) return { label: "Evening Briefing", greeting: "Good evening." };
-  return { label: "Evening Briefing", greeting: "Good evening." };
+  const pool = greetingPools.find(p => hour < p.max) || greetingPools[greetingPools.length - 1];
+  const greeting = pool.greetings[Math.floor(Math.random() * pool.greetings.length)];
+  const label = scheduleLabel ? `${scheduleLabel} Briefing` : `${pool.name} Briefing`;
+  return { label, greeting };
 }
