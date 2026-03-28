@@ -56,7 +56,7 @@ export default function ScheduleSection({ calendar, loaded, delay, style, classN
             style={{ background: "rgba(255,255,255,0.06)" }}
           />
 
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1.5">
             {/* Now marker at the top (no events passed yet) */}
             {nowPosition === 0 && <NowMarker time={nowTime} />}
 
@@ -91,8 +91,8 @@ export default function ScheduleSection({ calendar, loaded, delay, style, classN
                     className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
                     style={{
                       background: event.color,
-                      opacity: event.passed ? 0.3 : 0.8,
-                      boxShadow: event.passed ? "none" : `0 0 8px ${event.color}30`,
+                      opacity: event.passed ? 0.3 : 0.7,
+                      boxShadow: event.passed ? "none" : `0 0 6px ${event.color}30`,
                     }}
                   />
 

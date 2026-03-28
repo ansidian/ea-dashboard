@@ -60,7 +60,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
             title={acc.calendar_enabled ? "Calendar sync enabled" : "Calendar sync disabled"}
             aria-label={acc.calendar_enabled ? "Disable calendar sync" : "Enable calendar sync"}
             className={cn(
-              "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-all",
+              "flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer transition-all",
               acc.calendar_enabled
                 ? "bg-[#cba6da]/15 border border-[#cba6da]/30 text-[#cba6da]"
                 : "bg-input-bg border border-white/[0.08] text-muted-foreground"

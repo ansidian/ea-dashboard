@@ -331,7 +331,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                           color: isActive ? "rgba(203,166,218,0.7)" : "rgba(180,190,254,0.5)",
                           background: isActive ? "rgba(203,166,218,0.08)" : "rgba(180,190,254,0.06)",
                           padding: "2px 8px",
-                          borderRadius: 6,
+                          borderRadius: 8,
                         }}
                       >
                         {genTime}

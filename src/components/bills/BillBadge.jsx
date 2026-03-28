@@ -110,9 +110,9 @@ export default function BillBadge({ bill, model }) {
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="rounded-lg p-3 px-4 mt-3"
+      className="rounded-lg p-4 px-5 mt-3"
       style={{
-        background: "rgba(203,166,218,0.04)",
+        background: "rgba(203,166,218,0.06)",
         border: "1px solid rgba(203,166,218,0.1)",
       }}
     >

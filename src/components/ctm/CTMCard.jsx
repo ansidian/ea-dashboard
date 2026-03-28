@@ -47,7 +47,8 @@ export default function CTMCard({ task, expanded, onToggle }) {
         className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
         style={{
           background: task.class_color,
-          boxShadow: `0 0 8px ${task.class_color}30`,
+          opacity: 0.7,
+          boxShadow: `0 0 6px ${task.class_color}30`,
         }}
       />
 

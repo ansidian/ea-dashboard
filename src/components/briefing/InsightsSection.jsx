@@ -19,7 +19,7 @@ export default function InsightsSection({
       className={className}
     >
       <MotionList
-        className="flex flex-col gap-2"
+        className="flex flex-col gap-1.5"
         loaded={loaded}
         delay={delay + 100}
         stagger={0.06}
@@ -36,7 +36,7 @@ export default function InsightsSection({
             {/* Quote accent bar */}
             <div
               className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
-              style={{ background: "#cba6da", opacity: 0.6 }}
+              style={{ background: "#cba6da", opacity: 0.7 }}
             />
 
             {/* Emoji well */}

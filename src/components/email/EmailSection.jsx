@@ -114,7 +114,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                   className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
                   style={{
                     background: s.dot,
-                    opacity: isCarriedOver ? 0.2 : 0.6,
+                    opacity: isCarriedOver ? 0.3 : 0.7,
                     boxShadow: isCarriedOver ? "none" : `0 0 6px ${s.dot}30`,
                   }}
                 />
@@ -134,7 +134,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                         {email.from}
                       </span>
                       {isCarriedOver && (
-                        <span className="text-[10px] text-muted-foreground/30">
+                        <span className="text-[10px] text-muted-foreground/40">
                           ↩ previous
                         </span>
                       )}

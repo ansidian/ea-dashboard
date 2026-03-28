@@ -165,7 +165,7 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
                 className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
                 style={{
                   background: s.dot,
-                  opacity: 0.6,
+                  opacity: 0.7,
                   boxShadow: `0 0 6px ${s.dot}30`,
                 }}
               />
