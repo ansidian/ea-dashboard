@@ -337,9 +337,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             type="text"
             value={query}
             onChange={handleInputChange}
-            onFocus={() => {
-              if (query) setOpen(true);
-            }}
+            onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder="Search briefings..."
             className="flex-1 bg-transparent border-none outline-none text-foreground text-[13px] font-[inherit] placeholder:text-muted-foreground/40"
