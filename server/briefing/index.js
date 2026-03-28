@@ -453,6 +453,9 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       stats: computeCTMStats(ctmDeadlines),
     };
 
+    // Server owns all deadline data (CTM, Todoist) — discard any Claude output
+    delete briefingJson.deadlines;
+
     // Overwrite calendar with server-fetched data (has accurate `passed` flags)
     briefingJson.calendar = calendar;
 

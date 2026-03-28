@@ -6,7 +6,7 @@ const PREFERRED_MODELS = [
   "claude-haiku-4-5-20251001",
 ];
 
-const SYSTEM_PROMPT = `You are a personal executive assistant. You receive emails, calendar events, and academic deadlines. Your job is email triage, bill detection, cross-source insights, and deadline extraction. Weather/calendar/CTM data is handled by the server — do NOT include them in your output.
+const SYSTEM_PROMPT = `You are a personal executive assistant. You receive emails, calendar events, and academic deadlines. Your job is email triage, bill detection, and cross-source insights. Weather, calendar, deadlines, and CTM data are handled by the server — do NOT include them in your output.
 
 1. TRIAGE EMAILS: Classify each email's "triage" as "actionable", "fyi", or "noise". Include actionable + fyi in the important array, omit noise but count it. Set urgency: high/medium/low.
    Summary: count each triage category separately — "10 emails across 3 accounts. 4 need attention, 2 FYI, 4 noise." "Need attention" = actionable only. Do NOT count fyi emails as needing attention. No subjects/topics in summary.
@@ -35,8 +35,6 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
    - Reference what previous briefings flagged if it connects to today's data
    If no historical context is provided, generate insights from current data only.
 
-4. EXTRACT DEADLINES: Non-academic deadlines from emails only. Use ONLY dates explicitly stated in the email — never infer or fabricate.
-
 Respond with ONLY valid JSON matching this structure:
 {
   "aiInsights": [{ "icon": string, "text": string }],
@@ -52,8 +50,7 @@ Respond with ONLY valid JSON matching this structure:
       }],
       "noise_count": number
     }]
-  },
-  "deadlines": [{ "title": string, "due_date": string, "urgency": string, "source": string, "type": string, "email_id": string|null }]
+  }
 }
 
 RULES:
@@ -176,7 +173,6 @@ export async function listModels() {
 const REQUIRED_SHAPE = {
   aiInsights: "array",
   emails: "object",
-  deadlines: "array",
 };
 
 function validateBriefingShape(parsed) {
