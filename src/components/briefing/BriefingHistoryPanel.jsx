@@ -127,21 +127,38 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
   return createPortal(
     <div
       ref={panelRef}
-      className="bg-elevated border border-white/10 rounded-xl shadow-modal z-[9999] animate-in fade-in slide-in-from-top-2 duration-250 isolate flex flex-col overflow-hidden w-[360px]"
+      className="z-[9999] isolate flex flex-col overflow-hidden w-[360px] animate-in fade-in slide-in-from-top-2 duration-250"
       style={{
         position: "fixed",
         top: pos.top,
         right: pos.right,
         maxHeight: `min(420px, calc(100vh - ${pos.top + 16}px))`,
+        background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
-      {/* Header — fixed above scroll area */}
-      <div className="px-5 pt-4 pb-3 border-b border-white/[0.08] bg-elevated flex justify-between items-center shrink-0">
-        <div className="text-[11px] tracking-[1.5px] uppercase text-text-secondary font-semibold">
-          Briefing History
+      {/* Header */}
+      <div
+        className="shrink-0 flex justify-between items-center"
+        style={{
+          padding: "14px 20px 12px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          background: "rgba(255,255,255,0.015)",
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <span className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-semibold">
+            History
+          </span>
         </div>
         {history && (
-          <span className="text-[10px] text-[#475569]">
+          <span className="text-[10px] text-muted-foreground/60 font-medium tabular-nums">
             {groups.reduce((sum, g) => sum + g.items.length, 0)} briefings
           </span>
         )}
@@ -152,33 +169,39 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
 
         {/* Loading state */}
         {!history && !error && (
-          <div className="py-8 px-5 text-center">
-            <div className="w-[18px] h-[18px] border-2 border-white/[0.08] border-t-accent-light rounded-full animate-spin mx-auto mb-2.5" />
-            <div className="text-xs text-text-muted">Loading history...</div>
+          <div className="py-10 px-5 text-center">
+            <div className="w-4 h-4 border-2 border-white/[0.06] border-t-primary rounded-full animate-spin mx-auto mb-3" />
+            <div className="text-[11px] text-muted-foreground">Loading history...</div>
           </div>
         )}
 
         {/* Error state */}
         {error && (
-          <div className="py-5 px-5 text-xs text-red-300 text-center">
+          <div className="py-6 px-5 text-[11px] text-destructive text-center leading-relaxed">
             {error}
           </div>
         )}
 
         {/* Empty state */}
         {history && groups.length === 0 && (
-          <div className="py-8 px-5 text-center">
-            <div className="text-2xl mb-2">📋</div>
-            <div className="text-xs text-text-muted">No past briefings yet</div>
+          <div className="py-10 px-5 text-center">
+            <div className="text-2xl mb-2 opacity-60">📋</div>
+            <div className="text-[11px] text-muted-foreground">No past briefings yet</div>
           </div>
         )}
 
         {/* Briefing list grouped by date */}
-        <div className="pt-1 pb-2">
-        {groups.map((group) => (
+        <div className="py-1.5">
+        {groups.map((group, gi) => (
           <div key={group.label}>
-            <div className="text-[10px] tracking-[1.5px] uppercase text-text-muted font-semibold px-5 pt-3.5 pb-1.5">
-              {group.label}
+            {/* Date group header with rule line */}
+            <div className="flex items-center gap-3 px-5 pt-4 pb-2">
+              <span className="text-[10px] tracking-[1.5px] uppercase text-muted-foreground/70 font-semibold whitespace-nowrap">
+                {group.label}
+              </span>
+              {gi > 0 && (
+                <div className="flex-1 h-px bg-white/[0.04]" />
+              )}
             </div>
             {group.items.map((item) => {
               const isActive = item.id === activeId;
@@ -198,40 +221,81 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                   onClick={() => handleSelect(item)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleSelect(item); }}
                   className={cn(
-                    "flex items-center justify-between gap-3 py-3.5 px-5 mx-2 rounded-lg border-l-[3px] transition-all duration-200",
+                    "group relative flex items-center justify-between gap-3 mx-2 rounded-lg transition-all duration-200",
                     isActive
-                      ? "border-l-accent bg-accent/10 cursor-default hover:bg-accent/15"
+                      ? "cursor-default"
                       : isLoading
-                        ? "border-l-transparent cursor-wait"
-                        : "border-l-transparent cursor-pointer hover:bg-surface-hover hover:pl-[22px] active:bg-accent/[0.12] active:scale-[0.98]",
+                        ? "cursor-wait"
+                        : "cursor-pointer active:scale-[0.98]",
                   )}
+                  style={{
+                    padding: "10px 16px",
+                    background: isActive
+                      ? "rgba(203,166,218,0.08)"
+                      : undefined,
+                  }}
                 >
-                  <div className="flex items-center gap-3">
+                  {/* Active glow edge */}
+                  {isActive && (
+                    <div
+                      className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
+                      style={{
+                        background: "linear-gradient(180deg, #cba6da 0%, #b4befe 100%)",
+                        boxShadow: "0 0 10px rgba(203,166,218,0.3)",
+                      }}
+                    />
+                  )}
+
+                  {/* Hover bg — separate element for smooth transition */}
+                  {!isActive && !isLoading && (
+                    <div className="absolute inset-0 rounded-lg bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                  )}
+
+                  <div className="relative flex items-center gap-3">
+                    {/* Status dot */}
                     <div
                       className={cn(
-                        "w-2 h-2 rounded-full shrink-0 transition-all duration-200",
-                        isActive ? "shadow-[0_0_8px_rgba(99,102,241,0.4)]" : "shadow-none",
+                        "w-[7px] h-[7px] rounded-full shrink-0 transition-all duration-300",
                       )}
-                      style={{ background: isActive ? "#6366f1" : "rgba(255,255,255,0.15)" }}
+                      style={{
+                        background: isActive
+                          ? "#cba6da"
+                          : "rgba(255,255,255,0.10)",
+                        boxShadow: isActive
+                          ? "0 0 8px rgba(203,166,218,0.45)"
+                          : "none",
+                      }}
                     />
                     <div>
                       <div className={cn(
-                        "text-sm font-medium",
-                        isActive ? "text-accent-lightest" : "text-text-primary",
+                        "text-[13px] font-medium leading-tight tabular-nums",
+                        isActive ? "text-[#e2d0eb]" : "text-foreground/90 group-hover:text-foreground",
                       )}>
                         {time}
                       </div>
-                      <div className="text-[11px] text-text-secondary mt-0.5">
+                      <div className={cn(
+                        "text-[10px] mt-0.5 leading-tight transition-colors duration-200",
+                        isActive ? "text-muted-foreground/60" : "text-muted-foreground/50 group-hover:text-muted-foreground/70",
+                      )}>
                         {timeAgo(item._date)}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
+
+                  <div className="relative flex items-center gap-2">
                     {isLoading && (
-                      <div className="w-3.5 h-3.5 border-2 border-accent/30 border-t-accent-light rounded-full animate-spin" />
+                      <div className="w-3.5 h-3.5 border-[1.5px] border-primary/20 border-t-primary rounded-full animate-spin" />
                     )}
                     {genTime && !isLoading && (
-                      <span className="text-[10px] font-semibold text-accent-lighter bg-accent-light/10 px-2 py-0.5 rounded-md tracking-wide">
+                      <span
+                        className="text-[9px] font-semibold tracking-wide tabular-nums"
+                        style={{
+                          color: isActive ? "rgba(203,166,218,0.7)" : "rgba(180,190,254,0.5)",
+                          background: isActive ? "rgba(203,166,218,0.08)" : "rgba(180,190,254,0.06)",
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                        }}
+                      >
                         {genTime}
                       </span>
                     )}

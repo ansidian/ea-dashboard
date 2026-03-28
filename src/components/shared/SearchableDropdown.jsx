@@ -42,16 +42,26 @@ export default function SearchableDropdown({ options, value, onChange, placehold
         <PopoverTrigger
           className={cn(
             "flex w-full items-center justify-between rounded bg-input-bg px-2.5 py-1.5",
-            "border border-accent/20 text-[13px] font-medium text-text-body",
+            "border border-white/[0.08] text-[13px] font-medium text-foreground",
             "cursor-pointer transition-[border-color,box-shadow] duration-150",
-            "hover:border-accent/40"
+            "hover:border-white/[0.15]"
           )}
         >
           <span className="font-medium">{displayName || placeholder}</span>
-          <span className="text-[10px] text-text-muted">{open ? "\u25B2" : "\u25BC"}</span>
+          <svg
+            width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            className={cn("text-muted-foreground/40 transition-transform duration-200", open && "rotate-180")}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
         </PopoverTrigger>
         <PopoverContent
           align="start"
+          side="bottom"
+          sideOffset={4}
+          collisionPadding={16}
+          sticky
           className="w-[var(--anchor-width)] rounded bg-elevated border border-white/10 p-0 shadow-modal"
         >
           <Command
@@ -74,13 +84,13 @@ export default function SearchableDropdown({ options, value, onChange, placehold
                 <CommandGroup>
                   <CommandItem
                     onSelect={handleCreate}
-                    className="text-accent-light"
+                    className="text-primary"
                   >
                     <span className="text-sm">+</span> Create &ldquo;{search.trim()}&rdquo;
                   </CommandItem>
                 </CommandGroup>
               )}
-              <CommandEmpty className="py-2 text-xs text-text-muted">No matches</CommandEmpty>
+              <CommandEmpty className="py-2 text-xs text-muted-foreground/50">No matches</CommandEmpty>
               <CommandGroup>
                 {options.map(o => (
                   <CommandItem
@@ -88,10 +98,7 @@ export default function SearchableDropdown({ options, value, onChange, placehold
                     value={o.name}
                     onSelect={() => { onChange(o.id); setOpen(false); setSearch(""); }}
                     data-checked={o.id === value ? "true" : undefined}
-                    className={cn(
-                      "text-[13px] text-text-body cursor-pointer",
-                      o.id === value && "text-accent-light bg-accent-light/10"
-                    )}
+                    className="text-[13px] text-foreground/80 cursor-pointer transition-all duration-150"
                   >
                     {o.name}
                   </CommandItem>
