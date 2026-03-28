@@ -35,8 +35,9 @@ export const pollStatus = (id) => apiFetch(`/api/briefing/status/${id}`);
 export const checkInProgress = () => apiFetch("/api/briefing/in-progress");
 export const getBriefingHistory = () => apiFetch("/api/briefing/history");
 export const getBriefingById = (id) => apiFetch(`/api/briefing/${id}`);
-export const getEmailBody = (uid) => apiFetch(`/api/briefing/email/${uid}`);
+export const getEmailBody = (uid) => apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}`);
 export const dismissEmail = (emailId) => apiFetch(`/api/briefing/dismiss/${encodeURIComponent(emailId)}`, { method: "POST" });
+export const deleteBriefing = (id) => apiFetch(`/api/briefing/${id}`, { method: "DELETE" });
 
 // Actual Budget
 export const sendToActualBudget = (bill) => apiFetch("/api/briefing/actual/send", { method: "POST", body: JSON.stringify(bill) });

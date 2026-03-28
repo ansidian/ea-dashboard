@@ -173,14 +173,15 @@ router.get("/email/:uid", async (req, res) => {
       const password = decrypt(account.credentials_encrypted);
       return res.json(await fetchIcloudBody(account.email, password, uid));
     } else if (uid.startsWith("gmail-")) {
-      // Parse account ID from gmail-{accountId}-{messageId} format
-      const accountId = uid.split("-")[1];
+      // UID format: gmail-{accountId}-{messageId} where accountId is "gmail-{email}"
+      // Account ID contains dashes/@ so we can't split naively — match by prefix instead
       const accounts = await db.execute({
-        sql: "SELECT * FROM ea_accounts WHERE user_id = ? AND type = 'gmail' AND id = ?",
-        args: [userId, accountId],
+        sql: "SELECT * FROM ea_accounts WHERE user_id = ? AND type = 'gmail'",
+        args: [userId],
       });
-      if (!accounts.rows.length) return res.status(404).json({ message: "Gmail account not found" });
-      return res.json(await fetchGmailBody(accounts.rows[0], uid));
+      const account = accounts.rows.find(a => uid.startsWith(`gmail-${a.id}-`));
+      if (!account) return res.status(404).json({ message: "Gmail account not found" });
+      return res.json(await fetchGmailBody(account, uid));
     } else {
       return res.status(400).json({ message: "Unknown email uid format" });
     }
@@ -230,6 +231,22 @@ router.post("/dismiss/:emailId", async (req, res) => {
   } catch (err) {
     console.error("Error dismissing email:", err);
     res.status(500).json({ message: "Failed to dismiss email" });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { id } = req.params;
+  try {
+    const result = await db.execute({
+      sql: "DELETE FROM ea_briefings WHERE id = ? AND user_id = ?",
+      args: [id, userId],
+    });
+    if (!result.rowsAffected) return res.status(404).json({ message: "Briefing not found" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error deleting briefing:", err);
+    res.status(500).json({ message: "Failed to delete briefing" });
   }
 });
 
