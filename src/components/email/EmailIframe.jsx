@@ -21,8 +21,11 @@ export default function EmailIframe({ html }) {
   const sanitized = DOMPurify.sanitize(html, {
     ADD_TAGS: ["style", "link", "meta", "img", "center"],
     ADD_ATTR: ["src", "alt", "width", "height", "style", "class", "align", "valign", "bgcolor", "cellpadding", "cellspacing", "border", "role"],
+    FORBID_TAGS: ["script"],
     WHOLE_DOCUMENT: true,
-  });
+  })
+    // Strip tracking pixels (1x1 or 0x0 images, common tracker domains)
+    .replace(/<img[^>]*(?:width\s*=\s*["']?[01]|height\s*=\s*["']?[01]|\.gif\?[^"']*["'])[^>]*\/?>/gi, "");
 
   return (
     <iframe

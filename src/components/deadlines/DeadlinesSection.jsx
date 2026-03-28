@@ -3,6 +3,7 @@ import Section from "../layout/Section";
 import Tooltip from "../shared/Tooltip";
 import { urgencyStyles, formatRelativeDate, formatFullDate, parseDueDate } from "../../lib/dashboard-helpers";
 import CTMCard from "../ctm/CTMCard";
+import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
 
 export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style, className }) {
@@ -37,63 +38,81 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
 
   return (
     <Section title="Deadlines" delay={delay} loaded={loaded} style={style} className={className}>
-      <div className="bg-surface border border-border rounded-lg p-4 px-5 mb-3">
-        <div className="flex gap-4 items-baseline flex-wrap">
-          <div>
-            <span className="text-2xl font-semibold text-text-primary">
-              {totalIncomplete}
-            </span>
-            <span className="text-xs text-text-muted ml-1.5">
-              incomplete
-            </span>
-          </div>
-          <div>
-            <span className="text-2xl font-semibold" style={{ color: "#fca5a5" }}>
-              {totalDueToday}
-            </span>
-            <span className="text-xs text-text-muted ml-1.5">
-              due today
-            </span>
-          </div>
-          {ctmDueThisWeek > 0 && (
-            <div>
-              <span className="text-2xl font-semibold" style={{ color: "#fcd34d" }}>
-                {ctmDueThisWeek}
-              </span>
-              <span className="text-xs text-text-muted ml-1.5">
-                this week
-              </span>
-            </div>
-          )}
-          {ctmItems.length > 0 && (
-            <div className="ml-auto">
-              <a
-                href="https://ctm.andysu.tech"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium no-underline transition-all duration-200 text-[#a78bfa] bg-[rgba(167,139,250,0.08)] border border-[rgba(167,139,250,0.15)] hover:bg-[rgba(167,139,250,0.18)] hover:border-[rgba(167,139,250,0.35)] hover:-translate-y-px cursor-pointer"
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                </svg>
-                CTM
-              </a>
-            </div>
-          )}
+      <div className="flex items-center gap-1.5 flex-wrap mb-3">
+        <div
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
+          style={{ background: "rgba(205,214,244,0.04)", border: "1px solid rgba(205,214,244,0.08)" }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(205,214,244,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+          <span className="text-[11px] font-semibold tabular-nums text-foreground/80">{totalIncomplete}</span>
+          <span className="text-[11px] text-muted-foreground/50">incomplete</span>
         </div>
+        {totalDueToday > 0 && (
+          <div
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
+            style={{ background: "rgba(243,139,168,0.06)", border: "1px solid rgba(243,139,168,0.12)" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f38ba8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span className="text-[11px] font-semibold tabular-nums" style={{ color: "#f38ba8cc" }}>{totalDueToday}</span>
+            <span className="text-[11px] text-muted-foreground/50">due today</span>
+          </div>
+        )}
+        {ctmDueThisWeek > 0 && (
+          <div
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
+            style={{ background: "rgba(249,226,175,0.05)", border: "1px solid rgba(249,226,175,0.1)" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f9e2af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            <span className="text-[11px] font-semibold tabular-nums" style={{ color: "#f9e2afcc" }}>{ctmDueThisWeek}</span>
+            <span className="text-[11px] text-muted-foreground/50">this week</span>
+          </div>
+        )}
+        {ctmItems.length > 0 && (
+          <a
+            href="https://ctm.andysu.tech"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium no-underline transition-all duration-200 ml-auto"
+            style={{
+              color: "#cba6dacc",
+              background: "rgba(203,166,218,0.06)",
+              border: "1px solid rgba(203,166,218,0.12)",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(203,166,218,0.12)"; e.currentTarget.style.borderColor = "rgba(203,166,218,0.25)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(203,166,218,0.06)"; e.currentTarget.style.borderColor = "rgba(203,166,218,0.12)"; }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+            </svg>
+            CTM
+          </a>
+        )}
       </div>
-      <div className="flex flex-col gap-1.5">
+      <MotionList className="flex flex-col gap-1.5" loaded={loaded} delay={delay + 100} stagger={0.04}>
         {allItems.map((item, i) => {
           if (item._type === "ctm") {
             return (
-              <CTMCard
-                key={`ctm-${item.id}`}
-                task={item}
-                expanded={expandedTask === item.id}
-                onToggle={() =>
-                  setExpandedTask(expandedTask === item.id ? null : item.id)
-                }
-              />
+              <MotionItem key={`ctm-${item.id}`}>
+                <CTMCard
+                  task={item}
+                  expanded={expandedTask === item.id}
+                  onToggle={() =>
+                    setExpandedTask(expandedTask === item.id ? null : item.id)
+                  }
+                />
+              </MotionItem>
             );
           }
 
@@ -127,41 +146,54 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
           };
 
           return (
-            <div
+            <MotionItem
               key={`dl-${i}`}
               onClick={handleClick}
               role="button"
               tabIndex={0}
               className={cn(
-                "flex items-center gap-3 py-3 px-4 rounded transition-all duration-150",
-                isClickable ? "cursor-pointer hover:brightness-125" : "cursor-default",
+                "group relative flex items-center gap-3 py-3 px-4 pl-5 rounded-lg transition-all duration-150",
+                isClickable ? "cursor-pointer" : "cursor-default",
               )}
               style={{
                 background: s.bg,
-                border: `1px solid ${s.border}22`,
+                border: `1px solid ${s.border}15`,
               }}
             >
+              {/* Color accent bar */}
               <div
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: s.dot }}
+                className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                style={{
+                  background: s.dot,
+                  opacity: 0.6,
+                  boxShadow: `0 0 6px ${s.dot}30`,
+                }}
               />
-              <div className="flex-1">
-                <div className="text-sm font-medium text-text-body">
+
+              {/* Hover bg */}
+              {isClickable && (
+                <div className="absolute inset-0 rounded-lg bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-150" />
+              )}
+
+              <div className="relative flex-1 min-w-0">
+                <div className="text-[13px] font-medium text-foreground/90 truncate">
                   {dl.title}
                 </div>
-                <div className="text-[11px] text-text-muted">
-                  {dl.source}
-                </div>
+                {dl.source && (
+                  <div className="text-[10px] text-muted-foreground/40 mt-0.5">
+                    {dl.source}
+                  </div>
+                )}
               </div>
               <Tooltip text={formatFullDate(dateStr)}>
-                <div className="text-xs font-semibold" style={{ color: s.text }}>
+                <div className="relative text-[11px] font-semibold tabular-nums" style={{ color: s.text }}>
                   {formatRelativeDate(dateStr)}
                 </div>
               </Tooltip>
-            </div>
+            </MotionItem>
           );
         })}
-      </div>
+      </MotionList>
     </Section>
   );
 }

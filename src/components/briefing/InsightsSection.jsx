@@ -1,28 +1,58 @@
-import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
+import { MotionList, MotionItem } from "../ui/motion-wrappers";
 
-export default function InsightsSection({ insights, loaded, delay, style, className }) {
+export default function InsightsSection({
+  insights,
+  loaded,
+  delay,
+  style,
+  className,
+}) {
   if (!insights?.length) return null;
 
   return (
-    <Section title="Claude's Take" delay={delay} loaded={loaded} style={style} className={className}>
-      <div className="flex flex-col gap-3">
+    <Section
+      title="Claude's Take"
+      delay={delay}
+      loaded={loaded}
+      style={style}
+      className={className}
+    >
+      <MotionList
+        className="flex flex-col gap-2"
+        loaded={loaded}
+        delay={delay + 100}
+        stagger={0.06}
+      >
         {insights.map((insight, i) => (
-          <div
+          <MotionItem
             key={i}
-            className={cn(
-              "bg-[rgba(255,255,255,0.03)] border border-border rounded-lg px-4 py-3.5 text-sm leading-relaxed text-[#cbd5e1] flex gap-3 items-start transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
-              loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
-            )}
-            style={{ transitionDelay: `${delay + 100 + i * 80}ms` }}
+            className="group relative rounded-lg pl-5 pr-4 py-3.5 flex gap-3 items-start"
+            style={{
+              background: "rgba(36,36,58,0.4)",
+              border: "1px solid rgba(255,255,255,0.04)",
+            }}
           >
-            <span className="text-base shrink-0 mt-px">
+            {/* Quote accent bar */}
+            <div
+              className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+              style={{ background: "#cba6da", opacity: 0.6 }}
+            />
+
+            {/* Emoji well */}
+            <span
+              className="text-sm shrink-0 w-7 h-7 flex items-center justify-center rounded-md"
+              style={{ background: "rgba(255,255,255,0.03)" }}
+            >
               {insight.icon}
             </span>
-            <span>{insight.text}</span>
-          </div>
+
+            <span className="text-[13px] leading-relaxed text-foreground/75">
+              {insight.text}
+            </span>
+          </MotionItem>
         ))}
-      </div>
+      </MotionList>
     </Section>
   );
 }
