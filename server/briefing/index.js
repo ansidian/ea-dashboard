@@ -225,6 +225,67 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
   }
 }
 
+// Known payment processors whose confirmation emails duplicate the merchant's own receipt
+const PAYMENT_PROCESSORS = new Set([
+  "paypal", "venmo", "zelle", "cash app", "apple pay", "google pay", "square",
+]);
+
+// Deduplicate extracted bills across all email accounts.
+// When a payment processor (PayPal, Venmo, etc.) and a merchant both report the same
+// transaction (same amount + date within 1 day), clear the bill from the processor email.
+export function deduplicateBills(briefingJson) {
+  const accounts = briefingJson?.emails?.accounts;
+  if (!accounts?.length) return;
+
+  // Collect all emails with bills into a flat list with back-references
+  const billEmails = [];
+  for (const acct of accounts) {
+    for (const email of acct.important || []) {
+      if (email.hasBill && email.extractedBill && email.extractedBill.amount > 0) {
+        billEmails.push(email);
+      }
+    }
+  }
+
+  if (billEmails.length < 2) return;
+
+  // Find duplicates: same amount, dates within 1 day, one is a payment processor
+  const dominated = new Set();
+  for (let i = 0; i < billEmails.length; i++) {
+    if (dominated.has(i)) continue;
+    for (let j = i + 1; j < billEmails.length; j++) {
+      if (dominated.has(j)) continue;
+      const a = billEmails[i];
+      const b = billEmails[j];
+      if (a.extractedBill.amount !== b.extractedBill.amount) continue;
+
+      // Check dates are within 1 day of each other
+      const dateA = new Date(a.extractedBill.due_date);
+      const dateB = new Date(b.extractedBill.due_date);
+      if (Math.abs(dateA - dateB) > 86400000) continue;
+
+      // Determine which is the payment processor
+      const aFrom = (a.from || "").toLowerCase();
+      const bFrom = (b.from || "").toLowerCase();
+      const aIsProcessor = [...PAYMENT_PROCESSORS].some(p => aFrom.includes(p));
+      const bIsProcessor = [...PAYMENT_PROCESSORS].some(p => bFrom.includes(p));
+
+      if (aIsProcessor && !bIsProcessor) dominated.add(i);
+      else if (bIsProcessor && !aIsProcessor) dominated.add(j);
+    }
+  }
+
+  // Clear bills from dominated (processor) emails
+  for (const idx of dominated) {
+    billEmails[idx].hasBill = false;
+    billEmails[idx].extractedBill = null;
+  }
+
+  if (dominated.size > 0) {
+    console.log(`[Briefing] Deduplicated ${dominated.size} duplicate bill(s) from payment processor emails`);
+  }
+}
+
 // Load dismissed email IDs for this user
 async function loadDismissedIds(userId) {
   const result = await db.execute({
@@ -381,6 +442,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
         acct.unread = acct.important.length;
       }
       fixEmailAccounts(cloned, emails, accounts);
+      deduplicateBills(cloned);
       cloned.dataUpdatedAt = new Date().toISOString();
       cloned.generatedAt = nowPacific();
       if (scheduleLabel) cloned.scheduleLabel = scheduleLabel;
@@ -462,6 +524,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     // Fix email account grouping: re-assign emails to correct accounts based on
     // the original account_label from the fetched data (Claude sometimes misgroups)
     fixEmailAccounts(briefingJson, emails, accounts);
+    deduplicateBills(briefingJson);
 
     // Set server-fetched weather (Claude no longer returns this)
     briefingJson.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
