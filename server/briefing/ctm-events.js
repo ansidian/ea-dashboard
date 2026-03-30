@@ -6,7 +6,7 @@ function formatTime12h(timeStr) {
     // CTM stores ISO strings in Pacific time (no Z suffix).
     // Strings with Z/offset are already UTC — parse directly.
     // Bare strings like "2026-03-27T13:00:00" — extract the time portion.
-    if (/[Z+\-]\d{0,4}$/.test(timeStr)) {
+    if (/[Z+-]\d{0,4}$/.test(timeStr)) {
       return new Date(timeStr).toLocaleTimeString("en-US", {
         timeZone: "America/Los_Angeles",
         hour: "numeric",
@@ -26,11 +26,6 @@ function formatTime12h(timeStr) {
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
-function stripHtml(html) {
-  if (!html) return "";
-  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
 }
 
 export async function fetchCTMDeadlines(userId) {
@@ -61,7 +56,7 @@ export async function fetchCTMDeadlines(userId) {
     id: row.id,
     title: row.title,
     due_date: row.due_date?.includes("T")
-      ? /[Z+\-]\d{0,4}$/.test(row.due_date)
+      ? /[Z+-]\d{0,4}$/.test(row.due_date)
         ? new Date(row.due_date).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" })
         : row.due_date.split("T")[0]
       : row.due_date,

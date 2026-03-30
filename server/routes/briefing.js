@@ -65,7 +65,7 @@ router.get("/in-progress", async (req, res) => {
     });
     if (!result.rows.length) return res.json({ generating: false });
     res.json({ generating: true, id: result.rows[0].id, progress: result.rows[0].progress });
-  } catch (err) {
+  } catch {
     res.json({ generating: false });
   }
 });

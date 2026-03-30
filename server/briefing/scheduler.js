@@ -72,7 +72,7 @@ export async function initScheduler() {
     if (activeJobs.length === 0) {
       console.log("[EA Scheduler] No enabled schedules found");
     }
-  } catch (err) {
+  } catch {
     // ea_settings table may not exist yet on first run before migration
     console.log("[EA Scheduler] Skipping — ea_settings not yet available");
   }

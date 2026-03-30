@@ -226,7 +226,6 @@ async function batchGetMessages(token, messageIds) {
 function parseBatchResponse(responseText) {
   const messages = [];
   // Extract JSON objects from multipart response
-  const jsonRegex = /\{[\s\S]*?"id"\s*:\s*"[^"]+"/g;
   const parts = responseText.split(/--batch/);
 
   for (const part of parts) {

@@ -8,7 +8,6 @@ import { fetchCTMDeadlines } from "./ctm-events.js";
 import { callClaude } from "./claude.js";
 import { getCategories } from "./actual.js";
 import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../embeddings/index.js";
-import { chunkBriefing } from "../embeddings/chunker.js";
 
 // Shared: load accounts + settings, return them
 async function loadUserConfig(userId) {
@@ -479,7 +478,6 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     if (newEmails.length > 0 && newEmails.length < emails.length && prevBriefing) {
       await updateProgress(briefingId, `Sending ${newEmails.length} new email${newEmails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Delta generation: ${newEmails.length} new emails (${emails.length - newEmails.length} previously triaged)`);
-      const ctmStats = computeCTMStats(ctmDeadlines);
       briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext });
 
       // Merge previous triage with new triage using pure function
@@ -490,7 +488,6 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       // Full generation: all emails are new or no previous triage
       await updateProgress(briefingId, `Sending ${emails.length} email${emails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Full generation: ${emails.length} emails`);
-      const ctmStats = computeCTMStats(ctmDeadlines);
       briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext });
       // Tag all emails with seenCount 1
       for (const acct of briefingJson.emails?.accounts || []) {

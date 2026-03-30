@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
+// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence } from "motion/react";
 import { skipSchedule, deleteBriefing } from "../../api";
 import { getGreeting, timeAgo, formatShortTime } from "../../lib/dashboard-helpers";

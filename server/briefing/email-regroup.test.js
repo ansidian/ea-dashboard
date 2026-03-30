@@ -71,7 +71,7 @@ describe("fixEmailAccounts", () => {
     expect(gmail.important).toHaveLength(2);
   });
 
-  it("returns early without modifying briefingJson when inputEmails is empty", () => {
+  it("resets accounts to empty when inputEmails is empty and no dbAccounts", () => {
     const briefingJson = {
       emails: {
         accounts: [{
@@ -81,11 +81,10 @@ describe("fixEmailAccounts", () => {
         }],
       },
     };
-    const original = JSON.stringify(briefingJson);
 
     fixEmailAccounts(briefingJson, []);
 
-    expect(JSON.stringify(briefingJson)).toBe(original);
+    expect(briefingJson.emails.accounts).toEqual([]);
   });
 
   it("returns early without error when briefingJson.emails.accounts is empty", () => {
