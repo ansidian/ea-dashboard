@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 import { urgencyStyles } from "../../lib/dashboard-helpers";
@@ -12,10 +12,11 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
     activeAccount, setActiveAccount,
     selectedEmail, setSelectedEmail,
     confirmDismissId, setConfirmDismissId, handleDismiss: onDismiss,
-    setLoadingBillId, emailSectionRef,
+    setLoadingBillId, emailSectionRef, totalNoiseCount,
   } = useDashboard();
 
   const emailRowRefs = useRef({});
+  const [noiseExpanded, setNoiseExpanded] = useState(false);
 
   return (
     <>
@@ -240,6 +241,53 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
             );
           })}
         </MotionList>
+        {totalNoiseCount > 0 && (
+          <div className="mt-3">
+            <button
+              onClick={() => setNoiseExpanded(!noiseExpanded)}
+              className="w-full flex items-center justify-between text-[10px] font-medium rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 font-[inherit]"
+              style={{
+                color: "rgba(205,214,244,0.4)",
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; }}
+            >
+              <span>{totalNoiseCount} email{totalNoiseCount !== 1 ? "s" : ""} filtered as noise</span>
+              <MotionChevron isOpen={noiseExpanded} className="text-muted-foreground/30" />
+            </button>
+            <MotionExpand isOpen={noiseExpanded}>
+              <div
+                className="rounded-md mt-1.5 py-2 px-3"
+                style={{ background: "rgba(36,36,58,0.25)", border: "1px solid rgba(255,255,255,0.04)" }}
+              >
+                {emailAccounts.filter(acc => acc.noise?.length).map((acc, i) => (
+                  <div key={i} className={i > 0 ? "mt-3" : ""}>
+                    {emailAccounts.filter(a => a.noise?.length).length > 1 && (
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span
+                          className="inline-block w-1.5 h-1.5 rounded-full"
+                          style={{ background: acc.color }}
+                        />
+                        <span className="text-[10px] text-muted-foreground/40">{acc.name}</span>
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-0.5">
+                      {acc.noise.map((email, j) => (
+                        <div key={j} className="flex items-baseline gap-1.5 min-w-0 py-0.5 px-1">
+                          <span className="text-[11px] text-muted-foreground/40 shrink-0">{email.from}</span>
+                          <span className="text-[11px] text-muted-foreground/25">—</span>
+                          <span className="text-[11px] text-muted-foreground/60 truncate">{email.subject}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </MotionExpand>
+          </div>
+        )}
       </Section>
     </>
   );

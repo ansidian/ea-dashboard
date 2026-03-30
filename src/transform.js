@@ -46,6 +46,7 @@ export function transformBriefing(raw) {
           hasBill: email.hasBill ?? email.has_bill ?? false,
           extractedBill: email.extractedBill || email.extracted_bill || null,
         })),
+        noise: acc.noise || [],
       })),
     },
   };

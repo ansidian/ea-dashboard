@@ -30,11 +30,18 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
   );
   const currentAccount = emailAccounts[activeAccount] || {
     important: [],
+    noise: [],
+    noise_count: 0,
     name: "",
     icon: "",
     color: "#cba6da",
     unread: 0,
   };
+
+  const totalNoiseCount = useMemo(
+    () => emailAccounts.reduce((sum, acc) => sum + (acc.noise?.length || 0), 0),
+    [emailAccounts],
+  );
 
   const billEmails = useMemo(() =>
     emailAccounts.flatMap((acc, accIdx) =>
@@ -65,6 +72,7 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
       emailSectionRef,
       billEmails,
       totalBills,
+      totalNoiseCount,
     }}>
       {children}
     </DashboardContext.Provider>

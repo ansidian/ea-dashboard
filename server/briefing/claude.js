@@ -8,7 +8,7 @@ const PREFERRED_MODELS = [
 
 const SYSTEM_PROMPT = `You are a personal executive assistant. You receive emails, calendar events, and academic deadlines. Your job is email triage, bill detection, and cross-source insights. Weather, calendar, deadlines, and CTM data are handled by the server — do NOT include them in your output.
 
-1. TRIAGE EMAILS: Classify each email's "triage" as "actionable", "fyi", or "noise". Include actionable + fyi in the important array, omit noise but count it. Set urgency: high/medium/low.
+1. TRIAGE EMAILS: Classify each email's "triage" as "actionable", "fyi", or "noise". Include actionable + fyi in the important array, include noise in a compact noise array (from + subject only) AND count in noise_count. Set urgency: high/medium/low.
    Summary: count each triage category separately — "10 emails across 3 accounts. 4 need attention, 2 FYI, 4 noise." "Need attention" = actionable only. Do NOT count fyi emails as needing attention. No subjects/topics in summary.
    NOISE (always, unless overridden by Email Interests):
    - Marketing, promotions, coupons, deals, loyalty rewards ("earn points", "limited time", "% off")
@@ -48,6 +48,7 @@ Respond with ONLY valid JSON matching this structure:
         "urgency": string, "date": string, "hasBill": boolean,
         "extractedBill": { "payee": string, "amount": number, "due_date": string, "type": string, "category_id": string|null, "category_name": string|null } | null
       }],
+      "noise": [{ "from": string, "subject": string }],
       "noise_count": number
     }]
   }

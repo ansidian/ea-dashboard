@@ -151,6 +151,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
         icon: a.icon || (a.type === "icloud" ? "🍎" : "📧"),
         color: a.color || "#6366f1",
         important: [],
+        noise: [],
         noise_count: 0,
       });
     }
@@ -194,16 +195,19 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
         icon: original?.account_icon || "📧",
         color: original?.account_color || "#6366f1",
         important: [],
+        noise: [],
         noise_count: 0,
       });
     }
     grouped.get(accountLabel).important.push(email);
   }
 
-  // Preserve noise_count from Claude's response
+  // Preserve noise emails and noise_count from Claude's response
   for (const acct of briefingJson.emails.accounts) {
     const g = grouped.get(acct.name);
-    if (g && acct.noise_count) g.noise_count = acct.noise_count;
+    if (!g) continue;
+    if (acct.noise_count) g.noise_count = acct.noise_count;
+    if (acct.noise?.length) g.noise.push(...acct.noise);
   }
 
   // Replace accounts with corrected grouping, fix unread counts
