@@ -2,8 +2,8 @@ import { Router } from "express";
 import db from "../db/connection.js";
 import { requireAuth } from "../middleware/auth.js";
 import { generateBriefing, quickRefresh } from "../briefing/index.js";
-import { fetchEmailBody as fetchGmailBody } from "../briefing/gmail.js";
-import { fetchEmailBody as fetchIcloudBody } from "../briefing/icloud.js";
+import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, trashMessage as gmailTrash, batchMarkAsRead as gmailBatchMarkAsRead } from "../briefing/gmail.js";
+import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
 import { generateMockBriefing, generateMockHistory } from "../db/dev-fixture.js";
@@ -231,6 +231,116 @@ router.post("/dismiss/:emailId", async (req, res) => {
   } catch (err) {
     console.error("Error dismissing email:", err);
     res.status(500).json({ message: "Failed to dismiss email" });
+  }
+});
+
+// Look up email account by UID prefix
+async function findAccountByUid(userId, uid) {
+  if (uid.startsWith("icloud-")) {
+    const result = await db.execute({
+      sql: "SELECT * FROM ea_accounts WHERE user_id = ? AND type = 'icloud'",
+      args: [userId],
+    });
+    if (!result.rows.length) return null;
+    return { type: "icloud", account: result.rows[0] };
+  }
+  if (uid.startsWith("gmail-")) {
+    const result = await db.execute({
+      sql: "SELECT * FROM ea_accounts WHERE user_id = ? AND type = 'gmail'",
+      args: [userId],
+    });
+    const account = result.rows.find(a => uid.startsWith(`gmail-${a.id}-`));
+    if (!account) return null;
+    return { type: "gmail", account };
+  }
+  return null;
+}
+
+router.post("/email/:uid/mark-read", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { uid } = req.params;
+  try {
+    const found = await findAccountByUid(userId, uid);
+    if (!found) return res.status(404).json({ message: "Account not found" });
+
+    if (found.type === "icloud") {
+      const password = decrypt(found.account.credentials_encrypted);
+      await icloudMarkAsRead(found.account.email, password, uid);
+    } else {
+      await gmailMarkAsRead(found.account, uid);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error marking email as read:", err);
+    res.status(500).json({ message: "Failed to mark email as read" });
+  }
+});
+
+router.post("/email/:uid/trash", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { uid } = req.params;
+  try {
+    const found = await findAccountByUid(userId, uid);
+    if (!found) return res.status(404).json({ message: "Account not found" });
+
+    if (found.type === "icloud") {
+      const password = decrypt(found.account.credentials_encrypted);
+      await icloudTrash(found.account.email, password, uid);
+    } else {
+      await gmailTrash(found.account, uid);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error trashing email:", err);
+    res.status(500).json({ message: "Failed to trash email" });
+  }
+});
+
+router.post("/email/mark-all-read", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { uids } = req.body;
+  if (!Array.isArray(uids) || !uids.length) return res.status(400).json({ message: "uids array required" });
+  try {
+    // Group UIDs by account type
+    const gmailUids = new Map(); // accountId → [uids]
+    const icloudUids = [];
+
+    const accounts = await db.execute({
+      sql: "SELECT * FROM ea_accounts WHERE user_id = ? AND (type = 'gmail' OR type = 'icloud')",
+      args: [userId],
+    });
+
+    for (const uid of uids) {
+      if (uid.startsWith("icloud-")) {
+        icloudUids.push(uid);
+      } else if (uid.startsWith("gmail-")) {
+        const account = accounts.rows.find(a => a.type === "gmail" && uid.startsWith(`gmail-${a.id}-`));
+        if (account) {
+          if (!gmailUids.has(account.id)) gmailUids.set(account.id, { account, uids: [] });
+          gmailUids.get(account.id).uids.push(uid);
+        }
+      }
+    }
+
+    const ops = [];
+
+    for (const { account, uids: accUids } of gmailUids.values()) {
+      ops.push(gmailBatchMarkAsRead(account, accUids));
+    }
+
+    if (icloudUids.length) {
+      const icloudAccount = accounts.rows.find(a => a.type === "icloud");
+      if (icloudAccount) {
+        const password = decrypt(icloudAccount.credentials_encrypted);
+        ops.push(icloudBatchMarkAsRead(icloudAccount.email, password, icloudUids));
+      }
+    }
+
+    await Promise.all(ops);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error marking all emails as read:", err);
+    res.status(500).json({ message: "Failed to mark all emails as read" });
   }
 });
 

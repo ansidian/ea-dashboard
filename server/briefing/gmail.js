@@ -8,7 +8,7 @@ const GOOGLE_REDIRECT_URI = process.env.NODE_ENV === "production"
   : `http://localhost:${process.env.PORT || 3001}/api/ea/accounts/gmail/callback`;
 
 const SCOPES = [
-  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/calendar.readonly",
 ];
 
@@ -285,9 +285,7 @@ export async function fetchMessagesIndividually(token, messageIds) {
 // --- Full email body (for detail view) ---
 
 export async function fetchEmailBody(account, uid) {
-  // Strip the "gmail-{accountId}-" prefix to get the raw Gmail message ID
-  const prefix = `gmail-${account.id}-`;
-  const messageId = uid.startsWith(prefix) ? uid.slice(prefix.length) : uid;
+  const messageId = extractMessageId(account, uid);
   const token = await getValidToken(account);
 
   // Fetch raw RFC 2822 message and parse with mailparser for reliable decoding
@@ -308,6 +306,54 @@ export async function fetchEmailBody(account, uid) {
     from: parsed.from?.text || "",
     date: parsed.date ? parsed.date.toISOString() : "",
   };
+}
+
+// --- Email actions (requires gmail.modify scope) ---
+
+function extractMessageId(account, uid) {
+  const prefix = `gmail-${account.id}-`;
+  return uid.startsWith(prefix) ? uid.slice(prefix.length) : uid;
+}
+
+export async function markAsRead(account, uid) {
+  const messageId = extractMessageId(account, uid);
+  const token = await getValidToken(account);
+  const res = await fetch(
+    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+    },
+  );
+  if (!res.ok) throw new Error(`Gmail mark-as-read failed: ${res.status}`);
+}
+
+export async function trashMessage(account, uid) {
+  const messageId = extractMessageId(account, uid);
+  const token = await getValidToken(account);
+  const res = await fetch(
+    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/trash`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!res.ok) throw new Error(`Gmail trash failed: ${res.status}`);
+}
+
+export async function batchMarkAsRead(account, uids) {
+  const token = await getValidToken(account);
+  const ids = uids.map(uid => extractMessageId(account, uid));
+  const res = await fetch(
+    "https://www.googleapis.com/gmail/v1/users/me/messages/batchModify",
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, removeLabelIds: ["UNREAD"] }),
+    },
+  );
+  if (!res.ok) throw new Error(`Gmail batch mark-as-read failed: ${res.status}`);
 }
 
 // --- Connection test ---

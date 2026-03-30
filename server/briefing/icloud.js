@@ -149,6 +149,43 @@ export async function fetchEmailBody(email, password, uid) {
   }
 }
 
+// --- Email actions ---
+
+export async function markAsRead(email, password, uid) {
+  const imapUid = parseInt(uid.replace("icloud-", ""), 10);
+  const client = await getPooledClient(email, password);
+  const lock = await client.getMailboxLock("INBOX");
+  try {
+    await client.messageFlagsAdd({ uid: imapUid }, ["\\Seen"], { uid: true });
+  } finally {
+    lock.release();
+  }
+}
+
+export async function trashMessage(email, password, uid) {
+  const imapUid = parseInt(uid.replace("icloud-", ""), 10);
+  const client = await getPooledClient(email, password);
+  const lock = await client.getMailboxLock("INBOX");
+  try {
+    await client.messageMove({ uid: imapUid }, "Trash", { uid: true });
+  } finally {
+    lock.release();
+  }
+}
+
+export async function batchMarkAsRead(email, password, uids) {
+  const imapUids = uids.map(uid => parseInt(uid.replace("icloud-", ""), 10));
+  const client = await getPooledClient(email, password);
+  const lock = await client.getMailboxLock("INBOX");
+  try {
+    await client.messageFlagsAdd(imapUids.map(String), ["\\Seen"], { uid: true });
+  } finally {
+    lock.release();
+  }
+}
+
+// --- Connection test ---
+
 export async function testConnection(email, password) {
   const client = createClient(email, password);
   try {
