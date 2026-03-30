@@ -80,16 +80,18 @@ export async function fetchCalendar(gmailAccounts) {
 
         const data = await res.json();
         for (const event of data.items || []) {
+          const isAllDay = !event.start?.dateTime && !!event.start?.date;
           const start = event.start?.dateTime || event.start?.date;
           const end = event.end?.dateTime || event.end?.date;
 
           allEvents.push({
-            time: formatTime(start),
-            duration: formatDuration(start, end),
+            time: isAllDay ? "All day" : formatTime(start),
+            duration: isAllDay ? formatAllDayDuration(start, end) : formatDuration(start, end),
             title: event.summary || "(No title)",
             source: account.label,
             color: calColorMap.get(calId) || account.color || "#4285f4",
             flag: null,
+            allDay: isAllDay,
             _start: new Date(start).getTime(),
             _end: new Date(end).getTime(),
           });
@@ -100,9 +102,11 @@ export async function fetchCalendar(gmailAccounts) {
     }
   }
 
-  // Detect conflicts
+  // Detect conflicts (skip all-day events — they don't conflict with timed events)
   for (let i = 0; i < allEvents.length; i++) {
+    if (allEvents[i].allDay) continue;
     for (let j = i + 1; j < allEvents.length; j++) {
+      if (allEvents[j].allDay) continue;
       const a = allEvents[i];
       const b = allEvents[j];
       if (a._start < b._end && b._start < a._end) {
@@ -112,12 +116,15 @@ export async function fetchCalendar(gmailAccounts) {
     }
   }
 
-  // Sort by start time, mark passed events, and strip internal fields
+  // Sort: all-day events first, then by start time. Mark passed events.
   const nowMs = Date.now();
-  allEvents.sort((a, b) => a._start - b._start);
+  allEvents.sort((a, b) => {
+    if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+    return a._start - b._start;
+  });
   return allEvents.map(({ _start, _end, ...event }) => ({
     ...event,
-    passed: _end <= nowMs,
+    passed: event.allDay ? false : _end <= nowMs,
   }));
 }
 
@@ -130,6 +137,13 @@ function formatTime(dateStr) {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+function formatAllDayDuration(startStr, endStr) {
+  if (!startStr || !endStr) return "";
+  const days = Math.round((new Date(endStr) - new Date(startStr)) / 86400000);
+  if (days <= 1) return "";
+  return `${days} days`;
 }
 
 function formatDuration(startStr, endStr) {
