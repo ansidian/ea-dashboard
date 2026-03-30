@@ -45,7 +45,7 @@ Respond with ONLY valid JSON matching this structure:
       "important": [{
         "id": string, "from": string, "fromEmail": string, "subject": string,
         "preview": string (1-2 sentences), "action": string (max 3-4 words: "Reply needed", "FYI", "Pay by Apr 5"),
-        "urgency": string, "date": string, "hasBill": boolean,
+        "urgency": string, "date": string, "read": boolean, "hasBill": boolean,
         "extractedBill": { "payee": string, "amount": number, "due_date": string, "type": string, "category_id": string|null, "category_name": string|null } | null
       }],
       "noise": [{ "from": string, "subject": string }],
@@ -57,6 +57,7 @@ Respond with ONLY valid JSON matching this structure:
 RULES:
 - Group emails by their account_label. Use account_label as "name", account_icon as "icon", account_color as "color".
 - "unread" MUST equal the length of "important" array. Do NOT fabricate emails.
+- "read" MUST be passed through from the input email's "read" field as-is.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.`;
 
 export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext }) {
@@ -85,6 +86,7 @@ export async function callClaude({ emails, calendar, ctmDeadlines, model, emailI
     account_label: e.account_label,
     account_icon: e.account_icon,
     account_color: e.account_color,
+    read: e.read || false,
   }));
 
   // Compact calendar summary for insights (not output — server handles display)

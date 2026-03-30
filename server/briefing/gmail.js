@@ -192,6 +192,7 @@ export async function fetchEmails(account, hoursBack) {
       subject: getHeader("Subject"),
       body_preview: snippet + amounts,
       date: getHeader("Date"),
+      read: !msg.labelIds?.includes("UNREAD"),
     };
   });
 }

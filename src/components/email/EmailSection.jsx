@@ -6,17 +6,19 @@ import EmailBody from "./EmailBody";
 import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
 import { markEmailAsRead, markAllEmailsAsRead } from "../../api";
+import { CheckCheck } from "lucide-react";
 
 // Reusable ghost button — eliminates duplicated inline hover handlers
-function GhostAction({ onClick, disabled, children, className: cls }) {
+function GhostAction({ onClick, disabled, children, className: cls, active }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={cn(
         "text-[10px] font-medium rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 font-[inherit]",
-        "text-muted-foreground/40 bg-white/[0.02] border border-white/[0.06]",
-        "hover:bg-white/[0.05] hover:border-white/10",
+        active
+          ? "text-primary bg-primary/[0.08] border border-primary/20 hover:bg-primary/[0.15] hover:border-primary/30"
+          : "text-muted-foreground/40 bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/10",
         "disabled:opacity-50 disabled:pointer-events-none",
         cls,
       )}
@@ -57,9 +59,11 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
   } = useDashboard();
 
   const emailRowRefs = useRef({});
-  const markedReadRef = useRef(new Set());
+  const [markedRead, setMarkedRead] = useState(() => new Set());
   const [noiseExpanded, setNoiseExpanded] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
+
+  const hasUnread = currentAccount?.important?.some(e => !e.read && !markedRead.has(e.id));
 
   const handleMarkAllRead = async () => {
     const uids = currentAccount.important.map(e => e.id);
@@ -67,7 +71,11 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
     setMarkingAllRead(true);
     try {
       await markAllEmailsAsRead(uids);
-      uids.forEach(id => markedReadRef.current.add(id));
+      setMarkedRead(prev => {
+        const next = new Set(prev);
+        uids.forEach(id => next.add(id));
+        return next;
+      });
     } catch {
       // silently fail
     }
@@ -136,8 +144,9 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                 </GhostAction>
               );
             })()}
-            <GhostAction onClick={handleMarkAllRead} disabled={markingAllRead}>
-              {markingAllRead ? "Marking…" : "Mark all read"}
+            <GhostAction onClick={handleMarkAllRead} disabled={markingAllRead} active={hasUnread}>
+              <CheckCheck size={11} className="inline -mt-px" />
+              {markingAllRead ? " Marking…" : " Mark all read"}
             </GhostAction>
           </div>
         )}
@@ -158,8 +167,8 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                     if (isOpen && !e.target.closest("[data-email-header]")) return;
                     const opening = !isOpen;
                     setSelectedEmail(opening ? email : null);
-                    if (opening && !markedReadRef.current.has(email.id)) {
-                      markedReadRef.current.add(email.id);
+                    if (opening && !markedRead.has(email.id)) {
+                      setMarkedRead(prev => new Set(prev).add(email.id));
                       markEmailAsRead(email.id).catch(() => {});
                     }
                   }}

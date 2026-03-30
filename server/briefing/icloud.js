@@ -73,6 +73,7 @@ export async function fetchEmails(account, password, hoursBack) {
 
     for await (const msg of client.fetch(searchResults, {
       envelope: true,
+      flags: true,
       bodyStructure: true,
       source: { start: 0, maxLength: 16384 },
     })) {
@@ -95,6 +96,7 @@ export async function fetchEmails(account, password, hoursBack) {
         subject: msg.envelope?.subject || "(no subject)",
         body_preview: extractPreview(msg.source),
         date: msgDate ? new Date(msgDate).toISOString() : "",
+        read: msg.flags?.has("\\Seen") || false,
       });
     }
   } finally {
