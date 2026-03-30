@@ -1,24 +1,29 @@
 import { Router } from "express";
-import crypto from "crypto";
-import { createSession, validateSession } from "../middleware/auth.js";
+import bcrypt from "bcrypt";
+import rateLimit from "express-rate-limit";
+import { createSession, validateSession, deleteSession } from "../middleware/auth.js";
 
 const router = Router();
-const EA_PASSWORD = process.env.EA_PASSWORD;
+const EA_PASSWORD_HASH = process.env.EA_PASSWORD_HASH;
 
-router.post("/login", async (req, res) => {
+// Rate limit login: 5 attempts per 15 minutes per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { message: "Too many login attempts, try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.post("/login", loginLimiter, async (req, res) => {
   const { password } = req.body;
 
-  if (!EA_PASSWORD) {
+  if (!EA_PASSWORD_HASH || !password) {
     return res.status(401).json({ message: "Invalid password" });
   }
 
-  // Timing-safe comparison (SEC-02)
-  const passwordBuffer = Buffer.from(password || "", "utf8");
-  const expectedBuffer = Buffer.from(EA_PASSWORD, "utf8");
-  if (
-    passwordBuffer.length !== expectedBuffer.length ||
-    !crypto.timingSafeEqual(passwordBuffer, expectedBuffer)
-  ) {
+  const match = await bcrypt.compare(password, EA_PASSWORD_HASH);
+  if (!match) {
     return res.status(401).json({ message: "Invalid password" });
   }
 
@@ -26,8 +31,9 @@ router.post("/login", async (req, res) => {
   res.cookie("ea_session", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "strict",
     maxAge: 30 * 24 * 60 * 60 * 1000,
+    path: "/",
   });
   res.json({ authenticated: true });
 });
@@ -37,8 +43,12 @@ router.get("/check", async (req, res) => {
   res.json({ authenticated: await validateSession(token) });
 });
 
-router.post("/logout", (req, res) => {
-  res.clearCookie("ea_session");
+router.post("/logout", async (req, res) => {
+  const token = req.cookies?.ea_session;
+  if (token) {
+    await deleteSession(token);
+  }
+  res.clearCookie("ea_session", { path: "/" });
   res.json({ authenticated: false });
 });
 

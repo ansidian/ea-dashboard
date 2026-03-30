@@ -3,6 +3,7 @@ async function apiFetch(path, options = {}) {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      "X-Requested-With": "EADashboard",
       ...options.headers,
     },
   });
@@ -21,7 +22,18 @@ async function apiFetch(path, options = {}) {
 
 // Auth
 export const checkAuth = () => apiFetch("/api/auth/check");
-export const login = (password) => apiFetch("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) });
+export async function login(password) {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Requested-With": "EADashboard" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message || `API error: ${res.status}`);
+  }
+  return res.json();
+}
 export const logout = () => apiFetch("/api/auth/logout", { method: "POST" });
 
 // Briefings

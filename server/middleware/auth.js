@@ -3,8 +3,15 @@ import db from "../db/connection.js";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+export async function deleteSession(token) {
+  await db.execute({
+    sql: "DELETE FROM ea_sessions WHERE token = ?",
+    args: [token],
+  });
+}
+
 export async function createSession() {
-  const token = crypto.randomUUID();
+  const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = Date.now() + SESSION_MAX_AGE_MS;
   await db.execute({
     sql: "INSERT INTO ea_sessions (token, expires_at) VALUES (?, ?)",
