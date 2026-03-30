@@ -26,7 +26,7 @@ function useEmailBody(email) {
     return () => {
       cancelled = true;
     };
-  }, [emailKey]);
+  }, [emailKey, email.fullBody]);
 
   if (email.fullBody) return { body: email.fullBody, loading: false };
   // If result is for a different key, we're loading
@@ -45,7 +45,7 @@ export default function EmailBody({ email, model, onLoaded }) {
 
       setTimeout(() => onLoaded?.(), 75);
     }
-  }, [loadingBody]);
+  }, [loadingBody, onLoaded]);
 
   return (
     <div
