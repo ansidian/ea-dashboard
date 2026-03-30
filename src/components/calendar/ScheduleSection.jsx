@@ -37,7 +37,7 @@ export default function ScheduleSection({ calendar, loaded, delay, style, classN
   // - Before the first non-passed event (between passed and upcoming)
   // - At the top if no events have passed yet
   // - At the bottom if all events have passed
-  const firstUpcoming = calendar?.findIndex(e => !e.passed) ?? -1;
+  const firstUpcoming = calendar?.findIndex(e => !e.passed && !e.allDay) ?? -1;
   const nowPosition = calendar?.length > 0
     ? (firstUpcoming >= 0 ? firstUpcoming : calendar.length)
     : -1;
