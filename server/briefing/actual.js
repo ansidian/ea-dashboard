@@ -353,7 +353,7 @@ export function sendBill(billData, userId) {
           date: billData.due_date,
           amount: isIncome ? amountCents : -amountCents,
           payee_name: billData.payee,
-          notes: `Auto-detected ${billData.type} from EA briefing`,
+          notes: billData.notes || `Auto-detected ${billData.type} from EA briefing`,
         };
         if (billData.category_id) txn.category = billData.category_id;
         await actualApi.addTransactions(targetAccount.id, [txn]);

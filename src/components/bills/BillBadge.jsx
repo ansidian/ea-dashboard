@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,20 @@ const typeHints = {
   expense: "Creates one-time transaction",
   income: "Creates one-time transaction",
 };
+
+const KNOWN_CC_FEES = {
+  "socalgas": 1.50,
+  "sce": 1.65,
+};
+
+function detectFee(payeeName) {
+  if (!payeeName) return null;
+  const lower = payeeName.toLowerCase();
+  for (const [key, fee] of Object.entries(KNOWN_CC_FEES)) {
+    if (lower.includes(key)) return { vendor: key, fee };
+  }
+  return null;
+}
 
 function formatModelName(model) {
   if (!model) return "Claude";
@@ -48,8 +62,30 @@ export default function BillBadge({ bill, model }) {
   const [editFromAccount, setEditFromAccount] = useState("");
   const [editToAccount, setEditToAccount] = useState("");
   const [actualReady, setActualReady] = useState(!!_metadataCache);
+  const [feeOverride, setFeeOverride] = useState(null); // null = auto, true/false = manual
+  const [customFee, setCustomFee] = useState("");
 
   const isTransfer = editType === "transfer";
+
+  // detect CC fee from Actual payee name or original email payee
+  const resolvedPayeeName = useMemo(() => {
+    if (payees.length && editPayee) {
+      const match = payees.find(p => p.id === editPayee);
+      if (match) return match.name;
+    }
+    return editPayee;
+  }, [editPayee, payees]);
+
+  const detectedFee = useMemo(() =>
+    detectFee(resolvedPayeeName) || detectFee(bill.payee),
+    [resolvedPayeeName, bill.payee]
+  );
+
+  const feeEnabled = feeOverride !== null ? feeOverride : !!detectedFee;
+  const activeFee = detectedFee ? String(detectedFee.fee) : customFee;
+  const parsedFee = feeEnabled ? (parseFloat(activeFee) || 0) : 0;
+  const baseAmount = parseFloat(editAmount) || 0;
+  const totalAmount = baseAmount + parsedFee;
 
   useEffect(() => {
     ensureMetadataLoaded((data) => {
@@ -85,10 +121,13 @@ export default function BillBadge({ bill, model }) {
     const edited = {
       ...bill,
       payee: payees.find(p => p.id === editPayee)?.name || editPayee,
-      amount: parseFloat(editAmount) || 0,
+      amount: totalAmount,
       due_date: editDue,
       type: editType,
     };
+    if (parsedFee > 0) {
+      edited.notes = `$${baseAmount.toFixed(2)} + $${parsedFee.toFixed(2)} CC fee`;
+    }
     if (isTransfer) {
       edited.from_account_id = editFromAccount;
       edited.to_account_id = editToAccount;
@@ -201,7 +240,51 @@ export default function BillBadge({ bill, model }) {
               )}
             </div>
           </div>
-          <div className="mt-3">
+          {/* CC fee row */}
+          <div className="flex items-center gap-2 mt-3 animate-[fadeIn_0.15s_ease]">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {feeEnabled && parsedFee > 0 ? (
+                <span className="text-[11px] text-muted-foreground/60">
+                  ${baseAmount.toFixed(2)} + ${parsedFee.toFixed(2)} CC fee ={" "}
+                  <span className="text-[#cba6da] font-medium">${totalAmount.toFixed(2)}</span>
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground/40">CC processing fee</span>
+              )}
+              {feeEnabled && !detectedFee && (
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground/40 pointer-events-none">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={customFee}
+                    onChange={e => setCustomFee(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    placeholder="0.00"
+                    className="w-[72px] pl-[18px] pr-2 py-0.5 rounded-md text-[11px] font-medium bg-input-bg border border-white/[0.08] text-foreground outline-none focus:border-[#cba6da]/40"
+                  />
+                </div>
+              )}
+            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); setFeeOverride(!feeEnabled); }}
+              className="relative w-[32px] h-[16px] rounded-full transition-colors duration-200 flex-shrink-0 cursor-pointer"
+              style={{
+                background: feeEnabled ? "rgba(203,166,218,0.35)" : "rgba(255,255,255,0.08)",
+              }}
+              aria-label="Toggle CC fee"
+            >
+              <span
+                className="absolute top-[2px] w-[12px] h-[12px] rounded-full transition-all duration-200"
+                style={{
+                  left: feeEnabled ? "16px" : "3px",
+                  background: feeEnabled ? "#cba6da" : "rgba(205,214,244,0.3)",
+                }}
+              />
+            </button>
+          </div>
+
+          <div className="mt-2">
             {state === "error" && <div className="text-[11px] text-[#f38ba8] mb-1.5">Failed to send — check fields and try again.</div>}
             <Button
               onClick={handleSend}
