@@ -17,7 +17,10 @@ export default function SearchableDropdown({ options, value, onChange, placehold
   const selected = options.find(o => o.id === value);
   const displayName = selected?.name || (allowCreate && value && !selected ? value : null);
 
-  const exactMatch = search && options.some(o => o.name.toLowerCase() === search.toLowerCase());
+  const filtered = allowCreate && search
+    ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()))
+    : options;
+  const exactMatch = search && filtered.some(o => o.name.toLowerCase() === search.toLowerCase());
   const showCreateOption = allowCreate && search.trim() && !exactMatch;
 
   // Auto-select first match on type (skip if allowCreate — user may be typing a new name)
@@ -73,26 +76,22 @@ export default function SearchableDropdown({ options, value, onChange, placehold
               onValueChange={setSearch}
               placeholder={allowCreate ? "Search or type new..." : "Search..."}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && showCreateOption) {
+                if (e.key === "Enter") {
                   e.preventDefault();
-                  handleCreate();
+                  if (filtered.length > 0) {
+                    onChange(filtered[0].id);
+                    setOpen(false);
+                    setSearch("");
+                  } else if (showCreateOption) {
+                    handleCreate();
+                  }
                 }
               }}
             />
             <CommandList className="max-h-[180px]">
-              {showCreateOption && (
-                <CommandGroup>
-                  <CommandItem
-                    onSelect={handleCreate}
-                    className="text-primary"
-                  >
-                    <span className="text-sm">+</span> Create &ldquo;{search.trim()}&rdquo;
-                  </CommandItem>
-                </CommandGroup>
-              )}
               <CommandEmpty className="py-2 text-xs text-muted-foreground/50">No matches</CommandEmpty>
               <CommandGroup>
-                {options.map(o => (
+                {filtered.map(o => (
                   <CommandItem
                     key={o.id}
                     value={o.name}
@@ -104,6 +103,16 @@ export default function SearchableDropdown({ options, value, onChange, placehold
                   </CommandItem>
                 ))}
               </CommandGroup>
+              {showCreateOption && (
+                <CommandGroup>
+                  <CommandItem
+                    onSelect={handleCreate}
+                    className="text-primary"
+                  >
+                    <span className="text-sm">+</span> Create &ldquo;{search.trim()}&rdquo;
+                  </CommandItem>
+                </CommandGroup>
+              )}
             </CommandList>
           </Command>
         </PopoverContent>
