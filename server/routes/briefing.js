@@ -13,6 +13,30 @@ const router = Router();
 router.use(requireAuth);
 
 
+// In dev, enrich mock bills with real Actual Budget category IDs so bill pay works
+async function enrichMockWithActual(briefing, userId) {
+  try {
+    const groups = await getActualCategories(userId);
+    const catMap = new Map();
+    for (const g of groups) {
+      for (const c of g.categories || []) {
+        catMap.set(c.name.toLowerCase(), c.id);
+      }
+    }
+    for (const acct of briefing.emails?.accounts || []) {
+      for (const email of acct.important || []) {
+        if (email.extractedBill?.category_name) {
+          const id = catMap.get(email.extractedBill.category_name.toLowerCase());
+          if (id) email.extractedBill.category_id = id;
+        }
+      }
+    }
+  } catch {
+    // Actual Budget not configured — leave mock data as-is
+  }
+  return briefing;
+}
+
 // Merge current account display preferences (label, color, icon) into a briefing object.
 // This ensures user changes are reflected immediately without regenerating.
 async function mergeAccountPrefs(briefing, userId) {
@@ -96,14 +120,16 @@ router.get("/latest", async (req, res) => {
     // ?mock=1 forces mock briefing in dev (useful when real briefings exist)
     if (req.query.mock && process.env.NODE_ENV !== "production") {
       seedEmbeddings().catch(err => console.warn("[EA] Dev embedding seed failed:", err.message));
-      return res.json({ id: 0, status: "ready", briefing: generateMockBriefing(), generated_at: new Date().toISOString(), generation_time_ms: 0 });
+      const mock = await enrichMockWithActual(generateMockBriefing(), userId);
+      return res.json({ id: 0, status: "ready", briefing: mock, generated_at: new Date().toISOString(), generation_time_ms: 0 });
     }
 
     if (!result.rows.length) {
       // In dev, return a dynamic mock briefing so the UI is always usable
       if (process.env.NODE_ENV !== "production") {
         seedEmbeddings().catch(err => console.warn("[EA] Dev embedding seed failed:", err.message));
-        return res.json({ id: 0, status: "ready", briefing: generateMockBriefing(), generated_at: new Date().toISOString(), generation_time_ms: 0 });
+        const mock = await enrichMockWithActual(generateMockBriefing(), userId);
+        return res.json({ id: 0, status: "ready", briefing: mock, generated_at: new Date().toISOString(), generation_time_ms: 0 });
       }
       return res.json({ briefing: null });
     }
@@ -374,7 +400,8 @@ router.get("/:id", async (req, res) => {
         const mockHistory = generateMockHistory();
         const match = mockHistory.find(h => h.id === Number(id));
         if (match) {
-          return res.json({ id: match.id, status: "ready", briefing: generateMockBriefing(), generated_at: match.generated_at, generation_time_ms: match.generation_time_ms });
+          const mock = await enrichMockWithActual(generateMockBriefing(), userId);
+          return res.json({ id: match.id, status: "ready", briefing: mock, generated_at: match.generated_at, generation_time_ms: match.generation_time_ms });
         }
       }
       return res.status(404).json({ message: "Briefing not found" });
