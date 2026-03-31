@@ -117,20 +117,34 @@ ${ctmSummary}
 
   console.log(`[EA] Calling Claude API with model: ${selectedModel}`);
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: selectedModel,
-      max_tokens: 16384,
-      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: userMessage }],
-    }),
+  const body = JSON.stringify({
+    model: selectedModel,
+    max_tokens: 16384,
+    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: userMessage }],
   });
+
+  const maxRetries = 3;
+  let res;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body,
+    });
+
+    if (res.ok || (res.status !== 429 && res.status !== 529)) break;
+
+    if (attempt < maxRetries) {
+      const delay = Math.min(2000 * 2 ** attempt, 30000);
+      console.warn(`[EA] Claude API returned ${res.status}, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
 
   if (!res.ok) {
     const text = await res.text();
