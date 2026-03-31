@@ -1,3 +1,5 @@
+import { getCategories } from "../briefing/actual.js";
+
 // Dynamic mock briefing for local dev — always reflects current date/time
 // and matches the latest briefing JSON shape expected by the frontend.
 
@@ -230,6 +232,31 @@ export function generateMockBriefing() {
     dataUpdatedAt: now.toISOString(),
     aiGeneratedAt: now.toISOString(),
   };
+}
+
+// Generate mock briefing enriched with real Actual Budget category IDs
+export async function generateEnrichedMock(userId) {
+  const briefing = generateMockBriefing();
+  try {
+    const groups = await getCategories(userId);
+    const catMap = new Map();
+    for (const g of groups) {
+      for (const c of g.categories || []) {
+        catMap.set(c.name.toLowerCase(), c.id);
+      }
+    }
+    for (const acct of briefing.emails?.accounts || []) {
+      for (const email of acct.important || []) {
+        if (email.extractedBill?.category_name) {
+          const id = catMap.get(email.extractedBill.category_name.toLowerCase());
+          if (id) email.extractedBill.category_id = id;
+        }
+      }
+    }
+  } catch {
+    // Actual Budget not configured — leave mock data as-is
+  }
+  return briefing;
 }
 
 // Mock history entries for dev — simulates several past briefings
