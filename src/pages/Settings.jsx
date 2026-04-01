@@ -2,12 +2,15 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   getAccounts, getSettings, updateSettings,
-  getGmailAuthUrl, addICloudAccount, removeAccount, updateAccount,
+  getGmailAuthUrl, addICloudAccount, removeAccount, updateAccount, reorderAccounts,
   testActualBudget, geocodeLocation, getModels, skipSchedule,
 } from "../api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 function SettingsCard({ title, children }) {
   return (
@@ -27,6 +30,15 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
   const [color, setColor] = useState(acc.color || "#cba6da");
   const [icon, setIcon] = useState(acc.icon || (acc.type === "icloud" ? "🍎" : "📧"));
   const [saving, setSaving] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: acc.id, disabled: editing });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : "auto",
+    cursor: editing ? "default" : isDragging ? "grabbing" : "grab",
+  };
 
   async function handleSave() {
     setSaving(true);
@@ -37,7 +49,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
   }
 
   return (
-    <div className="bg-surface rounded-lg border border-border overflow-hidden">
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="bg-surface rounded-lg border border-border overflow-hidden">
       <div className="flex items-center gap-3 px-3.5 py-2.5">
         <span className="text-base cursor-pointer" onClick={() => setEditing(!editing)} title="Edit">{icon}</span>
         <div className="flex-1 min-w-0">
@@ -138,6 +150,17 @@ export default function Settings() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const modelDropdownRef = useRef(null);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  async function handleDragEnd(event) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = accounts.findIndex(a => a.id === active.id);
+    const newIndex = accounts.findIndex(a => a.id === over.id);
+    const reordered = arrayMove(accounts, oldIndex, newIndex);
+    setAccounts(reordered);
+    await reorderAccounts(reordered.map(a => a.id));
+  }
 
   useEffect(() => {
     if (!modelDropdownOpen) return;
@@ -288,11 +311,15 @@ export default function Settings() {
       {/* Connected Accounts */}
       <SettingsCard title="Connected Accounts">
         {accounts.length > 0 ? (
-          <div className="flex flex-col gap-2 mb-4">
-            {accounts.map(acc => (
-              <AccountRow key={acc.id} acc={acc} accounts={accounts} setAccounts={setAccounts} onRemove={handleRemoveAccount} />
-            ))}
-          </div>
+          <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={accounts.map(a => a.id)} strategy={verticalListSortingStrategy}>
+              <div className="flex flex-col gap-2 mb-4">
+                {accounts.map(acc => (
+                  <AccountRow key={acc.id} acc={acc} accounts={accounts} setAccounts={setAccounts} onRemove={handleRemoveAccount} />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         ) : (
           <p className="text-[13px] text-muted-foreground mb-4">No accounts connected yet.</p>
         )}

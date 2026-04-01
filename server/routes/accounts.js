@@ -102,7 +102,7 @@ router.get("/accounts", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const result = await db.execute({
-      sql: "SELECT id, type, email, label, color, icon, calendar_enabled, created_at FROM ea_accounts WHERE user_id = ?",
+      sql: "SELECT id, type, email, label, color, icon, calendar_enabled, sort_order, created_at FROM ea_accounts WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC",
       args: [userId],
     });
     res.json(result.rows);
@@ -233,6 +233,24 @@ router.delete("/accounts/:id", async (req, res) => {
   } catch (err) {
     console.error("Error deleting account:", err);
     res.status(500).json({ message: "Failed to delete account" });
+  }
+});
+
+router.patch("/accounts/reorder", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { order } = req.body; // array of account IDs in desired order
+  if (!Array.isArray(order) || !order.length)
+    return res.status(400).json({ message: "order array required" });
+  try {
+    const stmts = order.map((id, i) => ({
+      sql: "UPDATE ea_accounts SET sort_order = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+      args: [i, id, userId],
+    }));
+    await db.batch(stmts);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error reordering accounts:", err);
+    res.status(500).json({ message: "Failed to reorder accounts" });
   }
 });
 

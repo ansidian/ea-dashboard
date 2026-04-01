@@ -1,0 +1,1 @@
+ALTER TABLE ea_accounts ADD COLUMN sort_order INTEGER DEFAULT 0;
