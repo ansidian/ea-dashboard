@@ -107,7 +107,7 @@ export function generateMockBriefing() {
           unread: 4,
           important: [
             {
-              id: "mock-work-001",
+              id: "gmail-mock-18f0a1b2c3d4e5f6",
               from: "Sarah Chen",
               fromEmail: "sarah.chen@company.com",
               subject: "Q2 Report — Need Your Section by Tomorrow",
@@ -120,7 +120,7 @@ export function generateMockBriefing() {
               extractedBill: null,
             },
             {
-              id: "mock-work-002",
+              id: "gmail-mock-18f0a1b2c3d4e5f7",
               from: "SoFi",
               fromEmail: "no-reply@o.sofi.org",
               subject: "Your SoFi Credit Card autopay is scheduled for " + new Date(Date.now() + 10 * 86400000).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
@@ -133,7 +133,7 @@ export function generateMockBriefing() {
               extractedBill: { payee: "SoFi", amount: 0, due_date: relativeDate(10), type: "transfer", category_id: null, category_name: null },
             },
             {
-              id: "mock-work-003",
+              id: "gmail-mock-18f0a1b2c3d4e5f8",
               from: "Amazon.com",
               fromEmail: "auto-confirm@amazon.com",
               subject: 'Ordered: "Clorox ToiletWand..." and 1 more item',
@@ -146,7 +146,7 @@ export function generateMockBriefing() {
               extractedBill: { payee: "Amazon", amount: 21.55, due_date: relativeDate(0), type: "expense", category_id: null, category_name: "Shopping" },
             },
             {
-              id: "mock-work-004",
+              id: "gmail-mock-18f0a1b2c3d4e5f9",
               from: "IT Department",
               fromEmail: "it@company.com",
               subject: "Scheduled Maintenance — Saturday 2 AM",

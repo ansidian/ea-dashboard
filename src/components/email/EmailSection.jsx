@@ -8,6 +8,12 @@ import { useDashboard } from "../../context/DashboardContext";
 import { markEmailAsRead, markAllEmailsAsRead } from "../../api";
 import { CheckCheck } from "lucide-react";
 
+const getGmailUrl = (id) => {
+  if (!id?.startsWith("gmail-")) return null;
+  const messageId = id.split("-").slice(2).join("-");
+  return `https://mail.google.com/mail/u/0/#inbox/${messageId}`;
+};
+
 // Reusable ghost button — eliminates duplicated inline hover handlers
 function GhostAction({ onClick, disabled, children, className: cls, active }) {
   return (
@@ -265,6 +271,20 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                       >
                         {email.action}
                       </div>
+                    )}
+                    {getGmailUrl(email.id) && (
+                      <a
+                        href={getGmailUrl(email.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Open in Gmail"
+                        className="opacity-0 group-hover:opacity-100 transition-all duration-150 text-muted-foreground/20 hover:text-muted-foreground/60 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                        </svg>
+                      </a>
                     )}
                     <MotionChevron isOpen={isOpen} className="text-muted-foreground/40" />
                   </div>

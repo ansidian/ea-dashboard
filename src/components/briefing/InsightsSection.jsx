@@ -12,7 +12,7 @@ export default function InsightsSection({
 
   return (
     <Section
-      title="Claude's Take"
+      title="Claude's Insights"
       delay={delay}
       loaded={loaded}
       style={style}
