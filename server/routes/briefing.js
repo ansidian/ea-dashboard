@@ -34,6 +34,34 @@ async function mergeAccountPrefs(briefing, userId) {
   return briefing;
 }
 
+// Persist read status into the stored briefing so reloads reflect it
+async function markEmailsReadInBriefing(userId, uids) {
+  const uidSet = new Set(Array.isArray(uids) ? uids : [uids]);
+  const latest = await db.execute({
+    sql: `SELECT id, briefing_json FROM ea_briefings
+          WHERE user_id = ? AND status = 'ready'
+          ORDER BY generated_at DESC LIMIT 1`,
+    args: [userId],
+  });
+  if (!latest.rows.length) return;
+  const briefing = JSON.parse(latest.rows[0].briefing_json);
+  let changed = false;
+  for (const acct of briefing.emails?.accounts || []) {
+    for (const email of acct.important) {
+      if (uidSet.has(email.id) && !email.read) {
+        email.read = true;
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    await db.execute({
+      sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+      args: [JSON.stringify(briefing), latest.rows[0].id],
+    });
+  }
+}
+
 router.post("/generate", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
@@ -271,6 +299,7 @@ router.post("/email/:uid/mark-read", async (req, res) => {
     } else {
       await gmailMarkAsRead(found.account, uid);
     }
+    await markEmailsReadInBriefing(userId, uid);
     res.json({ ok: true });
   } catch (err) {
     console.error("Error marking email as read:", err);
@@ -339,6 +368,7 @@ router.post("/email/mark-all-read", async (req, res) => {
     }
 
     await Promise.all(ops);
+    await markEmailsReadInBriefing(userId, uids);
     res.json({ ok: true });
   } catch (err) {
     console.error("Error marking all emails as read:", err);
