@@ -108,6 +108,7 @@ export function generateMockBriefing() {
           important: [
             {
               id: "gmail-mock-18f0a1b2c3d4e5f6",
+              message_id: "<mock-001@company.com>",
               from: "Sarah Chen",
               fromEmail: "sarah.chen@company.com",
               subject: "Q2 Report — Need Your Section by Tomorrow",
@@ -121,6 +122,7 @@ export function generateMockBriefing() {
             },
             {
               id: "gmail-mock-18f0a1b2c3d4e5f7",
+              message_id: "<mock-002@sofi.org>",
               from: "SoFi",
               fromEmail: "no-reply@o.sofi.org",
               subject: "Your SoFi Credit Card autopay is scheduled for " + new Date(Date.now() + 10 * 86400000).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
@@ -134,6 +136,7 @@ export function generateMockBriefing() {
             },
             {
               id: "gmail-mock-18f0a1b2c3d4e5f8",
+              message_id: "<mock-003@amazon.com>",
               from: "Amazon.com",
               fromEmail: "auto-confirm@amazon.com",
               subject: 'Ordered: "Clorox ToiletWand..." and 1 more item',
@@ -147,6 +150,7 @@ export function generateMockBriefing() {
             },
             {
               id: "gmail-mock-18f0a1b2c3d4e5f9",
+              message_id: "<mock-004@company.com>",
               from: "IT Department",
               fromEmail: "it@company.com",
               subject: "Scheduled Maintenance — Saturday 2 AM",

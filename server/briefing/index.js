@@ -173,6 +173,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
       label: e.account_label,
       icon: e.account_icon,
       color: e.account_color,
+      message_id: e.message_id,
     });
   }
 
@@ -182,6 +183,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
     for (const email of acct.important || []) {
       const id = email.id || email.uid;
       const original = emailLookup.get(id);
+      if (original?.message_id) email.message_id = original.message_id;
       allTriaged.push({ email, accountLabel: original?.label || acct.name });
     }
   }

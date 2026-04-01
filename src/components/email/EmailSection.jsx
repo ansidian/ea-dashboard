@@ -8,10 +8,9 @@ import { useDashboard } from "../../context/DashboardContext";
 import { markEmailAsRead, markAllEmailsAsRead } from "../../api";
 import { CheckCheck } from "lucide-react";
 
-const getGmailUrl = (id) => {
-  if (!id?.startsWith("gmail-")) return null;
-  const messageId = id.split("-").slice(2).join("-");
-  return `https://mail.google.com/mail/u/0/#inbox/${messageId}`;
+const getGmailUrl = (email) => {
+  if (!email.message_id) return null;
+  return `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(email.message_id)}`;
 };
 
 // Reusable ghost button — eliminates duplicated inline hover handlers
@@ -272,9 +271,9 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                         {email.action}
                       </div>
                     )}
-                    {getGmailUrl(email.id) && (
+                    {getGmailUrl(email) && (
                       <a
-                        href={getGmailUrl(email.id)}
+                        href={getGmailUrl(email)}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
