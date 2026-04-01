@@ -49,20 +49,7 @@ app.use("/api/search", searchRoutes);
 
 // Serve static frontend in production (behind auth)
 if (process.env.NODE_ENV === "production") {
-  const staticAuth = async (req, res, next) => {
-    // Allow the login page assets to load without auth
-    if (req.path === "/" || req.path === "/login") return next();
-    const token = req.cookies?.ea_session;
-    if (await validateSession(token)) return next();
-    // Unauthenticated requests for non-page assets get 401
-    if (req.path.match(/\.(js|css|map|json|svg|png|ico|woff2?)$/)) {
-      return res.status(401).end();
-    }
-    // Everything else redirects to login page
-    return next();
-  };
-
-  app.use(staticAuth);
+  // Static assets are public — they're just the built frontend bundle
   app.use(express.static(join(__dirname, "../dist")));
 
   // SPA fallback — serve index.html for all non-API routes
