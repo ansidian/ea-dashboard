@@ -35,10 +35,17 @@ async function getPooledClient(email, password) {
   await client.connect();
   pool.set(email, { client, lastUsed: Date.now() });
 
-  // Auto-cleanup on unexpected close
+  // Auto-cleanup on unexpected close or error
   client.on("close", () => {
     const entry = pool.get(email);
     if (entry?.client === client) pool.delete(email);
+  });
+
+  client.on("error", (err) => {
+    console.warn(`[iCloud] Connection error for ${email}: ${err.message}`);
+    const entry = pool.get(email);
+    if (entry?.client === client) pool.delete(email);
+    client.close().catch(() => {});
   });
 
   return client;
