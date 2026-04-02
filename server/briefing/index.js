@@ -6,7 +6,7 @@ import { fetchCalendar } from "./calendar.js";
 import { fetchWeather } from "./weather.js";
 import { fetchCTMDeadlines } from "./ctm-events.js";
 import { callClaude } from "./claude.js";
-import { getCategories } from "./actual.js";
+import { getCategories, getUpcomingBills } from "./actual.js";
 import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../embeddings/index.js";
 
 // Shared: load accounts + settings, return them
@@ -417,12 +417,16 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing, dismissedIds }, categories] = await Promise.all([
+    const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing, dismissedIds }, categories, upcomingBills] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
       getCategories(userId).catch((err) => {
         console.error("Actual Budget categories fetch failed:", err.message);
+        return [];
+      }),
+      getUpcomingBills(userId).catch((err) => {
+        console.error("Actual Budget upcoming bills fetch failed:", err.message);
         return [];
       }),
     ]);
@@ -484,7 +488,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     if (newEmails.length > 0 && newEmails.length < emails.length && prevBriefing) {
       await updateProgress(briefingId, `Sending ${newEmails.length} new email${newEmails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Delta generation: ${newEmails.length} new emails (${emails.length - newEmails.length} previously triaged)`);
-      briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext });
+      briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills });
 
       // Merge previous triage with new triage using pure function
       const allEmailIds = new Set(emails.map(e => e.id || e.uid));
@@ -494,7 +498,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       // Full generation: all emails are new or no previous triage
       await updateProgress(briefingId, `Sending ${emails.length} email${emails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Full generation: ${emails.length} emails`);
-      briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext });
+      briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills });
       // Tag all emails with seenCount 1
       for (const acct of briefingJson.emails?.accounts || []) {
         acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
@@ -506,6 +510,9 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const uidById = new Map(emails.map(e => [e.id || e.uid, e.uid]));
     for (const acct of briefingJson.emails?.accounts || []) {
       for (const e of acct.important) {
+        if (!e.uid && uidById.has(e.id)) e.uid = uidById.get(e.id);
+      }
+      for (const e of acct.noise || []) {
         if (!e.uid && uidById.has(e.id)) e.uid = uidById.get(e.id);
       }
     }

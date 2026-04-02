@@ -19,12 +19,17 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
    FYI: real account activity, shipping updates, appointment confirmations, statements ready, actual transactions/bills owed.
    ACTIONABLE: requires a response or decision from the user.
    Emails with dollar amounts + merchants are "fyi" ONLY if they represent a real transaction or bill — not ads or promotional offers.
+   URGENT FLAGS: For any important email with a hard deadline or time-sensitive date (registration closes, payment due, RSVP by, offer expires, event date with registration cutoff), set urgentFlag: { "label": "Deadline Apr 22", "date": "2026-04-22" }. The label should be concise (2-4 words) and include the date. Only use for real deadlines with specific dates — not marketing urgency ("limited time!", "act now!"). If an email has both an event date and a registration deadline, use the registration deadline.
 
 2. DETECT TRANSACTIONS: Extract financial data from emails about payments, purchases, or subscriptions.
    Receipts (Apple, Google, app stores), order confirmations (Amazon, retailers), autopay notices (credit cards, loans), subscription renewals, and payment reminders are ALL bills — set hasBill: true.
    Extract: payee (short name), amount (number — REQUIRED, look in body_preview if not in subject), due_date (YYYY-MM-DD), type: "transfer" (credit card payments), "bill" (recurring services), "expense" (one-off purchases), "income" (refunds/deposits).
    If the email clearly describes a payment/purchase but the exact amount isn't visible, still set hasBill: true and set amount to 0 — the user can fill it in.
    If budget categories are provided, also set category_id and category_name to the best matching category. Only set these if confident in the match.
+   SCHEDULED PAYMENT CROSS-REFERENCE: When Scheduled Payments are provided, compare detected bills against them.
+   - Confident 1:1 match (same payee + similar amount within 10% + same week): suppress the bill entirely — do NOT set hasBill or extractedBill. The email is triaged normally but the bill is omitted since the user already has it scheduled.
+   - Partial match / discrepancy (payee matches but amount or date differs significantly): keep hasBill: true and note the discrepancy in the action field (e.g., "Xfinity $95.99 — scheduled $89.99").
+   - No match: treat as new bill detection, same as usual.
 
 3. GENERATE INSIGHTS (2-4 items): Connect dots across emails, calendar, and deadlines. Be specific and actionable.
    Calendar events with "passed": true already ended — skip them. Focus on what's ahead.
@@ -46,9 +51,10 @@ Respond with ONLY valid JSON matching this structure:
         "id": string, "from": string, "fromEmail": string, "subject": string,
         "preview": string (1-2 sentences), "action": string (max 3-4 words: "Reply needed", "FYI", "Pay by Apr 5"),
         "urgency": string, "date": string, "read": boolean, "hasBill": boolean,
-        "extractedBill": { "payee": string, "amount": number, "due_date": string, "type": string, "category_id": string|null, "category_name": string|null } | null
+        "extractedBill": { "payee": string, "amount": number, "due_date": string, "type": string, "category_id": string|null, "category_name": string|null } | null,
+        "urgentFlag": { "label": string, "date": string } | null
       }],
-      "noise": [{ "from": string, "subject": string }],
+      "noise": [{ "id": string, "from": string, "subject": string }],
       "noise_count": number
     }]
   }
@@ -60,7 +66,7 @@ RULES:
 - "read" MUST be passed through from the input email's "read" field as-is.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.`;
 
-export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext }) {
+export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills }) {
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
 
   const selectedModel = model || PREFERRED_MODELS[0];
@@ -104,6 +110,11 @@ export async function callClaude({ emails, calendar, ctmDeadlines, model, emailI
     ? `\n\n## Budget Categories (for bill detection — match extractedBill to closest category)\n${categories.flatMap(g => g.categories.map(c => `${c.id}:${c.name}`)).join(", ")}`
     : "";
 
+  // Scheduled payments for cross-referencing detected bills
+  const scheduledNote = upcomingBills?.length
+    ? `\n\n## Scheduled Payments (from budget app — cross-reference with detected bills)\n${upcomingBills.map(b => `${b.payee} $${b.amount.toFixed(2)} due ${b.next_date}`).join("; ")}`
+    : "";
+
   const userMessage = `## Emails
 ${JSON.stringify(trimmedEmails)}
 
@@ -113,7 +124,7 @@ ${calendarSummary || "No events"}
 ## Academic Deadlines (for insights only — do NOT include in output)
 ${ctmSummary}
 
-## Now: ${now}${interestsNote}${categoriesNote}${historicalContext ? `\n\n## Historical Context (from your previous briefings — use for trends, comparisons, continuity)\n${historicalContext}` : ""}`;
+## Now: ${now}${interestsNote}${categoriesNote}${scheduledNote}${historicalContext ? `\n\n## Historical Context (from your previous briefings — use for trends, comparisons, continuity)\n${historicalContext}` : ""}`;
 
   console.log(`[EA] Calling Claude API with model: ${selectedModel}`);
 
