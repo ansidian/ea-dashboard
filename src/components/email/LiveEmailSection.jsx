@@ -25,7 +25,7 @@ function formatRelativeTime(dateStr) {
 }
 
 function getTimestampColor(dateStr) {
-  if (!dateStr) return "inherit";
+  if (!dateStr) return undefined;
   const mins = (Date.now() - new Date(dateStr).getTime()) / 60000;
   if (mins < 30) return "rgba(99,102,241,0.6)";
   if (mins < 120) return undefined;
@@ -133,6 +133,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
           const isOpen = selectedId === email.uid;
           const isBillPayOpen = billPayId === email.uid;
           const isRead = email.read || markedRead.has(email.uid);
+          const tsColor = getTimestampColor(email.date);
           return (
             <MotionItem key={email.uid}>
               <div
@@ -223,7 +224,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                   <div className="flex items-center gap-2 shrink-0">
                     <span
                       className="text-[10px] text-muted-foreground/30 tabular-nums"
-                      style={getTimestampColor(email.date) ? { color: getTimestampColor(email.date) } : undefined}
+                      style={tsColor ? { color: tsColor } : undefined}
                     >
                       {formatRelativeTime(email.date)}
                     </span>
