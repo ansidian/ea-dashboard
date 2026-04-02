@@ -24,6 +24,14 @@ function formatRelativeTime(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function getTimestampColor(dateStr) {
+  if (!dateStr) return "inherit";
+  const mins = (Date.now() - new Date(dateStr).getTime()) / 60000;
+  if (mins < 30) return "rgba(99,102,241,0.6)";
+  if (mins < 120) return undefined;
+  return "rgba(245,158,11,0.6)";
+}
+
 function getSectionTitle(briefingGeneratedAt) {
   if (!briefingGeneratedAt) return "Since This Morning";
   const hour = new Date(briefingGeneratedAt + "Z").toLocaleString("en-US", {
@@ -213,7 +221,10 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] text-muted-foreground/30 tabular-nums">
+                    <span
+                      className="text-[10px] text-muted-foreground/30 tabular-nums"
+                      style={getTimestampColor(email.date) ? { color: getTimestampColor(email.date) } : undefined}
+                    >
                       {formatRelativeTime(email.date)}
                     </span>
                     {/* Bill pay toggle */}
