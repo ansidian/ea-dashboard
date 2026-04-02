@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 import EmailBody from "./EmailBody";
@@ -42,6 +42,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
   const [markedRead, setMarkedRead] = useState(() => new Set());
   const [billPayId, setBillPayId] = useState(null);
   const [markingAllRead, setMarkingAllRead] = useState(false);
+  const emailRowRefs = useRef({});
 
   const hasUnread = emails?.some(e => !e.read && !markedRead.has(e.uid));
 
@@ -126,6 +127,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
           return (
             <MotionItem key={email.uid}>
               <div
+                ref={(el) => { emailRowRefs.current[email.uid] = el; }}
                 role="button"
                 tabIndex={0}
                 onClick={(e) => {
@@ -242,7 +244,20 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                 {/* Email body */}
                 <MotionExpand isOpen={isOpen}>
                   <div onClick={(e) => e.stopPropagation()}>
-                    <EmailBody email={email} model={null} onDismiss={() => {}} onLoaded={() => {}} />
+                    <EmailBody
+                      email={email}
+                      model={null}
+                      onDismiss={() => {}}
+                      onLoaded={() => {
+                        const row = emailRowRefs.current[email.uid];
+                        if (!row) return;
+                        const rect = row.getBoundingClientRect();
+                        // only scroll if the bottom of the expanded row is below the viewport
+                        if (rect.bottom > window.innerHeight) {
+                          row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                        }
+                      }}
+                    />
                   </div>
                 </MotionExpand>
               </div>

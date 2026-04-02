@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useLayoutEffect } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 import EmailSection from "./EmailSection";
@@ -10,8 +10,63 @@ export default function EmailTabSection({
 }) {
   const [activeTab, setActiveTab] = useState("briefing");
   const { emailSectionRef } = useDashboard();
+  const containerRef = useRef(null);
+  const prevHeight = useRef(null);
+  const scrollTimer = useRef(null);
 
   const liveCount = emails?.length || 0;
+
+  function switchTab(tab) {
+    if (tab === activeTab) return;
+    // snapshot height before React re-renders
+    if (containerRef.current) {
+      prevHeight.current = containerRef.current.offsetHeight;
+    }
+    setActiveTab(tab);
+  }
+
+  // runs after DOM update but before browser paint
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el || prevHeight.current === null) return;
+
+    const from = prevHeight.current;
+    const to = el.scrollHeight;
+    prevHeight.current = null;
+
+    // set to old height (no transition yet)
+    el.style.transition = "none";
+    el.style.height = `${from}px`;
+    el.style.overflow = "hidden";
+
+    const collapsing = to < from;
+    const duration = collapsing ? 350 : 200;
+    // expand: snappy overshoot — collapse: gentle ease-out
+    const easing = collapsing
+      ? "cubic-bezier(0.4, 0, 0.2, 1)"
+      : "cubic-bezier(0.16, 1, 0.3, 1)";
+
+    // next frame: animate to new height
+    requestAnimationFrame(() => {
+      el.style.transition = `height ${duration}ms ${easing}`;
+      el.style.height = `${to}px`;
+      // scroll at ~60% through — layout is close enough, feels immediate
+      clearTimeout(scrollTimer.current);
+      scrollTimer.current = setTimeout(() => {
+        emailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, duration * 0.6);
+    });
+  }, [activeTab]);
+
+  function onTransitionEnd(e) {
+    if (e.target !== containerRef.current) return;
+    // release fixed height so within-tab expansions flow naturally
+    containerRef.current.style.height = "";
+    containerRef.current.style.overflow = "";
+    containerRef.current.style.transition = "";
+    // clear pending scroll if transition finished first
+    clearTimeout(scrollTimer.current);
+  }
 
   return (
     <>
@@ -23,7 +78,7 @@ export default function EmailTabSection({
           style={{ background: "rgba(255,255,255,0.02)" }}
         >
           <button
-            onClick={() => setActiveTab("briefing")}
+            onClick={() => switchTab("briefing")}
             className={cn(
               "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-[11px] font-medium cursor-pointer transition-all duration-150 border font-[inherit]",
               activeTab === "briefing"
@@ -45,7 +100,7 @@ export default function EmailTabSection({
             Briefing
           </button>
           <button
-            onClick={() => setActiveTab("live")}
+            onClick={() => switchTab("live")}
             className={cn(
               "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md text-[11px] font-medium cursor-pointer transition-all duration-150 border font-[inherit]",
               activeTab === "live"
@@ -86,24 +141,26 @@ export default function EmailTabSection({
           </button>
         </div>
 
-        {/* Tab content — display:none preserves state across tab switches */}
-        <div style={{ display: activeTab === "briefing" ? "block" : "none" }}>
-          <EmailSection
-            summary={summary}
-            model={model}
-            loaded={loaded}
-            delay={delay}
-            embedded
-          />
-        </div>
-        <div style={{ display: activeTab === "live" ? "block" : "none" }}>
-          <LiveEmailSection
-            emails={emails}
-            briefingGeneratedAt={briefingGeneratedAt}
-            loaded={loaded}
-            delay={delay}
-            embedded
-          />
+        {/* Tab content */}
+        <div ref={containerRef} onTransitionEnd={onTransitionEnd}>
+          <div style={{ display: activeTab === "briefing" ? "block" : "none" }}>
+            <EmailSection
+              summary={summary}
+              model={model}
+              loaded={loaded}
+              delay={delay}
+              embedded
+            />
+          </div>
+          <div style={{ display: activeTab === "live" ? "block" : "none" }}>
+            <LiveEmailSection
+              emails={emails}
+              briefingGeneratedAt={briefingGeneratedAt}
+              loaded={loaded}
+              delay={delay}
+              embedded
+            />
+          </div>
         </div>
       </Section>
     </>

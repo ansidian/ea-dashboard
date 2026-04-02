@@ -105,9 +105,6 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
               onClick={() => {
                 setActiveAccount(i);
                 setSelectedEmail(null);
-                requestAnimationFrame(() => {
-                  emailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                });
               }}
               className="rounded-lg px-3 py-2 cursor-pointer flex items-center gap-2 transition-all duration-200"
               style={{
@@ -297,21 +294,10 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                       setLoadingBillId(null);
                       const row = emailRowRefs.current[email.id];
                       if (!row) return;
-                      const maxScroll =
-                        document.documentElement.scrollHeight -
-                        window.innerHeight;
-                      const rowTop =
-                        row.getBoundingClientRect().top + window.scrollY;
-                      if (maxScroll < rowTop) {
-                        row.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        });
-                      } else {
-                        window.scrollTo({
-                          top: document.documentElement.scrollHeight,
-                          behavior: "smooth",
-                        });
+                      const rect = row.getBoundingClientRect();
+                      // only scroll if the bottom of the expanded row is below the viewport
+                      if (rect.bottom > window.innerHeight) {
+                        row.scrollIntoView({ behavior: "smooth", block: "nearest" });
                       }
                     }}
                   />
