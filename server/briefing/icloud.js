@@ -45,7 +45,7 @@ async function getPooledClient(email, password) {
     console.warn(`[iCloud] Connection error for ${email}: ${err.message}`);
     const entry = pool.get(email);
     if (entry?.client === client) pool.delete(email);
-    client.close().catch(() => {});
+    try { client.close?.()?.catch?.(() => {}); } catch {}
   });
 
   return client;
