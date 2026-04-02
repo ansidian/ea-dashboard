@@ -433,11 +433,13 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 
     // Optimization #2: Skip if nothing new (also exclude dismissed emails)
     const newEmails = emails.filter(e => !triagedIds.has(e.id || e.uid) && !dismissedIds.has(e.id || e.uid));
+    const unreadNew = newEmails.filter(e => !e.read);
+    const readNew = newEmails.filter(e => e.read);
     const calendarChanged = prevBriefing ? hasCalendarChanged(prevBriefing, calendar) : true;
 
-    await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${newEmails.length} new · Analyzing...`);
+    await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${unreadNew.length} unread new, ${readNew.length} read · Analyzing...`);
 
-    if (newEmails.length === 0 && !calendarChanged && prevBriefing) {
+    if (unreadNew.length === 0 && !calendarChanged && prevBriefing) {
       await updateProgress(briefingId, "No new data — refreshing weather and deadlines...");
       console.log("[EA] No new emails or data changes — cloning previous briefing with fresh weather");
       const cloned = { ...prevBriefing };
@@ -449,6 +451,18 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
           .filter(e => !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
           .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
         acct.unread = acct.important.length;
+      }
+      // inject read-but-untriaged emails as carried-over
+      for (const e of readNew) {
+        const label = e.account_label;
+        let acct = (cloned.emails?.accounts || []).find(a => a.name === label);
+        if (!acct) {
+          acct = { name: label, icon: e.account_icon, color: e.account_color, important: [], noise: [], noise_count: 0, unread: 0 };
+          cloned.emails.accounts.push(acct);
+        }
+        if (!acct.important.some(ex => (ex.id || ex.uid) === (e.id || e.uid))) {
+          acct.important.push({ id: e.id || e.uid, uid: e.uid, from: e.from, subject: e.subject, body_preview: e.body_preview, date: e.date, read: true, seenCount: 1, account_label: e.account_label, account_icon: e.account_icon, account_color: e.account_color });
+        }
       }
       fixEmailAccounts(cloned, emails, accounts);
       deduplicateBills(cloned);
@@ -485,23 +499,48 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     }
 
     let briefingJson;
-    if (newEmails.length > 0 && newEmails.length < emails.length && prevBriefing) {
-      await updateProgress(briefingId, `Sending ${newEmails.length} new email${newEmails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
-      console.log(`[EA] Delta generation: ${newEmails.length} new emails (${emails.length - newEmails.length} previously triaged)`);
-      briefingJson = await callClaude({ emails: newEmails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills });
+    if (unreadNew.length > 0 && unreadNew.length < emails.length && prevBriefing) {
+      await updateProgress(briefingId, `Sending ${unreadNew.length} new email${unreadNew.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
+      console.log(`[EA] Delta generation: ${unreadNew.length} new unread emails (${readNew.length} read, ${emails.length - newEmails.length} previously triaged)`);
+      briefingJson = await callClaude({ emails: unreadNew, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills });
 
       // Merge previous triage with new triage using pure function
       const allEmailIds = new Set(emails.map(e => e.id || e.uid));
       const mergedAccounts = mergeDeltaBriefing(prevBriefing, briefingJson, dismissedIds, allEmailIds);
       briefingJson.emails.accounts = mergedAccounts;
+      // inject read-but-untriaged emails as carried-over
+      for (const e of readNew) {
+        const label = e.account_label;
+        let acct = briefingJson.emails.accounts.find(a => a.name === label);
+        if (!acct) {
+          acct = { name: label, icon: e.account_icon, color: e.account_color, important: [], noise: [], noise_count: 0, unread: 0 };
+          briefingJson.emails.accounts.push(acct);
+        }
+        if (!acct.important.some(ex => (ex.id || ex.uid) === (e.id || e.uid))) {
+          acct.important.push({ id: e.id || e.uid, uid: e.uid, from: e.from, subject: e.subject, body_preview: e.body_preview, date: e.date, read: true, seenCount: 1, account_label: e.account_label, account_icon: e.account_icon, account_color: e.account_color });
+        }
+      }
     } else {
       // Full generation: all emails are new or no previous triage
-      await updateProgress(briefingId, `Sending ${emails.length} email${emails.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
-      console.log(`[EA] Full generation: ${emails.length} emails`);
-      briefingJson = await callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills });
+      const emailsForClaude = unreadNew.length > 0 ? unreadNew : emails;
+      await updateProgress(briefingId, `Sending ${emailsForClaude.length} email${emailsForClaude.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
+      console.log(`[EA] Full generation: ${emailsForClaude.length} emails (${readNew.length} read skipped)`);
+      briefingJson = await callClaude({ emails: emailsForClaude, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills });
       // Tag all emails with seenCount 1
       for (const acct of briefingJson.emails?.accounts || []) {
         acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
+      }
+      // inject read-but-untriaged emails as carried-over
+      for (const e of readNew) {
+        const label = e.account_label;
+        let acct = briefingJson.emails.accounts.find(a => a.name === label);
+        if (!acct) {
+          acct = { name: label, icon: e.account_icon, color: e.account_color, important: [], noise: [], noise_count: 0, unread: 0 };
+          briefingJson.emails.accounts.push(acct);
+        }
+        if (!acct.important.some(ex => (ex.id || ex.uid) === (e.id || e.uid))) {
+          acct.important.push({ id: e.id || e.uid, uid: e.uid, from: e.from, subject: e.subject, body_preview: e.body_preview, date: e.date, read: true, seenCount: 1, account_label: e.account_label, account_icon: e.account_icon, account_color: e.account_color });
+        }
       }
     }
 
