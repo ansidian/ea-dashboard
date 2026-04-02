@@ -10,7 +10,7 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
 
 1. TRIAGE EMAILS: Classify each email's "triage" as "actionable", "fyi", or "noise". Include actionable + fyi in the important array, include noise in a compact noise array (from + subject only) AND count in noise_count. Set urgency: high/medium/low.
    Summary: count each triage category separately — "10 emails across 3 accounts. 4 need attention, 2 FYI, 4 noise." "Need attention" = actionable only. Do NOT count fyi emails as needing attention. No subjects/topics in summary.
-   NOISE (always, unless overridden by Email Interests):
+   NOISE (ONLY if the sender does NOT match any Email Interest — interests ALWAYS win over noise rules):
    - Marketing, promotions, coupons, deals, loyalty rewards ("earn points", "limited time", "% off")
    - Upsell/cross-sell ("see how much you could save", "upgrade your plan", "you might like")
    - Newsletters and digests the user didn't write or reply to
@@ -72,7 +72,7 @@ export async function callClaude({ emails, calendar, ctmDeadlines, model, emailI
   });
 
   const interestsNote = emailInterests?.length
-    ? `\n\nEmail Interests (never classify as noise): ${emailInterests.join(", ")}`
+    ? `\n\n## Email Interests (ABSOLUTE RULE — if sender name contains any of these, classify as "fyi" NOT "noise", even if the email looks promotional)\n${emailInterests.join(", ")}`
     : "";
 
   // Trim emails to only fields Claude needs for triage
