@@ -47,7 +47,7 @@ export default function ScheduleSection({ calendar, loaded, delay, style, classN
   const showSource = sources.size > 1;
 
   return (
-    <Section title="Today's Schedule" delay={delay} loaded={loaded} style={style} className={className}>
+    <Section title="Today's Schedule" delay={delay} loaded={loaded} style={style} className={className} tier={2}>
       {calendar?.length > 0 ? (
         <div className="relative pl-5">
           {/* Timeline spine */}
@@ -56,7 +56,7 @@ export default function ScheduleSection({ calendar, loaded, delay, style, classN
             style={{ background: "rgba(255,255,255,0.06)" }}
           />
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             {/* Now marker at the top (no events passed yet) */}
             {nowPosition === 0 && <NowMarker time={nowTime} />}
 
@@ -65,7 +65,7 @@ export default function ScheduleSection({ calendar, loaded, delay, style, classN
                 {/* Event card */}
                 <div
                   className={cn(
-                    "group relative flex items-center gap-3 py-3 px-4 rounded-lg transition-all duration-200",
+                    "group relative flex items-center gap-3 py-2 px-3 rounded-md transition-all duration-200",
                     event.flag === "Conflict"
                       ? "bg-destructive/[0.05]"
                       : "bg-card/60",
@@ -113,7 +113,7 @@ export default function ScheduleSection({ calendar, loaded, delay, style, classN
                   <div className="flex-1 min-w-0">
                     <div
                       className={cn(
-                        "text-[13px] font-medium truncate",
+                        "text-[12px] font-medium truncate",
                         event.passed
                           ? "text-muted-foreground line-through decoration-muted-foreground/30"
                           : "text-foreground/90",
