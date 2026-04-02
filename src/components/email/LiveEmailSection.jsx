@@ -37,7 +37,7 @@ function getSectionTitle(briefingGeneratedAt) {
   return "Since This Morning";
 }
 
-export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, delay, className }) {
+export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, delay, className, embedded }) {
   const [selectedId, setSelectedId] = useState(null);
   const [markedRead, setMarkedRead] = useState(() => new Set());
   const [billPayId, setBillPayId] = useState(null);
@@ -66,11 +66,11 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
 
   if (!emails?.length) {
     if (!briefingGeneratedAt) return null;
+    const emptyMsg = <p className="text-[12px] text-muted-foreground/40 m-0">No new emails since the last briefing.</p>;
+    if (embedded) return emptyMsg;
     return (
       <Section title={sectionTitle} delay={delay} loaded={loaded} className={className}>
-        <p className="text-[12px] text-muted-foreground/40 m-0">
-          No new emails since the last briefing.
-        </p>
+        {emptyMsg}
       </Section>
     );
   }
@@ -79,8 +79,8 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
     ? formatRelativeTime(briefingGeneratedAt + "Z")
     : null;
 
-  return (
-    <Section title={sectionTitle} delay={delay} loaded={loaded} className={className}>
+  const content = (
+    <>
       <div className="flex items-center gap-2 mb-4">
         <span
           className="text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums"
@@ -250,6 +250,14 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
           );
         })}
       </MotionList>
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <Section title={sectionTitle} delay={delay} loaded={loaded} className={className}>
+      {content}
     </Section>
   );
 }
