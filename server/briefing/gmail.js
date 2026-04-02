@@ -63,9 +63,15 @@ export async function handleCallback(code, accountId, userId) {
   // Use email-based ID so multiple Gmail accounts each get their own row
   const emailBasedId = `gmail-${email}`;
 
+  const maxSort = await db.execute({
+    sql: "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM ea_accounts WHERE user_id = ?",
+    args: [userId],
+  });
+  const nextSort = maxSort.rows[0].next;
+
   await db.execute({
-    sql: `INSERT INTO ea_accounts (id, user_id, type, email, label, credentials_encrypted)
-          VALUES (?, ?, 'gmail', ?, ?, ?)
+    sql: `INSERT INTO ea_accounts (id, user_id, type, email, label, credentials_encrypted, sort_order)
+          VALUES (?, ?, 'gmail', ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             credentials_encrypted = excluded.credentials_encrypted,
             email = excluded.email,
@@ -76,6 +82,7 @@ export async function handleCallback(code, accountId, userId) {
       email,
       email, // label defaults to email, user can rename later
       encrypt(JSON.stringify(credentials)),
+      nextSort,
     ],
   });
 
