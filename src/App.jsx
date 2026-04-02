@@ -15,6 +15,15 @@ export default function App() {
       .catch(() => setAuthenticated(false));
   }, []);
 
+  useEffect(() => {
+    const onMove = (e) => {
+      document.body.style.setProperty("--mouse-x", e.clientX + "px");
+      document.body.style.setProperty("--mouse-y", e.clientY + "px");
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
+
   if (authenticated === null) {
     return (
       <div className="min-h-screen flex items-center justify-center">

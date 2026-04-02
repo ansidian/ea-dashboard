@@ -148,8 +148,31 @@ html, body, #root {
 
 body {
   font-family: Montserrat, sans-serif;
+  background-color: var(--background);
+  background-image:
+    radial-gradient(oklch(0.2973 0.0294 276.2144) 0.5px, transparent 0.5px);
+  background-size: 10px 10px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image:
+    radial-gradient(oklch(0.4 0.04 304.77) 0.5px, transparent 0.5px);
+  background-size: 10px 10px;
+  mask-image: radial-gradient(
+    150px circle at var(--mouse-x, -300px) var(--mouse-y, -300px),
+    oklch(0 0 0 / 0.65), transparent 70%
+  );
+  -webkit-mask-image: radial-gradient(
+    150px circle at var(--mouse-x, -300px) var(--mouse-y, -300px),
+    oklch(0 0 0 / 0.65), transparent 70%
+  );
 }
 
 /* Animations */
