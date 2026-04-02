@@ -17,11 +17,15 @@ import InsightsSection from "../components/briefing/InsightsSection";
 import ScheduleSection from "../components/calendar/ScheduleSection";
 import DeadlinesSection from "../components/deadlines/DeadlinesSection";
 import BillsSection from "../components/bills/BillsSection";
+import UpcomingBillsSection from "../components/bills/UpcomingBillsSection";
 import EmailSection from "../components/email/EmailSection";
+import LiveEmailSection from "../components/email/LiveEmailSection";
 import SummaryBar from "../components/layout/SummaryBar";
 import { parseDueDate } from "../lib/dashboard-helpers";
 import { DashboardProvider, useDashboard } from "../context/DashboardContext";
 import { Button } from "@/components/ui/button";
+import useLiveData from "../hooks/useLiveData";
+import useNotifications from "../hooks/useNotifications";
 
 export default function Dashboard() {
   const [briefing, setBriefing] = useState(null);
@@ -49,6 +53,9 @@ export default function Dashboard() {
   const [suspended, setSuspended] = useState(false);
   const suspendHoldTimerRef = useRef(null);
   const suspendHoldProgressRef = useRef(null);
+
+  const liveData = useLiveData();
+  useNotifications(liveData);
 
   // --- Data fetching ---
 
@@ -116,7 +123,10 @@ export default function Dashboard() {
     if (refreshing || generating) return;
     setRefreshing(true);
     try {
-      const result = await quickRefresh();
+      const [result] = await Promise.all([
+        quickRefresh(),
+        liveData.refreshNow(),
+      ]);
       const transformed = transformBriefing(result.briefingJson);
       setBriefing(transformed);
       setLatestBriefing(transformed);
@@ -377,6 +387,7 @@ export default function Dashboard() {
         onSuspend={handleSuspend}
         suspending={suspending}
         suspended={suspended}
+        liveData={liveData}
       />
     </DashboardProvider>
   );
@@ -416,6 +427,7 @@ function DashboardMain({
   onSuspend,
   suspending,
   suspended,
+  liveData,
 }) {
   const {
     emailAccounts,
@@ -445,8 +457,8 @@ function DashboardMain({
         const due = parseDueDate(dateStr);
         return due.getTime() === today.getTime();
       }).length,
-    meetings: d.calendar?.length || 0,
-    temp: d.weather?.temp,
+    meetings: (liveData.liveCalendar || d.calendar)?.length || 0,
+    temp: (liveData.liveWeather || d.weather)?.temp,
   };
 
   function handleNavigateToEmail(params) {
@@ -510,7 +522,7 @@ function DashboardMain({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ScheduleSection
-          calendar={d.calendar}
+          calendar={liveData.liveCalendar || d.calendar}
           loaded={loaded}
           delay={200}
           className={halfClass}
@@ -533,11 +545,26 @@ function DashboardMain({
 
         <BillsSection loaded={loaded} delay={500} className={halfClass} />
 
+        <UpcomingBillsSection
+          bills={liveData.liveBills}
+          loaded={loaded}
+          delay={550}
+          className={halfClass}
+        />
+
         <EmailSection
           summary={d.emails?.summary}
           model={d.model}
           loaded={loaded}
           delay={600}
+          className={fullClass}
+        />
+
+        <LiveEmailSection
+          emails={liveData.liveEmails}
+          briefingGeneratedAt={liveData.briefingGeneratedAt}
+          loaded={loaded}
+          delay={700}
           className={fullClass}
         />
       </div>
