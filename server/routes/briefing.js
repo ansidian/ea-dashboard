@@ -8,10 +8,16 @@ import { decrypt } from "../briefing/encryption.js";
 import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
 import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
+import { applyScenarios, listScenarios } from "../db/scenarios/index.js";
 
 const router = Router();
 router.use(requireAuth);
 
+// List available dev scenarios (dev only)
+router.get("/scenarios", (req, res) => {
+  if (process.env.NODE_ENV === "production") return res.status(404).json({ message: "Not found" });
+  res.json(listScenarios());
+});
 
 // Merge current account display preferences (label, color, icon) into a briefing object.
 // This ensures user changes are reflected immediately without regenerating.
@@ -122,9 +128,12 @@ router.get("/latest", async (req, res) => {
     });
 
     // ?mock=1 forces mock briefing in dev (useful when real briefings exist)
+    // ?scenario=urgent-flags,noise-preview applies scenario overlays
     if (req.query.mock && process.env.NODE_ENV !== "production") {
       seedEmbeddings().catch(err => console.warn("[EA] Dev embedding seed failed:", err.message));
       const mock = await generateEnrichedMock(userId);
+      const scenarioKeys = req.query.scenario ? req.query.scenario.split(",").map(s => s.trim()) : [];
+      applyScenarios(mock, scenarioKeys);
       return res.json({ id: 0, status: "ready", briefing: mock, generated_at: new Date().toISOString(), generation_time_ms: 0 });
     }
 
@@ -133,6 +142,8 @@ router.get("/latest", async (req, res) => {
       if (process.env.NODE_ENV !== "production") {
         seedEmbeddings().catch(err => console.warn("[EA] Dev embedding seed failed:", err.message));
         const mock = await generateEnrichedMock(userId);
+        const scenarioKeys = req.query.scenario ? req.query.scenario.split(",").map(s => s.trim()) : [];
+        applyScenarios(mock, scenarioKeys);
         return res.json({ id: 0, status: "ready", briefing: mock, generated_at: new Date().toISOString(), generation_time_ms: 0 });
       }
       return res.json({ briefing: null });

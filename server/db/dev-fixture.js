@@ -1,7 +1,8 @@
 import { getCategories } from "../briefing/actual.js";
 
-// Dynamic mock briefing for local dev — always reflects current date/time
-// and matches the latest briefing JSON shape expected by the frontend.
+// Minimal base mock briefing for local dev.
+// Feature-specific data lives in server/db/scenarios/ — use the dev panel
+// (Ctrl+Shift+D) or ?mock=1&scenario=name to layer them on.
 
 function relativeDate(daysFromNow) {
   return new Date(Date.now() + daysFromNow * 86400000).toISOString().slice(0, 10);
@@ -19,7 +20,6 @@ export function generateMockBriefing() {
   const now = new Date();
   const hour = now.getHours();
 
-  // Build hourly forecast starting from current hour
   const hourly = [];
   for (let i = 0; i < 6; i++) {
     const h = (hour + i * 2) % 24;
@@ -35,17 +35,14 @@ export function generateMockBriefing() {
 
   return {
     weather: {
-      temp: 72,
-      high: 78,
-      low: 58,
+      temp: 72, high: 78, low: 58,
       summary: "Sunny with a few afternoon clouds. Light breeze from the west.",
       hourly,
       location: "El Monte, CA",
     },
     aiInsights: [
-      { icon: "💰", text: "SoFi autopay is scheduled — statement balance will be debited automatically. Apple charged $3.99 for Narwhal Pro, and your Amazon order totals $21.55." },
       { icon: "📅", text: "Your 3 PM meeting overlaps with the Canvas assignment deadline at 4 PM. Complete the submission before lunch." },
-      { icon: "📧", text: "3 emails require responses today — the most urgent is from your manager about the Q2 report due tomorrow." },
+      { icon: "📧", text: "2 emails need your attention today — check the briefing tab for details." },
     ],
     calendar: [
       { time: "9:00 AM", duration: "30 min", title: "Daily Standup", source: "Work", color: "#4285f4", flag: null },
@@ -56,189 +53,75 @@ export function generateMockBriefing() {
     ctm: {
       upcoming: [
         {
-          id: 9001,
-          title: "Module 5 Quiz",
-          due_date: relativeDate(1),
-          due_time: "11:59 PM",
-          class_name: "CS 301",
-          class_color: "#e74c3c",
-          points_possible: 25,
-          status: "pending",
-          source: "canvas",
-          description: "Covers chapters 9-11 on data structures and algorithm analysis",
-          url: null,
+          id: 9001, title: "Module 5 Quiz", due_date: relativeDate(1), due_time: "11:59 PM",
+          class_name: "CS 301", class_color: "#e74c3c", points_possible: 25,
+          status: "pending", source: "canvas", description: "Covers chapters 9-11", url: null,
         },
         {
-          id: 9002,
-          title: "Research Paper Draft",
-          due_date: relativeDate(3),
-          due_time: "11:59 PM",
-          class_name: "ENG 201",
-          class_color: "#3498db",
-          points_possible: 100,
-          status: "pending",
-          source: "canvas",
-          description: "First draft, 5-7 pages, MLA format with annotated bibliography",
-          url: null,
-        },
-        {
-          id: 9003,
-          title: "Lab Report #4",
-          due_date: relativeDate(5),
-          due_time: "11:59 PM",
-          class_name: "PHYS 101",
-          class_color: "#2ecc71",
-          points_possible: 40,
-          status: "pending",
-          source: "canvas",
-          description: "Pendulum experiment analysis with error calculations",
-          url: null,
+          id: 9002, title: "Research Paper Draft", due_date: relativeDate(3), due_time: "11:59 PM",
+          class_name: "ENG 201", class_color: "#3498db", points_possible: 100,
+          status: "pending", source: "canvas", description: "First draft, 5-7 pages, MLA format", url: null,
         },
       ],
-      stats: { pending: 3, dueToday: 0, dueThisWeek: 3, totalPoints: 165 },
+      stats: { pending: 2, dueToday: 0, dueThisWeek: 2, totalPoints: 125 },
     },
     emails: {
-      summary: "16 emails across 2 accounts. 4 need action, 6 FYI, 6 noise.",
+      summary: "4 emails across 2 accounts. 2 need attention, 2 FYI, 0 noise.",
       accounts: [
         {
-          name: "Work Gmail",
-          icon: "📧",
-          color: "#818cf8",
-          unread: 4,
+          name: "Work Gmail", icon: "📧", color: "#818cf8", unread: 2,
           important: [
             {
-              id: "gmail-mock-18f0a1b2c3d4e5f6",
-              message_id: "<mock-001@company.com>",
-              from: "Sarah Chen",
-              fromEmail: "sarah.chen@company.com",
+              id: "mock-work-001", message_id: "<mock-001@company.com>",
+              from: "Sarah Chen", fromEmail: "sarah.chen@company.com",
               subject: "Q2 Report — Need Your Section by Tomorrow",
-              preview: "Hey, just a reminder that I need your section of the Q2 report by end of day tomorrow. The exec team is reviewing Friday.",
-              action: "Write and submit Q2 report section by EOD tomorrow",
-              urgency: "high",
-              date: now.toISOString(),
-              read: false,
-              hasBill: false,
-              extractedBill: null,
+              preview: "Hey, just a reminder that I need your section of the Q2 report by end of day tomorrow.",
+              action: "Reply needed", urgency: "high", date: now.toISOString(),
+              read: false, hasBill: false, extractedBill: null, urgentFlag: null,
             },
             {
-              id: "gmail-mock-18f0a1b2c3d4e5f7",
-              message_id: "<mock-002@sofi.org>",
-              from: "SoFi",
-              fromEmail: "no-reply@o.sofi.org",
-              subject: "Your SoFi Credit Card autopay is scheduled for " + new Date(Date.now() + 10 * 86400000).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }),
-              preview: "Your autopay for your SoFi Credit Card is scheduled. Your statement balance will be debited from your linked bank account.",
-              action: "Pay by " + new Date(Date.now() + 10 * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-              urgency: "medium",
-              date: now.toISOString(),
-              read: true,
-              hasBill: true,
-              extractedBill: { payee: "SoFi", amount: 0, due_date: relativeDate(10), type: "transfer", category_id: null, category_name: null },
-            },
-            {
-              id: "gmail-mock-18f0a1b2c3d4e5f8",
-              message_id: "<mock-003@amazon.com>",
-              from: "Amazon.com",
-              fromEmail: "auto-confirm@amazon.com",
-              subject: 'Ordered: "Clorox ToiletWand..." and 1 more item',
-              preview: 'Thanks for your order, Andy! Your order #112-4567890 will arrive by ' + new Date(Date.now() + 4 * 86400000).toLocaleDateString("en-US", { month: "long", day: "numeric" }) + ". [amounts: $12.49, $6.99, $2.07, $21.55]",
-              action: "FYI",
-              urgency: "low",
-              date: now.toISOString(),
-              read: false,
-              hasBill: true,
-              extractedBill: { payee: "Amazon", amount: 21.55, due_date: relativeDate(0), type: "expense", category_id: null, category_name: "Shopping" },
-            },
-            {
-              id: "gmail-mock-18f0a1b2c3d4e5f9",
-              message_id: "<mock-004@company.com>",
-              from: "IT Department",
-              fromEmail: "it@company.com",
+              id: "mock-work-002", message_id: "<mock-002@company.com>",
+              from: "IT Department", fromEmail: "it@company.com",
               subject: "Scheduled Maintenance — Saturday 2 AM",
-              preview: "Systems will be down for maintenance this Saturday from 2-4 AM PST. No action required.",
-              action: "",
-              urgency: "low",
-              date: now.toISOString(),
-              read: true,
-              hasBill: false,
-              extractedBill: null,
+              preview: "Systems will be down for maintenance this Saturday from 2-4 AM PST.",
+              action: "FYI", urgency: "low", date: now.toISOString(),
+              read: true, hasBill: false, extractedBill: null, urgentFlag: null,
             },
           ],
-          noise_count: 4,
+          noise: [], noise_count: 0,
         },
         {
-          name: "Personal iCloud",
-          icon: "🍎",
-          color: "#a259ff",
-          unread: 4,
+          name: "Personal iCloud", icon: "🍎", color: "#a259ff", unread: 2,
           important: [
             {
-              id: "mock-icloud-001",
-              from: "Apple",
-              fromEmail: "no_reply@email.apple.com",
-              subject: "Your receipt from Apple.",
-              preview: "Receipt. Narwhal for Reddit — Narwhal Pro (Monthly). Renews " + new Date(Date.now() + 21 * 86400000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) + ". [amounts: $3.99, $3.99, $3.99]",
-              action: "FYI",
-              urgency: "low",
-              date: now.toISOString(),
-              read: true,
-              hasBill: true,
-              extractedBill: { payee: "Apple", amount: 3.99, due_date: relativeDate(0), type: "bill", category_id: null, category_name: "Subscriptions" },
-            },
-            {
-              id: "mock-icloud-002",
-              from: "Edison",
-              fromEmail: "billing@sce.com",
-              subject: "Your Electric Bill — $50.00 Due",
-              preview: "Your electricity bill for the current period is $50.00. Due by " + new Date(Date.now() + 12 * 86400000).toLocaleDateString("en-US", { month: "long", day: "numeric" }) + ". [amounts: $50.00]",
-              action: "Pay electric bill of $50.00",
-              urgency: "medium",
-              date: now.toISOString(),
-              read: false,
-              hasBill: true,
-              extractedBill: { payee: "Edison", amount: 50.00, due_date: relativeDate(12), type: "bill", category_id: null, category_name: "Electric" },
-            },
-            {
-              id: "mock-icloud-003",
-              from: "SoFi",
-              fromEmail: "noreply@sofi.com",
-              subject: "Your Credit Card Statement is Ready",
-              preview: "Your statement balance of $197.50 is due on " + new Date(Date.now() + 8 * 86400000).toLocaleDateString("en-US", { month: "long", day: "numeric" }) + ". [amounts: $197.50]",
-              action: "Pay credit card bill of $197.50",
-              urgency: "medium",
-              date: now.toISOString(),
-              read: false,
-              hasBill: true,
-              extractedBill: { payee: "SoFi", amount: 197.50, due_date: relativeDate(8), type: "transfer", category_id: null, category_name: null },
-            },
-            {
-              id: "mock-icloud-004",
-              from: "Venmo",
-              fromEmail: "venmo@venmo.com",
+              id: "mock-personal-001", message_id: "<mock-003@venmo.com>",
+              from: "Venmo", fromEmail: "venmo@venmo.com",
               subject: "Alex sent you $25.00",
               preview: "Alex paid you $25.00 for 'lunch'. The money is now in your Venmo balance.",
-              action: "",
-              urgency: "low",
-              date: now.toISOString(),
-              read: true,
-              hasBill: true,
-              extractedBill: { payee: "Venmo (Alex)", amount: 25.00, due_date: relativeDate(0), type: "income", category_id: null, category_name: null },
+              action: "FYI", urgency: "low", date: now.toISOString(),
+              read: true, hasBill: false, extractedBill: null, urgentFlag: null,
+            },
+            {
+              id: "mock-personal-002", message_id: "<mock-004@shipping.com>",
+              from: "Amazon.com", fromEmail: "auto-confirm@amazon.com",
+              subject: "Your order has shipped",
+              preview: "Your package is on its way and will arrive by " + new Date(Date.now() + 3 * 86400000).toLocaleDateString("en-US", { month: "long", day: "numeric" }) + ".",
+              action: "FYI", urgency: "low", date: now.toISOString(),
+              read: false, hasBill: false, extractedBill: null, urgentFlag: null,
             },
           ],
-          noise_count: 2,
+          noise: [], noise_count: 0,
         },
       ],
     },
-    deadlines: [
-      { title: "Q2 Report Section", due: "Tomorrow EOD", urgency: "high", source: "email", type: "work" },
-      { title: "Dentist Appointment", due: relativeDate(4), urgency: "low", source: "calendar", type: "personal" },
-    ],
+    deadlines: [],
     generatedAt: nowPacific(),
     dataUpdatedAt: now.toISOString(),
     aiGeneratedAt: now.toISOString(),
   };
 }
 
-// Generate mock briefing enriched with real Actual Budget category IDs
+// Enrich mock with real Actual Budget category IDs if available
 export async function generateEnrichedMock(userId) {
   const briefing = generateMockBriefing();
   try {
@@ -263,7 +146,7 @@ export async function generateEnrichedMock(userId) {
   return briefing;
 }
 
-// Mock history entries for dev — simulates several past briefings
+// Mock history entries for dev
 export function generateMockHistory() {
   const now = Date.now();
   return [

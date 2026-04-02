@@ -37,10 +37,15 @@ export async function login(password) {
 export const logout = () => apiFetch("/api/auth/logout", { method: "POST" });
 
 // Briefings
-export const getLatestBriefing = () => {
-  const mock = new URLSearchParams(window.location.search).get("mock");
-  return apiFetch(mock ? "/api/briefing/latest?mock=1" : "/api/briefing/latest");
+export const getLatestBriefing = (scenarioOverride) => {
+  const params = new URLSearchParams(window.location.search);
+  const mock = params.get("mock");
+  if (scenarioOverride) return apiFetch(`/api/briefing/latest?mock=1&scenario=${scenarioOverride}`);
+  const scenario = params.get("scenario");
+  const qs = mock ? `?mock=1${scenario ? `&scenario=${scenario}` : ""}` : "";
+  return apiFetch(`/api/briefing/latest${qs}`);
 };
+export const getDevScenarios = () => apiFetch("/api/briefing/scenarios");
 export const triggerGeneration = () => apiFetch("/api/briefing/generate", { method: "POST" });
 export const quickRefresh = () => apiFetch("/api/briefing/refresh", { method: "POST" });
 export const pollStatus = (id) => apiFetch(`/api/briefing/status/${id}`);
