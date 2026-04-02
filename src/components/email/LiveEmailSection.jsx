@@ -129,7 +129,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
       )}
 
       <MotionList className="flex flex-col gap-1.5" loaded={loaded} delay={delay + 100} stagger={0.04}>
-        {emails.map((email) => {
+        {[...emails].sort((a, b) => (b.isImportantSender ? 1 : 0) - (a.isImportantSender ? 1 : 0) || new Date(b.date) - new Date(a.date)).map((email) => {
           const isOpen = selectedId === email.uid;
           const isBillPayOpen = billPayId === email.uid;
           const isRead = email.read || markedRead.has(email.uid);
