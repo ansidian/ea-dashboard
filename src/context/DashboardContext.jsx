@@ -11,6 +11,17 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
   const [expandedTask, setExpandedTask] = useState(null);
   const emailSectionRef = useRef(null);
 
+  const markAccountEmailsRead = useCallback(() => {
+    setBriefing(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      const acct = updated.emails?.accounts?.[activeAccount];
+      if (acct) {
+        for (const e of acct.important) e.read = true;
+      }
+      return updated;
+    });
+  }, [activeAccount, setBriefing]);
+
   const handleDismiss = useCallback(async (emailId) => {
     dismissEmail(emailId).catch(() => {});
     if (selectedEmail?.id === emailId) setSelectedEmail(null);
@@ -67,6 +78,7 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
       expandedTask,
       setExpandedTask,
       handleDismiss,
+      markAccountEmailsRead,
       emailAccounts,
       currentAccount,
       emailSectionRef,

@@ -6,7 +6,7 @@ import LiveEmailSection from "./LiveEmailSection";
 import { useDashboard } from "../../context/DashboardContext";
 
 export default function EmailTabSection({
-  summary, model, emails, briefingGeneratedAt, loaded, delay, className,
+  summary, model, emails, briefingGeneratedAt, loaded, delay, className, onRefreshLive,
 }) {
   const [activeTab, setActiveTab] = useState("briefing");
   const { emailSectionRef } = useDashboard();
@@ -159,6 +159,7 @@ export default function EmailTabSection({
               loaded={loaded}
               delay={delay}
               embedded
+              onRefreshLive={onRefreshLive}
             />
           </div>
         </div>

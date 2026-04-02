@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import {
   getLatestBriefing,
   triggerGeneration,
@@ -23,6 +23,7 @@ import { parseDueDate } from "../lib/dashboard-helpers";
 import { DashboardProvider, useDashboard } from "../context/DashboardContext";
 import { Button } from "@/components/ui/button";
 import useLiveData from "../hooks/useLiveData";
+const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevPanel.jsx")) : null;
 import useNotifications from "../hooks/useNotifications";
 
 export default function Dashboard() {
@@ -387,6 +388,16 @@ export default function Dashboard() {
         suspended={suspended}
         liveData={liveData}
       />
+      {DevPanel && (
+        <Suspense fallback={null}>
+          <DevPanel onApply={(transformed, id) => {
+            setBriefing(transformed);
+            setLatestBriefing(transformed);
+            setLatestId(id);
+            setLoaded(true);
+          }} />
+        </Suspense>
+      )}
     </DashboardProvider>
   );
 }
@@ -556,6 +567,7 @@ function DashboardMain({
           loaded={loaded}
           delay={500}
           className={fullClass}
+          onRefreshLive={liveData.refreshNow}
         />
       </div>
 

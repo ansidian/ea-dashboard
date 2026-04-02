@@ -37,7 +37,7 @@ function getSectionTitle(briefingGeneratedAt) {
   return "Since This Morning";
 }
 
-export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, delay, className, embedded }) {
+export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, delay, className, embedded, onRefreshLive }) {
   const [selectedId, setSelectedId] = useState(null);
   const [markedRead, setMarkedRead] = useState(() => new Set());
   const [billPayId, setBillPayId] = useState(null);
@@ -57,6 +57,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
         uids.forEach(id => next.add(id));
         return next;
       });
+      onRefreshLive?.();
     } catch {
       // silently fail
     }
@@ -67,7 +68,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
 
   if (!emails?.length) {
     if (!briefingGeneratedAt) return null;
-    const emptyMsg = <p className="text-[12px] text-muted-foreground/40 m-0">No new emails since the last briefing.</p>;
+    const emptyMsg = <p className="text-[12px] text-muted-foreground/40 m-0">No new emails since the last fetch.</p>;
     if (embedded) return emptyMsg;
     return (
       <Section title={sectionTitle} delay={delay} loaded={loaded} className={className}>
@@ -171,6 +172,9 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                       {email.account_icon && (
                         <span className="text-[10px]">{email.account_icon}</span>
                       )}
+                      {email.account_label && (
+                        <span className="text-[10px] text-muted-foreground/35">{email.account_label}</span>
+                      )}
                       <span
                         className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
                         style={{ background: email.account_color || "#6366f1" }}
@@ -187,6 +191,21 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                     <div className="text-[13px] font-medium text-foreground/90 mt-0.5">
                       {email.subject}
                     </div>
+                    {email.urgentFlag && (
+                      <div
+                        className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 mt-1 inline-flex items-center gap-1 w-fit"
+                        style={{
+                          color: "#f97316",
+                          background: "rgba(249,115,22,0.08)",
+                          border: "1px solid rgba(249,115,22,0.2)",
+                        }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        {email.urgentFlag.label}
+                      </div>
+                    )}
                     {!isOpen && email.body_preview && (
                       <div className="text-[11px] text-muted-foreground/40 mt-1 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
                         {email.body_preview}

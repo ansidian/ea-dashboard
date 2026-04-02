@@ -61,12 +61,14 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
     activeAccount, setActiveAccount,
     selectedEmail, setSelectedEmail,
     confirmDismissId, setConfirmDismissId, handleDismiss: onDismiss,
+    markAccountEmailsRead,
     setLoadingBillId, emailSectionRef, totalNoiseCount,
   } = useDashboard();
 
   const emailRowRefs = useRef({});
   const [markedRead, setMarkedRead] = useState(() => new Set());
   const [noiseExpanded, setNoiseExpanded] = useState(false);
+  const [selectedNoiseId, setSelectedNoiseId] = useState(null);
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
   const hasUnread = currentAccount?.important?.some(e => !e.read && !markedRead.has(e.id));
@@ -82,6 +84,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
         uids.forEach(id => next.add(id));
         return next;
       });
+      markAccountEmailsRead();
     } catch {
       // silently fail
     }
@@ -267,6 +270,21 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                       {email.action}
                     </div>
                   )}
+                  {email.urgentFlag && (
+                    <div
+                      className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 flex items-center gap-1"
+                      style={{
+                        color: "#f97316",
+                        background: "rgba(249,115,22,0.08)",
+                        border: "1px solid rgba(249,115,22,0.2)",
+                      }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      {email.urgentFlag.label}
+                    </div>
+                  )}
                   {getGmailUrl(email) && (
                     <a
                       href={getGmailUrl(email)}
@@ -336,12 +354,34 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                     </div>
                   )}
                   <div className="flex flex-col">
-                    {acc.noise.map((noiseEmail, j) => (
-                      <div key={j} className="flex items-baseline gap-2 min-w-0 py-1 px-1 rounded hover:bg-white/[0.02] transition-colors duration-150">
-                        <span className="text-[11px] text-muted-foreground/35 shrink-0 min-w-[80px] max-w-[140px] truncate">{noiseEmail.from}</span>
-                        <span className="text-[11px] text-muted-foreground/55 truncate">{noiseEmail.subject}</span>
-                      </div>
-                    ))}
+                    {acc.noise.map((noiseEmail, j) => {
+                      const noiseId = noiseEmail.id || `noise-${i}-${j}`;
+                      const isNoiseOpen = selectedNoiseId === noiseId;
+                      return (
+                        <div key={noiseId}>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedNoiseId(isNoiseOpen ? null : noiseId)}
+                            className="flex items-center gap-2 min-w-0 py-1.5 px-1 rounded cursor-pointer hover:bg-white/[0.04] transition-colors duration-150"
+                          >
+                            <span className="text-[11px] text-muted-foreground/35 shrink-0 min-w-[80px] max-w-[140px] truncate">{noiseEmail.from}</span>
+                            <span className="text-[11px] text-muted-foreground/55 truncate flex-1">{noiseEmail.subject}</span>
+                            <MotionChevron isOpen={isNoiseOpen} className="text-muted-foreground/20 shrink-0" />
+                          </div>
+                          <MotionExpand isOpen={isNoiseOpen}>
+                            <div onClick={(e) => e.stopPropagation()} className="pb-2">
+                              <EmailBody
+                                email={{ ...noiseEmail, uid: noiseEmail.id }}
+                                model={model}
+                                onDismiss={() => {}}
+                                onLoaded={() => {}}
+                              />
+                            </div>
+                          </MotionExpand>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
