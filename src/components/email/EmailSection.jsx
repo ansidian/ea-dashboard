@@ -10,7 +10,8 @@ import { CheckCheck } from "lucide-react";
 
 const getGmailUrl = (email) => {
   if (!email.message_id) return null;
-  return `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(email.message_id)}`;
+  const idx = email.gmail_index ?? 0;
+  return `https://mail.google.com/mail/u/${idx}/#search/rfc822msgid:${encodeURIComponent(email.message_id)}`;
 };
 
 // Reusable ghost button — eliminates duplicated inline hover handlers

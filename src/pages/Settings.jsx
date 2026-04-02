@@ -4,6 +4,7 @@ import {
   getAccounts, getSettings, updateSettings,
   getGmailAuthUrl, addICloudAccount, removeAccount, updateAccount, reorderAccounts,
   testActualBudget, geocodeLocation, getModels, skipSchedule,
+  getImportantSenders, updateImportantSenders,
 } from "../api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
   const [label, setLabel] = useState(acc.label || acc.email);
   const [color, setColor] = useState(acc.color || "#cba6da");
   const [icon, setIcon] = useState(acc.icon || (acc.type === "icloud" ? "🍎" : "📧"));
+  const [gmailIndex, setGmailIndex] = useState(acc.gmail_index ?? 0);
   const [saving, setSaving] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: acc.id, disabled: editing });
 
@@ -42,8 +44,10 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
 
   async function handleSave() {
     setSaving(true);
-    await updateAccount(acc.id, { label, color, icon });
-    setAccounts(accounts.map(a => a.id === acc.id ? { ...a, label, color, icon } : a));
+    const updates = { label, color, icon };
+    if (acc.type === "gmail") updates.gmail_index = gmailIndex;
+    await updateAccount(acc.id, updates);
+    setAccounts(accounts.map(a => a.id === acc.id ? { ...a, ...updates } : a));
     setSaving(false);
     setEditing(false);
   }
@@ -120,6 +124,26 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
               />
             </div>
           </div>
+          {acc.type === "gmail" && (
+            <div>
+              <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">
+                Gmail Account Index
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  max="9"
+                  value={gmailIndex}
+                  onChange={e => setGmailIndex(parseInt(e.target.value, 10) || 0)}
+                  className="w-20"
+                />
+                <span className="text-[11px] text-muted-foreground/50">
+                  The /u/N index in Gmail URLs (check your browser address bar)
+                </span>
+              </div>
+            </div>
+          )}
           <Button onClick={handleSave} disabled={saving} size="sm" className="self-start">
             {saving ? "Saving..." : "Save"}
           </Button>
@@ -151,6 +175,8 @@ export default function Settings() {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const modelDropdownRef = useRef(null);
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const [importantSenders, setImportantSenders] = useState([]);
+  const [senderSaving, setSenderSaving] = useState(false);
 
   async function handleDragEnd(event) {
     const { active, over } = event;
@@ -174,8 +200,9 @@ export default function Settings() {
   }, [modelDropdownOpen]);
 
   useEffect(() => {
-    Promise.all([getAccounts(), getSettings(), getModels().catch(() => [])])
-      .then(([acc, sett, mdls]) => {
+    Promise.all([getAccounts(), getSettings(), getModels().catch(() => []), getImportantSenders().catch(() => [])])
+      .then(([acc, sett, mdls, senders]) => {
+        setImportantSenders(senders || []);
         setModels(mdls);
         setAccounts(acc.accounts || acc);
         setSettings(sett);
@@ -471,6 +498,75 @@ export default function Settings() {
         }} className="flex gap-2">
           <Input name="interest" placeholder="e.g. Da Vien, Anthropic, GitHub..." className="flex-1" />
           <Button type="submit" size="sm">Add</Button>
+        </form>
+      </SettingsCard>
+
+      {/* Important Senders */}
+      <SettingsCard title="Important Senders">
+        <p className="text-[12px] text-muted-foreground/60 mb-3 leading-relaxed">
+          Get browser notifications when emails arrive from these senders. Auto-detected senders are learned from past briefings where Claude flagged them as high urgency.
+        </p>
+        <div className="flex flex-col gap-1.5 mb-3">
+          {importantSenders.map((sender, i) => (
+            <div
+              key={sender.address}
+              className="flex items-center justify-between gap-2 rounded-lg py-2 px-3"
+              style={{ background: "rgba(36,36,58,0.4)", border: "1px solid rgba(255,255,255,0.04)" }}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[13px] text-foreground/80 truncate">
+                  {sender.name || sender.address}
+                </span>
+                <span className="text-[10px] text-muted-foreground/40 truncate">
+                  {sender.address}
+                </span>
+                {sender.source === "auto" && (
+                  <span className="text-[9px] text-muted-foreground/30 shrink-0">(auto)</span>
+                )}
+              </div>
+              <button
+                className="text-muted-foreground/30 hover:text-red-400/80 transition-colors bg-transparent border-none cursor-pointer p-1 rounded hover:bg-white/[0.04]"
+                onClick={async () => {
+                  const next = importantSenders.filter((_, j) => j !== i);
+                  setImportantSenders(next);
+                  setSenderSaving(true);
+                  await updateImportantSenders(next).catch(() => {});
+                  setSenderSaving(false);
+                }}
+                title="Remove"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          ))}
+          {importantSenders.length === 0 && (
+            <p className="text-[11px] text-muted-foreground/30 italic">
+              No important senders yet. Add one below, or they will be auto-detected from future briefings.
+            </p>
+          )}
+        </div>
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          const input = e.target.elements.senderEmail;
+          const address = input.value.trim().toLowerCase();
+          if (!address) return;
+          if (importantSenders.some(s => s.address === address)) {
+            input.value = "";
+            return;
+          }
+          const next = [...importantSenders, { address, name: address.split("@")[0], source: "manual" }];
+          setImportantSenders(next);
+          input.value = "";
+          setSenderSaving(true);
+          await updateImportantSenders(next).catch(() => {});
+          setSenderSaving(false);
+        }} className="flex gap-2">
+          <Input name="senderEmail" placeholder="e.g. boss@company.com" className="flex-1" />
+          <Button type="submit" size="sm" disabled={senderSaving}>
+            {senderSaving ? "Saving…" : "Add"}
+          </Button>
         </form>
       </SettingsCard>
 
