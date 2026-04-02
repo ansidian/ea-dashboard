@@ -16,10 +16,8 @@ import DashboardHeader from "../components/layout/DashboardHeader";
 import InsightsSection from "../components/briefing/InsightsSection";
 import ScheduleSection from "../components/calendar/ScheduleSection";
 import DeadlinesSection from "../components/deadlines/DeadlinesSection";
-import BillsSection from "../components/bills/BillsSection";
-import UpcomingBillsSection from "../components/bills/UpcomingBillsSection";
-import EmailSection from "../components/email/EmailSection";
-import LiveEmailSection from "../components/email/LiveEmailSection";
+import BillsPaymentsSection from "../components/bills/BillsPaymentsSection";
+import EmailTabSection from "../components/email/EmailTabSection";
 import SummaryBar from "../components/layout/SummaryBar";
 import { parseDueDate } from "../lib/dashboard-helpers";
 import { DashboardProvider, useDashboard } from "../context/DashboardContext";
@@ -480,7 +478,7 @@ function DashboardMain({
   }
 
   return (
-    <div className="min-h-screen text-foreground font-sans p-6 max-w-[1200px] mx-auto">
+    <div className="min-h-screen text-foreground font-sans p-6 max-w-[1400px] mx-auto">
       {generating && <RefreshBanner progress={genProgress} />}
 
       <DashboardHeader
@@ -521,17 +519,17 @@ function DashboardMain({
       <SummaryBar stats={summaryStats} loaded={loaded} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ScheduleSection
-          calendar={liveData.liveCalendar || d.calendar}
+        <InsightsSection
+          insights={d.aiInsights}
           loaded={loaded}
           delay={200}
           className={halfClass}
         />
 
-        <InsightsSection
-          insights={d.aiInsights}
+        <ScheduleSection
+          calendar={liveData.liveCalendar || d.calendar}
           loaded={loaded}
-          delay={300}
+          delay={250}
           className={halfClass}
         />
 
@@ -539,32 +537,24 @@ function DashboardMain({
           ctm={d.ctm}
           deadlines={d.deadlines}
           loaded={loaded}
+          delay={350}
+          className={halfClass}
+        />
+
+        <BillsPaymentsSection
+          bills={liveData.liveBills}
+          loaded={loaded}
           delay={400}
           className={halfClass}
         />
 
-        <BillsSection loaded={loaded} delay={500} className={halfClass} />
-
-        <UpcomingBillsSection
-          bills={liveData.liveBills}
-          loaded={loaded}
-          delay={550}
-          className={halfClass}
-        />
-
-        <EmailSection
+        <EmailTabSection
           summary={d.emails?.summary}
           model={d.model}
-          loaded={loaded}
-          delay={600}
-          className={fullClass}
-        />
-
-        <LiveEmailSection
           emails={liveData.liveEmails}
           briefingGeneratedAt={liveData.briefingGeneratedAt}
           loaded={loaded}
-          delay={700}
+          delay={500}
           className={fullClass}
         />
       </div>
