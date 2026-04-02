@@ -124,6 +124,7 @@ export async function fetchCalendar(gmailAccounts) {
   });
   return allEvents.map(({ _start, _end, ...event }) => ({
     ...event,
+    startMs: _start,
     passed: event.allDay ? false : _end <= nowMs,
   }));
 }

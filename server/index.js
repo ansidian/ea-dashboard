@@ -12,6 +12,7 @@ import authRoutes from "./routes/auth.js";
 import briefingRoutes from "./routes/briefing.js";
 import accountsRoutes from "./routes/accounts.js";
 import searchRoutes from "./routes/search.js";
+import liveRoutes from "./routes/live.js";
 import { initScheduler } from "./briefing/scheduler.js";
 import { migrate } from "./db/migrate.js";
 import { validateSession } from "./middleware/auth.js";
@@ -46,6 +47,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/briefing", briefingRoutes);
 app.use("/api/ea", accountsRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/live", liveRoutes);
 
 // Serve static frontend in production (behind auth)
 if (process.env.NODE_ENV === "production") {

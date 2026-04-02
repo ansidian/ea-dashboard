@@ -71,10 +71,11 @@ export function getMetadata(userId) {
       await actualApi.init({ serverURL, password });
       await actualApi.downloadBudget(syncId);
 
-      const [rawAccounts, rawPayees, groups] = await Promise.all([
+      const [rawAccounts, rawPayees, groups, schedules] = await Promise.all([
         actualApi.getAccounts(),
         actualApi.getPayees(),
         actualApi.getCategoryGroups(),
+        getSchedulesWithConditions().catch(() => []),
       ]);
 
       const accounts = rawAccounts
@@ -87,6 +88,8 @@ export function getMetadata(userId) {
         .map(p => ({ id: p.id, name: p.name }))
         .sort((a, b) => a.name.localeCompare(b.name));
 
+      const payeeMap = Object.fromEntries(rawPayees.map(p => [p.id, p.name]));
+
       const categories = groups
         .filter(g => g.name !== "Internal")
         .map(g => ({
@@ -94,7 +97,7 @@ export function getMetadata(userId) {
           categories: (g.categories || []).map(c => ({ id: c.id, name: c.name })),
         }));
 
-      const result = { accounts, payees, categories };
+      const result = { accounts, payees, payeeMap, categories, schedules };
       metadataCache = { data: result, ts: Date.now() };
       return result;
     } finally {
@@ -311,6 +314,34 @@ async function upsertTransferSchedule(billData) {
 
   const result = await createOrReuseSchedule(name, billData.due_date, amountCents, conditions);
   return { success: true, message: result.reused ? `Updated existing transfer schedule "${name}"` : `Transfer schedule "${name}" created` };
+}
+
+export async function getUpcomingBills(userId) {
+  const { schedules, payeeMap } = await getMetadata(userId);
+
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+  const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    .toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+
+  return schedules
+    .filter(s => s.next_date && s.next_date <= weekFromNow)
+    .map(s => {
+      const amtCond = s.conditions.find(c => c.field === "amount");
+      const payeeCond = s.conditions.find(c => c.field === "payee");
+      const amountCents = amtCond?.value ?? 0;
+      const payeeName = payeeCond ? payeeMap[payeeCond.value] : s.name;
+
+      return {
+        id: s.id,
+        name: s.name || payeeName || "Unknown",
+        payee: payeeName || s.name || "Unknown",
+        amount: Math.abs(amountCents) / 100,
+        next_date: s.next_date,
+        isDueToday: s.next_date === today,
+        isOverdue: s.next_date < today,
+      };
+    })
+    .sort((a, b) => a.next_date.localeCompare(b.next_date));
 }
 
 export function sendBill(billData, userId) {

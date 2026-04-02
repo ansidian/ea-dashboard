@@ -10,7 +10,7 @@ import { getCategories } from "./actual.js";
 import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../embeddings/index.js";
 
 // Shared: load accounts + settings, return them
-async function loadUserConfig(userId) {
+export async function loadUserConfig(userId) {
   const accountsResult = await db.execute({
     sql: "SELECT * FROM ea_accounts WHERE user_id = ?",
     args: [userId],

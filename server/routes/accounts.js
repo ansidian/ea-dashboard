@@ -184,7 +184,7 @@ router.post("/accounts/test/:id", async (req, res) => {
 router.patch("/accounts/:id", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const { id } = req.params;
-  const { calendar_enabled, label, color, icon } = req.body;
+  const { calendar_enabled, label, color, icon, gmail_index } = req.body;
   try {
     const updates = [];
     const args = [];
@@ -203,6 +203,10 @@ router.patch("/accounts/:id", async (req, res) => {
     if (icon !== undefined) {
       updates.push("icon = ?");
       args.push(icon || null);
+    }
+    if (gmail_index !== undefined) {
+      updates.push("gmail_index = ?");
+      args.push(gmail_index);
     }
     if (updates.length) {
       updates.push("updated_at = datetime('now')");
@@ -409,6 +413,41 @@ router.get("/models", async (req, res) => {
     res.json(models);
   } catch (err) {
     console.error("Error fetching models:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- Important Senders ---
+
+router.get("/important-senders", requireAuth, async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    const result = await db.execute({
+      sql: "SELECT important_senders_json FROM ea_settings WHERE user_id = ?",
+      args: [userId],
+    });
+    const raw = result.rows[0]?.important_senders_json || "[]";
+    res.json(JSON.parse(raw));
+  } catch (err) {
+    console.error("Error fetching important senders:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put("/important-senders", requireAuth, async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { senders } = req.body;
+  if (!Array.isArray(senders)) {
+    return res.status(400).json({ message: "senders must be an array" });
+  }
+  try {
+    await db.execute({
+      sql: "UPDATE ea_settings SET important_senders_json = ? WHERE user_id = ?",
+      args: [JSON.stringify(senders), userId],
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error updating important senders:", err.message);
     res.status(500).json({ message: err.message });
   }
 });

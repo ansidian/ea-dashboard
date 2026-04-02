@@ -84,3 +84,10 @@ export const searchBriefings = (query, options = {}) => {
   return apiFetch(`/api/search?${params}`);
 };
 export const analyzeSearchResults = (query, results) => apiFetch("/api/search/analyze", { method: "POST", body: JSON.stringify({ query, results }) });
+
+// Live Data
+export const getLiveData = () => apiFetch("/api/live/all");
+
+// Important Senders
+export const getImportantSenders = () => apiFetch("/api/ea/important-senders");
+export const updateImportantSenders = (senders) => apiFetch("/api/ea/important-senders", { method: "PUT", body: JSON.stringify({ senders }) });
