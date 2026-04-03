@@ -408,7 +408,7 @@ export default function Settings() {
                 aria-label="Select Claude model"
               >
                 <span>{modelsLoading ? "Loading models..." : selectedLabel}</span>
-                <span className="text-muted-foreground text-[10px] max-sm:text-xs">{open ? "▲" : "▼"}</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 150ms ease" }}><path d="M3 4.5L6 7.5L9 4.5" /></svg>
               </button>
               {open && models.length > 0 && (
                 <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-elevated border border-white/10 rounded-lg max-h-60 max-sm:max-h-[calc(100vh-200px)] overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.7)]">

@@ -74,12 +74,20 @@ export default function Section({
               </span>
             )}
           </div>
-          <span
-            className="text-muted-foreground/50 text-xs transition-transform duration-200"
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-muted-foreground/50 transition-transform duration-200"
             style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
           >
-            ▶
-          </span>
+            <path d="M4.5 3L7.5 6L4.5 9" />
+          </svg>
         </div>
       ) : (
         <div className={cn(t.titleClass, "mb-3")} style={t.titleStyle}>

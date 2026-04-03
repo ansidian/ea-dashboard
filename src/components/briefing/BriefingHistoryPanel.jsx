@@ -18,7 +18,9 @@ function groupByDate(items) {
   let currentItems = [];
 
   for (const item of items) {
-    const d = new Date(item.generated_at + "Z");
+    // generated_at may be a full ISO datetime or just a date ("2026-04-01")
+    const raw = item.generated_at;
+    const d = new Date(raw.includes("T") ? raw + (raw.endsWith("Z") ? "" : "Z") : raw + "T00:00:00Z");
     const itemDateStr = dateFmt.format(d);
 
     let label;
@@ -288,7 +290,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                         className={cn(
                           "text-[9px] max-sm:text-xs font-semibold tracking-wide tabular-nums transition-opacity duration-200",
                           !isActive && !isMobile && "group-hover:opacity-0",
-                          confirmId === item.id && "!opacity-0",
+                          confirmId === item.id && !isMobile && "!opacity-0",
                         )}
                         style={{
                           color: isActive ? "rgba(203,166,218,0.7)" : "rgba(180,190,254,0.5)",
@@ -304,12 +306,12 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                       <button
                         onClick={(e) => handleDeleteClick(e, item)}
                         className={cn(
-                          "absolute right-0 flex items-center justify-center rounded-md transition-all duration-200",
+                          "flex items-center justify-center rounded-md transition-all duration-200",
                           confirmId === item.id
                             ? "opacity-100 bg-destructive/[0.12] px-2 py-0.5 gap-1"
                             : isMobile
                               ? "opacity-70 w-8 h-8 bg-transparent"
-                              : "opacity-0 group-hover:opacity-100 w-6 h-6 bg-transparent hover:bg-destructive/[0.12]",
+                              : "absolute right-0 opacity-0 group-hover:opacity-100 w-6 h-6 bg-transparent hover:bg-destructive/[0.12]",
                           "active:scale-90",
                           deletingId === item.id && "opacity-100 pointer-events-none",
                         )}

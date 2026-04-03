@@ -343,7 +343,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder="Search briefings..."
-            className="flex-1 bg-transparent border-none outline-none text-foreground text-[13px] font-[inherit] placeholder:text-muted-foreground/40"
+            className="flex-1 bg-transparent border-none outline-none text-foreground text-[13px] max-sm:text-[16px] font-[inherit] placeholder:text-muted-foreground/40"
           />
           {!query && (
             <div className="hidden sm:flex items-center gap-1 shrink-0">

@@ -3,8 +3,10 @@ import { createPortal } from "react-dom";
 
 export default function BottomSheet({ open, onClose, title, children }) {
   const sheetRef = useRef(null);
+  const contentRef = useRef(null);
   const dragStartY = useRef(null);
   const dragCurrentY = useRef(null);
+  const isDragging = useRef(false);
 
   // close on escape
   useEffect(() => {
@@ -23,12 +25,19 @@ export default function BottomSheet({ open, onClose, title, children }) {
   }, [open]);
 
   const onTouchStart = useCallback((e) => {
+    // only allow drag-to-dismiss when content is scrolled to top
+    const content = contentRef.current;
+    if (content && content.scrollTop > 0) {
+      isDragging.current = false;
+      return;
+    }
+    isDragging.current = true;
     dragStartY.current = e.touches[0].clientY;
     dragCurrentY.current = 0;
   }, []);
 
   const onTouchMove = useCallback((e) => {
-    if (dragStartY.current === null) return;
+    if (!isDragging.current || dragStartY.current === null) return;
     const dy = e.touches[0].clientY - dragStartY.current;
     if (dy < 0) return; // only drag down
     dragCurrentY.current = dy;
@@ -39,6 +48,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
   }, []);
 
   const onTouchEnd = useCallback(() => {
+    if (!isDragging.current) return;
     if (sheetRef.current) {
       sheetRef.current.style.transition = "";
     }
@@ -49,6 +59,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
     }
     dragStartY.current = null;
     dragCurrentY.current = 0;
+    isDragging.current = false;
   }, [onClose]);
 
   if (!open) return null;
@@ -74,6 +85,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
           borderRadius: "16px 16px 0 0",
           border: "1px solid rgba(255,255,255,0.08)",
           borderBottom: "none",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
           overscrollBehavior: "contain",
           transition: "transform 300ms cubic-bezier(0.16,1,0.3,1)",
         }}
@@ -107,6 +119,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
 
         {/* Content */}
         <div
+          ref={contentRef}
           className="flex-1 overflow-y-auto"
           style={{ overscrollBehavior: "contain" }}
         >
