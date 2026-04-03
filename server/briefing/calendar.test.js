@@ -38,14 +38,15 @@ describe("getNextWeekRange", () => {
     expect(endDate.getDate()).toBe(18);
   });
 
-  it("startDate is at midnight, endDate is at 23:59:59.999", () => {
+  it("startDate and endDate are correct Pacific midnight boundaries regardless of server timezone", () => {
     vi.useFakeTimers();
+    // Thu Apr 3 2026 — Pacific is UTC-7 (PDT)
+    // Next Sunday is Apr 5, midnight Pacific = 07:00 UTC
+    // Next Saturday is Apr 11, end-of-day Pacific = Apr 12 06:59:59.999 UTC
     vi.setSystemTime(new Date("2026-04-03T17:00:00Z"));
     const { startDate, endDate } = getNextWeekRange();
-    expect(startDate.getHours()).toBe(0);
-    expect(startDate.getMinutes()).toBe(0);
-    expect(endDate.getHours()).toBe(23);
-    expect(endDate.getMinutes()).toBe(59);
-    expect(endDate.getSeconds()).toBe(59);
+    // ISO string must show midnight Pacific as 07:00Z (UTC-7 offset)
+    expect(startDate.toISOString()).toBe("2026-04-05T07:00:00.000Z");
+    expect(endDate.toISOString()).toBe("2026-04-12T06:59:59.999Z");
   });
 });

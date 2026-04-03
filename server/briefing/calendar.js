@@ -1,6 +1,49 @@
 import { decrypt } from "./encryption.js";
 import db from "../db/connection.js";
 
+/**
+ * Returns midnight (start) and 23:59:59.999 (end) for the Pacific-time date
+ * that `date` falls on, as proper UTC-anchored Date objects regardless of the
+ * server's local timezone.
+ */
+function pacificDayBoundaries(date) {
+  // Resolve the current Pacific UTC offset (handles DST automatically)
+  const offsetPart = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(date)
+    .find((p) => p.type === "timeZoneName")?.value; // e.g. "GMT-7" or "GMT-8"
+  const offsetMatch = offsetPart?.match(/GMT([+-]\d+(?::\d+)?)/);
+  const [offsetHours, offsetMins] = offsetMatch
+    ? offsetMatch[1].split(":").map(Number)
+    : [-8, 0];
+  const totalOffsetMs = (offsetHours * 60 + (offsetMins || 0) * Math.sign(offsetHours)) * 60000;
+
+  // Get the Pacific date components
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .formatToParts(date)
+    .reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+
+  const yyyy = parts.year;
+  const mm = parts.month;
+  const dd = parts.day;
+
+  // Midnight Pacific = midnight in Pacific ISO string converted to UTC
+  const dayStart = new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`);
+  dayStart.setTime(dayStart.getTime() - totalOffsetMs);
+
+  const dayEnd = new Date(`${yyyy}-${mm}-${dd}T23:59:59.999Z`);
+  dayEnd.setTime(dayEnd.getTime() - totalOffsetMs);
+
+  return { dayStart, dayEnd };
+}
+
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
@@ -50,15 +93,9 @@ export async function fetchCalendar(gmailAccounts, { startDate, endDate } = {}) 
         rangeStart = startDate;
         rangeEnd = endDate;
       } else {
-        const now = new Date();
-        const todayStart = new Date(
-          now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }),
-        );
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date(todayStart);
-        todayEnd.setHours(23, 59, 59, 999);
-        rangeStart = todayStart;
-        rangeEnd = todayEnd;
+        const { dayStart, dayEnd } = pacificDayBoundaries(new Date());
+        rangeStart = dayStart;
+        rangeEnd = dayEnd;
       }
 
       // Fetch all calendars for this account (with colors)
@@ -149,20 +186,24 @@ export async function fetchCalendar(gmailAccounts, { startDate, endDate } = {}) 
 
 export function getNextWeekRange() {
   const now = new Date();
-  const pacific = new Date(
-    now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }),
-  );
-  const dayOfWeek = pacific.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  // Determine the current day-of-week in Pacific time
+  const dayOfWeekStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    weekday: "short",
+  }).format(now);
+  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(dayOfWeekStr);
+
   // Days until next Sunday: if today is Sun (0), next Sun is 7 days away
-  // If today is Mon (1), next Sun is 6 days away, etc.
   const daysUntilNextSunday = (7 - dayOfWeek) % 7 || 7;
-  const nextSunday = new Date(pacific);
-  nextSunday.setDate(pacific.getDate() + daysUntilNextSunday);
-  nextSunday.setHours(0, 0, 0, 0);
-  const nextSaturday = new Date(nextSunday);
-  nextSaturday.setDate(nextSunday.getDate() + 6);
-  nextSaturday.setHours(23, 59, 59, 999);
-  return { startDate: nextSunday, endDate: nextSaturday };
+
+  // Advance `now` by the right number of days, then get Pacific boundaries
+  const nextSundayMs = now.getTime() + daysUntilNextSunday * 86400000;
+  const { dayStart: startDate } = pacificDayBoundaries(new Date(nextSundayMs));
+
+  const nextSaturdayMs = nextSundayMs + 6 * 86400000;
+  const { dayEnd: endDate } = pacificDayBoundaries(new Date(nextSaturdayMs));
+
+  return { startDate, endDate };
 }
 
 function formatTime(dateStr) {
