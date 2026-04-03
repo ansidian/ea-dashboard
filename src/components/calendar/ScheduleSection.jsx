@@ -30,148 +30,338 @@ function NowMarker({ time }) {
   );
 }
 
-export default function ScheduleSection({ calendar, loaded, delay, style, className }) {
-  const nowTime = useNowTime();
+function buildWeekDays(events) {
+  if (!events || events.length === 0) return [];
 
-  // Where to insert the now marker:
-  // - Before the first non-passed event (between passed and upcoming)
-  // - At the top if no events have passed yet
-  // - At the bottom if all events have passed
+  // Find the earliest event to determine the week
+  const earliest = events.reduce((min, e) => (e.startMs < min.startMs ? e : min), events[0]);
+  const d = new Date(earliest.startMs);
+  // Compute Sunday of that week
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - d.getDay());
+  sunday.setHours(0, 0, 0, 0);
+
+  // Group events by dayLabel
+  const byDay = {};
+  for (const e of events) {
+    const key = e.dayLabel;
+    if (!byDay[key]) byDay[key] = [];
+    byDay[key].push(e);
+  }
+
+  // Generate 7 days
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(sunday);
+    date.setDate(sunday.getDate() + i);
+    const label = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    days.push({
+      label,
+      events: byDay[label] || [],
+    });
+  }
+
+  return days;
+}
+
+function EventCard({ event, showSource }) {
+  return (
+    <div
+      className={cn(
+        "group relative flex items-center gap-3 py-2 px-3 rounded-md transition-all duration-200",
+        event.flag === "Conflict"
+          ? "bg-destructive/[0.05]"
+          : "bg-card/60",
+        "hover:bg-card/80",
+      )}
+      style={{
+        border: event.flag === "Conflict"
+          ? "1px solid rgba(243,139,168,0.2)"
+          : "1px solid rgba(255,255,255,0.04)",
+      }}
+    >
+      {/* Color accent bar */}
+      <div
+        className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+        style={{
+          background: event.color,
+          opacity: 0.7,
+          boxShadow: `0 0 6px ${event.color}30`,
+        }}
+      />
+
+      {/* Time + duration */}
+      <div className="min-w-[72px] ml-1">
+        <div className="text-[13px] font-semibold tabular-nums text-foreground">
+          {event.time}
+        </div>
+        <div className="text-[10px] text-muted-foreground/50">
+          {event.duration}
+        </div>
+      </div>
+
+      {/* Title + source */}
+      <div className="flex-1 min-w-0">
+        <div className="text-[12px] font-medium truncate text-foreground/90">
+          {event.title}
+        </div>
+        {showSource && event.source && (
+          <span
+            className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-medium rounded px-1.5 py-px"
+            style={{
+              color: `${event.color}cc`,
+              background: `${event.color}10`,
+            }}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: event.color, opacity: 0.7 }}
+            />
+            {event.source}
+          </span>
+        )}
+      </div>
+
+      {/* Flags */}
+      {event.flag && (
+        <div
+          className={cn(
+            "text-[9px] font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
+            event.flag === "Conflict"
+              ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
+              : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
+          )}
+        >
+          {event.flag}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NextWeekView({ events, showSource }) {
+  const days = buildWeekDays(events);
+
+  if (days.length === 0) {
+    return (
+      <div className="py-8 text-center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2.5 text-muted-foreground/20">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        <div className="text-[11px] text-muted-foreground/50">No events scheduled next week</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {days.map((day) => (
+        <div key={day.label}>
+          <div
+            className="text-[10px] tracking-[1.5px] uppercase font-bold mb-1.5"
+            style={{
+              color: day.events.length > 0
+                ? "rgba(203,166,218,0.6)"
+                : "rgba(255,255,255,0.15)",
+            }}
+          >
+            {day.label}
+          </div>
+          {day.events.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {day.events.map((event, i) => (
+                <EventCard key={i} event={event} showSource={showSource} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-[11px] text-muted-foreground/30 py-1">
+              No events
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, delay, style, className }) {
+  const nowTime = useNowTime();
+  const [view, setView] = useState("today");
+
+  const activeEvents = view === "today" ? calendar : nextWeekCalendar;
+  const sources = new Set(activeEvents?.map(e => e.source).filter(Boolean));
+  const showSource = sources.size > 1;
+
+  // Where to insert the now marker (today view only)
   const firstUpcoming = calendar?.findIndex(e => !e.passed && !e.allDay) ?? -1;
   const nowPosition = calendar?.length > 0
     ? (firstUpcoming >= 0 ? firstUpcoming : calendar.length)
     : -1;
 
-  // Only show source chips when events come from multiple calendars
-  const sources = new Set(calendar?.map(e => e.source).filter(Boolean));
-  const showSource = sources.size > 1;
+  const titleContent = (
+    <div className="flex items-center gap-3">
+      <button
+        onClick={() => setView("today")}
+        className={cn(
+          "text-[11px] tracking-[2.5px] uppercase font-semibold transition-colors duration-200",
+          view === "today"
+            ? "text-foreground/40"
+            : "text-foreground/15 hover:text-foreground/25",
+        )}
+      >
+        Today
+      </button>
+      <button
+        onClick={() => setView("next-week")}
+        className={cn(
+          "text-[11px] tracking-[2.5px] uppercase font-semibold transition-colors duration-200",
+          view === "next-week"
+            ? "text-foreground/40"
+            : "text-foreground/15 hover:text-foreground/25",
+        )}
+      >
+        Next Week
+      </button>
+    </div>
+  );
 
   return (
-    <Section title="Today's Schedule" delay={delay} loaded={loaded} style={style} className={className} tier={2}>
-      {calendar?.length > 0 ? (
-        <div className="relative pl-5">
-          {/* Timeline spine */}
-          <div
-            className="absolute left-[5px] top-2 bottom-2 w-px"
-            style={{ background: "rgba(255,255,255,0.06)" }}
-          />
+    <Section title={titleContent} delay={delay} loaded={loaded} style={style} className={className} tier={2}>
+      {view === "today" && (
+        <>
+          {calendar?.length > 0 ? (
+            <div className="relative pl-5">
+              {/* Timeline spine */}
+              <div
+                className="absolute left-[5px] top-2 bottom-2 w-px"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+              />
 
-          <div className="flex flex-col gap-1">
-            {/* Now marker at the top (no events passed yet) */}
-            {nowPosition === 0 && <NowMarker time={nowTime} />}
+              <div className="flex flex-col gap-1">
+                {/* Now marker at the top (no events passed yet) */}
+                {nowPosition === 0 && <NowMarker time={nowTime} />}
 
-            {calendar.map((event, i) => (
-              <div key={i}>
-                {/* Event card */}
-                <div
-                  className={cn(
-                    "group relative flex items-center gap-3 py-2 px-3 rounded-md transition-all duration-200",
-                    event.flag === "Conflict"
-                      ? "bg-destructive/[0.05]"
-                      : "bg-card/60",
-                    event.passed ? "opacity-40" : "hover:bg-card/80",
-                  )}
-                  style={{
-                    border: event.flag === "Conflict"
-                      ? "1px solid rgba(243,139,168,0.2)"
-                      : "1px solid rgba(255,255,255,0.04)",
-                  }}
-                >
-                  {/* Timeline dot — on the spine */}
-                  <div
-                    className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0 transition-all duration-200"
-                    style={{
-                      background: event.passed ? "rgba(255,255,255,0.1)" : event.color,
-                      boxShadow: event.passed ? "none" : `0 0 6px ${event.color}50`,
-                    }}
-                  />
-
-                  {/* Color accent bar */}
-                  <div
-                    className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
-                    style={{
-                      background: event.color,
-                      opacity: event.passed ? 0.3 : 0.7,
-                      boxShadow: event.passed ? "none" : `0 0 6px ${event.color}30`,
-                    }}
-                  />
-
-                  {/* Time + duration */}
-                  <div className="min-w-[72px] ml-1">
-                    <div className={cn(
-                      "text-[13px] font-semibold tabular-nums",
-                      event.passed ? "text-muted-foreground" : "text-foreground",
-                    )}>
-                      {event.time}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground/50">
-                      {event.duration}
-                    </div>
-                  </div>
-
-                  {/* Title + source */}
-                  <div className="flex-1 min-w-0">
+                {calendar.map((event, i) => (
+                  <div key={i}>
+                    {/* Event card */}
                     <div
                       className={cn(
-                        "text-[12px] font-medium truncate",
-                        event.passed
-                          ? "text-muted-foreground line-through decoration-muted-foreground/30"
-                          : "text-foreground/90",
-                      )}
-                    >
-                      {event.title}
-                    </div>
-                    {showSource && event.source && (
-                      <span
-                        className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-medium rounded px-1.5 py-px"
-                        style={{
-                          color: `${event.color}cc`,
-                          background: `${event.color}10`,
-                        }}
-                      >
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ background: event.color, opacity: 0.7 }}
-                        />
-                        {event.source}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Flags */}
-                  {!event.passed && event.flag && (
-                    <div
-                      className={cn(
-                        "text-[9px] font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
+                        "group relative flex items-center gap-3 py-2 px-3 rounded-md transition-all duration-200",
                         event.flag === "Conflict"
-                          ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
-                          : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
+                          ? "bg-destructive/[0.05]"
+                          : "bg-card/60",
+                        event.passed ? "opacity-40" : "hover:bg-card/80",
                       )}
+                      style={{
+                        border: event.flag === "Conflict"
+                          ? "1px solid rgba(243,139,168,0.2)"
+                          : "1px solid rgba(255,255,255,0.04)",
+                      }}
                     >
-                      {event.flag}
+                      {/* Timeline dot — on the spine */}
+                      <div
+                        className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0 transition-all duration-200"
+                        style={{
+                          background: event.passed ? "rgba(255,255,255,0.1)" : event.color,
+                          boxShadow: event.passed ? "none" : `0 0 6px ${event.color}50`,
+                        }}
+                      />
+
+                      {/* Color accent bar */}
+                      <div
+                        className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                        style={{
+                          background: event.color,
+                          opacity: event.passed ? 0.3 : 0.7,
+                          boxShadow: event.passed ? "none" : `0 0 6px ${event.color}30`,
+                        }}
+                      />
+
+                      {/* Time + duration */}
+                      <div className="min-w-[72px] ml-1">
+                        <div className={cn(
+                          "text-[13px] font-semibold tabular-nums",
+                          event.passed ? "text-muted-foreground" : "text-foreground",
+                        )}>
+                          {event.time}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground/50">
+                          {event.duration}
+                        </div>
+                      </div>
+
+                      {/* Title + source */}
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className={cn(
+                            "text-[12px] font-medium truncate",
+                            event.passed
+                              ? "text-muted-foreground line-through decoration-muted-foreground/30"
+                              : "text-foreground/90",
+                          )}
+                        >
+                          {event.title}
+                        </div>
+                        {showSource && event.source && (
+                          <span
+                            className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-medium rounded px-1.5 py-px"
+                            style={{
+                              color: `${event.color}cc`,
+                              background: `${event.color}10`,
+                            }}
+                          >
+                            <span
+                              className="w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ background: event.color, opacity: 0.7 }}
+                            />
+                            {event.source}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Flags */}
+                      {!event.passed && event.flag && (
+                        <div
+                          className={cn(
+                            "text-[9px] font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
+                            event.flag === "Conflict"
+                              ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
+                              : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
+                          )}
+                        >
+                          {event.flag}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
 
-                {/* Now marker — between passed and upcoming */}
-                {nowPosition > 0 && nowPosition < calendar.length && i === nowPosition - 1 && <NowMarker time={nowTime} />}
+                    {/* Now marker — between passed and upcoming */}
+                    {nowPosition > 0 && nowPosition < calendar.length && i === nowPosition - 1 && <NowMarker time={nowTime} />}
+                  </div>
+                ))}
+
+                {/* Now marker at the bottom (all events passed) */}
+                {nowPosition === calendar.length && <NowMarker time={nowTime} />}
               </div>
-            ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2.5 text-muted-foreground/20">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <div className="text-[11px] text-muted-foreground/50">No events scheduled today</div>
+            </div>
+          )}
+        </>
+      )}
 
-            {/* Now marker at the bottom (all events passed) */}
-            {nowPosition === calendar.length && <NowMarker time={nowTime} />}
-          </div>
-        </div>
-      ) : (
-        <div className="py-8 text-center">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2.5 text-muted-foreground/20">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          <div className="text-[11px] text-muted-foreground/50">No events scheduled today</div>
-        </div>
+      {view === "next-week" && (
+        <NextWeekView events={nextWeekCalendar} showSource={showSource} />
       )}
     </Section>
   );

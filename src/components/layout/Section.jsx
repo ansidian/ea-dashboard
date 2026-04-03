@@ -34,9 +34,9 @@ export default function Section({ title, children, delay, loaded, style, classNa
       )}
       style={{ transitionDelay: `${delay}ms`, ...t.wrapperStyle, ...style }}
     >
-      <h2 className={t.titleClass} style={t.titleStyle}>
+      <div className={t.titleClass} style={t.titleStyle}>
         {title}
-      </h2>
+      </div>
       {children}
     </div>
   );
