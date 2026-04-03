@@ -10,6 +10,7 @@ export default function useLiveData() {
   const [liveBills, setLiveBills] = useState([]);
   const [importantSenders, setImportantSenders] = useState([]);
   const [briefingGeneratedAt, setBriefingGeneratedAt] = useState(null);
+  const [briefingReadStatus, setBriefingReadStatus] = useState({});
   const [lastFetched, setLastFetched] = useState(null);
   const [isPolling, setIsPolling] = useState(false);
   const intervalRef = useRef(null);
@@ -29,6 +30,7 @@ export default function useLiveData() {
       setLiveBills(data.bills || []);
       setImportantSenders(data.importantSenders || []);
       setBriefingGeneratedAt(data.briefingGeneratedAt || null);
+      setBriefingReadStatus(data.briefingReadStatus || {});
       setLastFetched(data.fetchedAt || new Date().toISOString());
     } catch (err) {
       console.error("[Live] Fetch failed:", err.message);
@@ -80,6 +82,7 @@ export default function useLiveData() {
     liveBills,
     importantSenders,
     briefingGeneratedAt,
+    briefingReadStatus,
     lastFetched,
     isPolling,
     refreshNow,

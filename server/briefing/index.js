@@ -166,7 +166,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
     return;
   }
 
-  // Build lookup: email uid/id → original account info
+  // Build lookup: email uid/id → original account info (including current read status)
   const emailLookup = new Map();
   for (const e of inputEmails) {
     emailLookup.set(e.uid, {
@@ -174,6 +174,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
       icon: e.account_icon,
       color: e.account_color,
       message_id: e.message_id,
+      read: e.read,
     });
   }
 
@@ -184,6 +185,8 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
       const id = email.id || email.uid;
       const original = emailLookup.get(id);
       if (original?.message_id) email.message_id = original.message_id;
+      // Sync read status from fresh Gmail/iCloud fetch
+      if (original?.read && !email.read) email.read = true;
       allTriaged.push({ email, accountLabel: original?.label || acct.name });
     }
   }
@@ -215,7 +218,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
   // Replace accounts with corrected grouping, fix unread counts
   briefingJson.emails.accounts = [...grouped.values()].map((acct) => ({
     ...acct,
-    unread: acct.important.length,
+    unread: acct.important.filter(e => !e.read).length,
   }));
 
   // Invariant check: email count in should equal email count out (per D-01, D-02)

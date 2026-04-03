@@ -167,6 +167,14 @@ router.get("/all", async (req, res) => {
         : Promise.resolve([]),
     ]);
 
+    // Capture read status for briefing emails before filtering them out
+    const briefingReadStatus = {};
+    for (const e of emailArrays) {
+      if (knownUids.has(e.uid) && e.read) {
+        briefingReadStatus[e.uid] = true;
+      }
+    }
+
     // Filter to only new emails not in the briefing
     const newEmails = emailArrays
       .filter(e => !knownUids.has(e.uid))
@@ -188,6 +196,7 @@ router.get("/all", async (req, res) => {
       bills,
       importantSenders: Array.from(importantSendersMap.values()),
       briefingGeneratedAt,
+      briefingReadStatus,
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {

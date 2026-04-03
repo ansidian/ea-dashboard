@@ -71,10 +71,10 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
   const [selectedNoiseId, setSelectedNoiseId] = useState(null);
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
-  const hasUnread = currentAccount?.important?.some(e => !e.read && !markedRead.has(e.id));
+  const hasUnread = currentAccount?.important?.some(e => !e.read && !markedRead.has(e.uid || e.id) && !markedRead.has(e.id));
 
   const handleMarkAllRead = async () => {
-    const uids = currentAccount.important.map(e => e.id);
+    const uids = currentAccount.important.map(e => e.uid || e.id);
     if (!uids.length) return;
     setMarkingAllRead(true);
     try {

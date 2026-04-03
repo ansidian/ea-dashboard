@@ -54,7 +54,7 @@ async function markEmailsReadInBriefing(userId, uids) {
   let changed = false;
   for (const acct of briefing.emails?.accounts || []) {
     for (const email of acct.important) {
-      if (uidSet.has(email.id) && !email.read) {
+      if ((uidSet.has(email.id) || uidSet.has(email.uid)) && !email.read) {
         email.read = true;
         changed = true;
       }

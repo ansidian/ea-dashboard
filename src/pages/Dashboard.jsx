@@ -116,6 +116,27 @@ export default function Dashboard() {
       });
   }, []);
 
+  // Reconcile briefing read status from live Gmail data
+  useEffect(() => {
+    const status = liveData.briefingReadStatus;
+    if (!status || !Object.keys(status).length) return;
+    setBriefing(prev => {
+      if (!prev?.emails?.accounts) return prev;
+      let changed = false;
+      const updated = JSON.parse(JSON.stringify(prev));
+      for (const acct of updated.emails.accounts) {
+        for (const e of acct.important) {
+          if (!e.read && (status[e.uid] || status[e.id])) {
+            e.read = true;
+            changed = true;
+          }
+        }
+        if (changed) acct.unread = acct.important.filter(e => !e.read).length;
+      }
+      return changed ? updated : prev;
+    });
+  }, [liveData.briefingReadStatus]);
+
   // --- Actions ---
 
   async function handleQuickRefresh() {
