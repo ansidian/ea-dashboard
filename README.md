@@ -62,8 +62,8 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
 
-# Weather (optional)
-WEATHER_API_KEY=
+# Weather (optional) — Pirate Weather
+PIRATE_WEATHER_API_KEY=
 ```
 
 ```bash
