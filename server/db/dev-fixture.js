@@ -44,12 +44,18 @@ export function generateMockBriefing() {
       { icon: "📅", text: "Your 3 PM meeting overlaps with the Canvas assignment deadline at 4 PM. Complete the submission before lunch." },
       { icon: "📧", text: "2 emails need your attention today — check the briefing tab for details." },
     ],
-    calendar: [
-      { time: "9:00 AM", duration: "30 min", title: "Daily Standup", source: "Work", color: "#4285f4", flag: null },
-      { time: "11:00 AM", duration: "1 hr", title: "Project Review", source: "Work", color: "#4285f4", flag: null },
-      { time: "1:00 PM", duration: "30 min", title: "Lunch with Alex", source: "Personal", color: "#34a853", flag: null },
-      { time: "3:00 PM", duration: "1 hr", title: "Team Planning", source: "Work", color: "#4285f4", flag: "conflict" },
-    ],
+    calendar: (() => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const ms = (h, m) => today.getTime() + h * 3600000 + m * 60000;
+      return [
+        { time: "9:00 AM", duration: "30m", title: "Daily Standup", source: "Work", color: "#4285f4", flag: null, allDay: false, startMs: ms(9, 0), passed: hour >= 10 },
+        { time: "11:00 AM", duration: "1h", title: "Project Review", source: "Work", color: "#4285f4", flag: null, allDay: false, startMs: ms(11, 0), passed: hour >= 12 },
+        { time: "1:00 PM", duration: "30m", title: "Lunch with Alex", source: "Personal", color: "#34a853", flag: null, allDay: false, startMs: ms(13, 0), passed: hour >= 14 },
+        { time: "3:00 PM", duration: "1h", title: "Team Planning", source: "Work", color: "#4285f4", flag: "Conflict", allDay: false, startMs: ms(15, 0), passed: hour >= 16 },
+      ];
+    })(),
+    nextWeekCalendar: [],
     ctm: {
       upcoming: [
         {

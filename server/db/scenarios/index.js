@@ -8,12 +8,14 @@ import urgentFlags from "./urgent-flags.js";
 import noisePreview from "./noise-preview.js";
 import bills from "./bills.js";
 import billMatch from "./bill-match.js";
+import nextWeek from "./next-week.js";
 
 const scenarios = {
   "urgent-flags": urgentFlags,
   "noise-preview": noisePreview,
   "bills": bills,
   "bill-match": billMatch,
+  "next-week": nextWeek,
 };
 
 // Returns list of available scenario names + descriptions

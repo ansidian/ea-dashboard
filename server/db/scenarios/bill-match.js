@@ -1,6 +1,7 @@
 // Simulates bill cross-reference with Actual Budget scheduled payments.
 // Tests: Group D (Enhancement 2)
-// Self-contained — adds its own bill emails showing:
+// Self-contained — do NOT combine with "bills" scenario (overlapping SoFi/Edison data).
+// Adds its own bill emails showing:
 // - SoFi: amount discrepancy flagged (email says $197.50, schedule says $185.00)
 // - T-Mobile: 1:1 match suppressed (hasBill: false, no extractedBill)
 // - Edison: new bill, no matching schedule (normal bill detection)
