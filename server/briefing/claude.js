@@ -33,6 +33,7 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
 
 3. GENERATE INSIGHTS (2-4 items): Connect dots across emails, calendar, and deadlines. Be specific and actionable.
    Calendar events with "passed": true already ended — skip them. Focus on what's ahead.
+   When "Next Week's Calendar" is provided, naturally blend it into insights — reference upcoming events when they connect to today's emails, deadlines, or calendar (e.g., prep needed, follow-ups, busy days ahead). Do not force a separate next-week insight if nothing is noteworthy.
    When Historical Context is provided, USE it:
    - Compare current bills/transactions to historical amounts (note increases, decreases, trends)
    - Flag recurring senders or threads that span multiple briefings
@@ -66,7 +67,7 @@ RULES:
 - "read" MUST be passed through from the input email's "read" field as-is.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.`;
 
-export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills }) {
+export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar }) {
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
 
   const selectedModel = model || PREFERRED_MODELS[0];
@@ -100,6 +101,13 @@ export async function callClaude({ emails, calendar, ctmDeadlines, model, emailI
     `${e.time} ${e.duration} "${e.title}"${e.passed ? " [PASSED]" : ""}${e.flag ? ` [${e.flag}]` : ""}`
   ).join("; ");
 
+  // Compact next-week calendar summary for insights
+  const nextWeekSummary = nextWeekCalendar?.length
+    ? nextWeekCalendar.map(e =>
+        `${e.dayLabel} ${e.time} ${e.duration} "${e.title}"${e.flag ? ` [${e.flag}]` : ""}`
+      ).join("; ")
+    : "";
+
   // Compact CTM summary for insights
   const ctmSummary = ctmDeadlines.length
     ? ctmDeadlines.map(d => `"${d.title}" due ${d.due_date} ${d.due_time || ""} (${d.class_name}, ${d.points_possible || 0}pts)`).join("; ")
@@ -123,6 +131,9 @@ ${calendarSummary || "No events"}
 
 ## Academic Deadlines (for insights only — do NOT include in output)
 ${ctmSummary}
+
+## Next Week's Calendar (for insights only — do NOT include in output)
+${nextWeekSummary || "No events"}
 
 ## Now: ${now}${interestsNote}${categoriesNote}${scheduledNote}${historicalContext ? `\n\n## Historical Context (from your previous briefings — use for trends, comparisons, continuity)\n${historicalContext}` : ""}`;
 
