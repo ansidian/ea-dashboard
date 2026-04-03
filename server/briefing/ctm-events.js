@@ -60,7 +60,7 @@ export async function fetchCTMDeadlines(userId) {
         ? new Date(row.due_date).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" })
         : row.due_date.split("T")[0]
       : row.due_date,
-    due_time: formatTime12h(row.due_time ? row.due_time : row.due_date),
+    due_time: row.due_time ? formatTime12h(row.due_time) : row.due_date?.includes("T") ? formatTime12h(row.due_date) : null,
     class_name: row.class_name || "Uncategorized",
     class_color: row.class_color || "#6b7280",
     points_possible: row.points_possible || null,

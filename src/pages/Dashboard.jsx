@@ -487,7 +487,7 @@ function DashboardMain({
         const due = parseDueDate(dateStr);
         return due.getTime() === today.getTime();
       }).length,
-    meetings: (liveData.liveCalendar || d.calendar)?.length || 0,
+    events: (liveData.liveCalendar || d.calendar)?.filter((e) => !e.allDay)?.length || 0,
     temp: (liveData.liveWeather || d.weather)?.temp,
   };
 

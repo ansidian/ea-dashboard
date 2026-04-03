@@ -39,7 +39,7 @@ export default function SummaryBar({ stats, loaded }) {
       value: stats.dueToday,
       label: "due today",
     },
-    stats.meetings > 0 && {
+    stats.events > 0 && {
       color: "#89b4fa",
       icon: (
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -49,8 +49,8 @@ export default function SummaryBar({ stats, loaded }) {
           <line x1="3" y1="10" x2="21" y2="10" />
         </svg>
       ),
-      value: stats.meetings,
-      label: `meeting${stats.meetings !== 1 ? "s" : ""}`,
+      value: stats.events,
+      label: `event${stats.events !== 1 ? "s" : ""}`,
     },
     stats.temp != null && {
       color: "#f9e2af",
