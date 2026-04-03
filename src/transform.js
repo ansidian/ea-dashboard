@@ -67,7 +67,8 @@ function computeCTMStats(deadlines) {
 
 function formatGeneratedAt(isoString) {
   if (!isoString) return "";
-  const d = new Date(isoString);
+  const normalized = isoString.replace(" ", "T");
+  const d = new Date(normalized.includes("T") ? normalized + (normalized.endsWith("Z") ? "" : "Z") : normalized + "T00:00:00Z");
   const tz = "America/Los_Angeles";
   const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
   const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: tz });

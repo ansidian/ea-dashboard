@@ -18,8 +18,8 @@ function groupByDate(items) {
   let currentItems = [];
 
   for (const item of items) {
-    // generated_at may be a full ISO datetime or just a date ("2026-04-01")
-    const raw = item.generated_at;
+    // generated_at from SQLite: "2026-04-03 14:30:00", "2026-04-03T14:30:00", or "2026-04-03"
+    const raw = (item.generated_at || "").replace(" ", "T");
     const d = new Date(raw.includes("T") ? raw + (raw.endsWith("Z") ? "" : "Z") : raw + "T00:00:00Z");
     const itemDateStr = dateFmt.format(d);
 

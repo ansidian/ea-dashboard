@@ -539,7 +539,8 @@ export default function DashboardHeader({
             <span className="text-xs text-[#cba6da]/80">
               Viewing briefing from{" "}
               {(() => {
-                const d2 = new Date(viewingPast.generated_at + "Z");
+                const raw = (viewingPast.generated_at || "").replace(" ", "T");
+                const d2 = new Date(raw.includes("T") ? raw + (raw.endsWith("Z") ? "" : "Z") : raw + "T00:00:00Z");
                 return d2.toLocaleString("en-US", {
                   month: "short",
                   day: "numeric",
