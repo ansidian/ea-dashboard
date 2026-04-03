@@ -12,7 +12,7 @@ import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../e
 // Shared: load accounts + settings, return them
 export async function loadUserConfig(userId) {
   const accountsResult = await db.execute({
-    sql: "SELECT * FROM ea_accounts WHERE user_id = ?",
+    sql: "SELECT * FROM ea_accounts WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC",
     args: [userId],
   });
   const accounts = accountsResult.rows;
