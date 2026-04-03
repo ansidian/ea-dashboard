@@ -6,6 +6,7 @@ import BillBadge from "../bills/BillBadge";
 import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motion-wrappers";
 import { markEmailAsRead, markAllEmailsAsRead } from "../../api";
 import { CheckCheck } from "lucide-react";
+import useIsMobile from "../../hooks/useIsMobile";
 
 const getGmailUrl = (email) => {
   if (!email.message_id) return null;
@@ -45,14 +46,17 @@ function getSectionTitle(briefingGeneratedAt) {
   return "Since This Morning";
 }
 
-export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, delay, className, embedded, onRefreshLive }) {
+export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, delay, className, embedded, onRefreshLive, onTrashedCountChange }) {
+  const isMobile = useIsMobile();
   const [selectedId, setSelectedId] = useState(null);
   const [markedRead, setMarkedRead] = useState(() => new Set());
   const [billPayId, setBillPayId] = useState(null);
   const [markingAllRead, setMarkingAllRead] = useState(false);
+  const [trashedUids, setTrashedUids] = useState(() => new Set());
   const emailRowRefs = useRef({});
 
-  const hasUnread = emails?.some(e => !e.read && !markedRead.has(e.uid));
+  const visibleEmails = emails?.filter(e => !trashedUids.has(e.uid));
+  const hasUnread = visibleEmails?.some(e => !e.read && !markedRead.has(e.uid));
 
   const handleMarkAllRead = async () => {
     const uids = emails.map(e => e.uid);
@@ -74,7 +78,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
 
   const sectionTitle = getSectionTitle(briefingGeneratedAt);
 
-  if (!emails?.length) {
+  if (!visibleEmails?.length) {
     if (!briefingGeneratedAt) return null;
     const emptyMsg = <p className="text-[12px] text-muted-foreground/40 m-0">No new emails since the last fetch.</p>;
     if (embedded) return emptyMsg;
@@ -93,13 +97,13 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
     <>
       <div className="flex items-center gap-2 mb-4">
         <span
-          className="text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums"
+          className="text-[10px] max-sm:text-xs font-bold px-2 py-0.5 rounded-full tabular-nums"
           style={{ background: "rgba(99,102,241,0.1)", color: "rgba(99,102,241,0.8)" }}
         >
-          {emails.length}
+          {visibleEmails.length}
         </span>
         <span className="text-[12px] text-muted-foreground/50">
-          new email{emails.length !== 1 ? "s" : ""}
+          new email{visibleEmails.length !== 1 ? "s" : ""}
           {briefingTime && ` · briefing ${briefingTime}`}
         </span>
         <span
@@ -109,13 +113,13 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
       </div>
 
       {/* Batch actions */}
-      {emails.length > 0 && (
+      {visibleEmails.length > 0 && (
         <div className="mb-3 flex items-center gap-1.5">
           <button
             onClick={handleMarkAllRead}
             disabled={markingAllRead || !hasUnread}
             className={cn(
-              "text-[10px] font-medium rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 font-[inherit]",
+              "text-[10px] max-sm:text-xs font-medium rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 font-[inherit]",
               hasUnread
                 ? "text-primary bg-primary/[0.08] border border-primary/20 hover:bg-primary/[0.15] hover:border-primary/30"
                 : "text-muted-foreground/40 bg-white/[0.02] border border-white/[0.06]",
@@ -129,7 +133,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
       )}
 
       <MotionList className="flex flex-col gap-1.5" loaded={loaded} delay={delay + 100} stagger={0.04}>
-        {[...emails].sort((a, b) => (b.isImportantSender ? 1 : 0) - (a.isImportantSender ? 1 : 0) || new Date(b.date) - new Date(a.date)).map((email) => {
+        {[...visibleEmails].sort((a, b) => (b.isImportantSender ? 1 : 0) - (a.isImportantSender ? 1 : 0) || new Date(b.date) - new Date(a.date)).map((email) => {
           const isOpen = selectedId === email.uid;
           const isBillPayOpen = billPayId === email.uid;
           const isRead = email.read || markedRead.has(email.uid);
@@ -174,95 +178,143 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
 
                 <div
                   data-email-header
-                  className="relative flex justify-between items-start gap-3"
+                  className={cn(
+                    "relative",
+                    isMobile ? "flex flex-col gap-1" : "flex justify-between items-start gap-3",
+                  )}
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      {email.account_icon && (
-                        <span className="text-[10px]">{email.account_icon}</span>
-                      )}
-                      {email.account_label && (
-                        <span className="text-[10px] text-muted-foreground/35">{email.account_label}</span>
-                      )}
-                      <span
-                        className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                        style={{ background: email.account_color || "#6366f1" }}
-                      />
-                      <span className="text-[11px] text-muted-foreground/50">
-                        {email.from}
-                      </span>
-                      {email.isImportantSender && (
-                        <span className="text-[9px] text-orange-400/80 font-semibold tracking-wide">
-                          ★
+                  {isMobile ? (
+                    /* Mobile: subject-first minimal layout */
+                    <>
+                      <div className="text-[13px] font-medium text-foreground/90">
+                        {email.subject}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {email.account_icon && (
+                          <span className="text-xs">{email.account_icon}</span>
+                        )}
+                        <span className="text-xs text-muted-foreground/50 truncate">
+                          {email.from}
                         </span>
-                      )}
-                    </div>
-                    <div className="text-[13px] font-medium text-foreground/90 mt-0.5">
-                      {email.subject}
-                    </div>
-                    {email.urgentFlag && (
-                      <div
-                        className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 mt-1 inline-flex items-center gap-1 w-fit"
-                        style={{
-                          color: "#f97316",
-                          background: "rgba(249,115,22,0.08)",
-                          border: "1px solid rgba(249,115,22,0.2)",
-                        }}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        {email.urgentFlag.label}
+                        {email.isImportantSender && (
+                          <span className="text-xs text-orange-400/80 font-semibold">★</span>
+                        )}
+                        <span className="text-xs text-muted-foreground/30 tabular-nums" style={tsColor ? { color: tsColor } : undefined}>
+                          · {formatRelativeTime(email.date)}
+                        </span>
                       </div>
-                    )}
-                    {!isOpen && email.body_preview && (
-                      <div className="text-[11px] text-muted-foreground/40 mt-1 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
-                        {email.body_preview}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span
-                      className="text-[10px] text-muted-foreground/30 tabular-nums"
-                      style={tsColor ? { color: tsColor } : undefined}
-                    >
-                      {formatRelativeTime(email.date)}
-                    </span>
-                    {/* Bill pay toggle */}
-                    <button
-                      className={cn(
-                        "transition-all duration-150 bg-transparent border-none cursor-pointer p-1 leading-none rounded",
-                        isBillPayOpen
-                          ? "text-green-400/80 bg-green-400/[0.08]"
-                          : "text-muted-foreground/20 opacity-0 group-hover:opacity-100 hover:text-green-400/60 hover:bg-white/[0.04]",
+                      {email.urgentFlag && (
+                        <div
+                          className="text-xs font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 mt-0.5 inline-flex items-center gap-1 w-fit"
+                          style={{
+                            color: "#f97316",
+                            background: "rgba(249,115,22,0.08)",
+                            border: "1px solid rgba(249,115,22,0.2)",
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          {email.urgentFlag.label}
+                        </div>
                       )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBillPayId(isBillPayOpen ? null : email.uid);
-                      }}
-                      title="Send to Actual Budget"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="1" x2="12" y2="23" />
-                        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-                      </svg>
-                    </button>
-                    {getGmailUrl(email) && (
-                      <a
-                        href={getGmailUrl(email)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        title="Open in Gmail"
-                        className="opacity-0 group-hover:opacity-100 transition-all duration-150 text-muted-foreground/20 hover:text-muted-foreground/60 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                        </svg>
-                      </a>
-                    )}
-                    <MotionChevron isOpen={isOpen} className="text-muted-foreground/40" />
-                  </div>
+                      {!isOpen && email.body_preview && (
+                        <div className="text-xs text-muted-foreground/40 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
+                          {email.body_preview}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* Desktop: original layout */
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {email.account_icon && (
+                            <span className="text-[10px]">{email.account_icon}</span>
+                          )}
+                          {email.account_label && (
+                            <span className="text-[10px] text-muted-foreground/35">{email.account_label}</span>
+                          )}
+                          <span
+                            className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ background: email.account_color || "#6366f1" }}
+                          />
+                          <span className="text-[11px] text-muted-foreground/50">
+                            {email.from}
+                          </span>
+                          {email.isImportantSender && (
+                            <span className="text-[9px] text-orange-400/80 font-semibold tracking-wide">
+                              ★
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[13px] font-medium text-foreground/90 mt-0.5">
+                          {email.subject}
+                        </div>
+                        {email.urgentFlag && (
+                          <div
+                            className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 mt-1 inline-flex items-center gap-1 w-fit"
+                            style={{
+                              color: "#f97316",
+                              background: "rgba(249,115,22,0.08)",
+                              border: "1px solid rgba(249,115,22,0.2)",
+                            }}
+                          >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            {email.urgentFlag.label}
+                          </div>
+                        )}
+                        {!isOpen && email.body_preview && (
+                          <div className="text-[11px] text-muted-foreground/40 mt-1 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
+                            {email.body_preview}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span
+                          className="text-[10px] text-muted-foreground/30 tabular-nums"
+                          style={tsColor ? { color: tsColor } : undefined}
+                        >
+                          {formatRelativeTime(email.date)}
+                        </span>
+                        <button
+                          className={cn(
+                            "transition-all duration-150 bg-transparent border-none cursor-pointer p-1 leading-none rounded",
+                            isBillPayOpen
+                              ? "text-green-400/80 bg-green-400/[0.08]"
+                              : "text-muted-foreground/20 opacity-0 group-hover:opacity-100 hover:text-green-400/60 hover:bg-white/[0.04]",
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBillPayId(isBillPayOpen ? null : email.uid);
+                          }}
+                          title="Send to Actual Budget"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="1" x2="12" y2="23" />
+                            <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                          </svg>
+                        </button>
+                        {getGmailUrl(email) && (
+                          <a
+                            href={getGmailUrl(email)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Open in Gmail"
+                            className="opacity-0 group-hover:opacity-100 transition-all duration-150 text-muted-foreground/20 hover:text-muted-foreground/60 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                            </svg>
+                          </a>
+                        )}
+                        <MotionChevron isOpen={isOpen} className="text-muted-foreground/40" />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Bill pay panel — opens inline below header */}
@@ -278,7 +330,14 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                     <EmailBody
                       email={email}
                       model={null}
-                      onDismiss={() => {}}
+                      onDismiss={(uid) => {
+                        setTrashedUids(prev => {
+                          const next = new Set(prev).add(uid);
+                          onTrashedCountChange?.(next.size);
+                          return next;
+                        });
+                        setSelectedId(null);
+                      }}
                       onLoaded={() => {
                         const row = emailRowRefs.current[email.uid];
                         if (!row) return;

@@ -14,7 +14,8 @@ export default function EmailTabSection({
   const prevHeight = useRef(null);
   const scrollTimer = useRef(null);
 
-  const liveCount = emails?.length || 0;
+  const [trashedCount, setTrashedCount] = useState(0);
+  const liveCount = Math.max(0, (emails?.length || 0) - trashedCount);
 
   function switchTab(tab) {
     if (tab === activeTab) return;
@@ -71,7 +72,14 @@ export default function EmailTabSection({
   return (
     <>
       <div ref={emailSectionRef} />
-      <Section title="Email" delay={delay} loaded={loaded} className={className}>
+      <Section
+        title="Email"
+        delay={delay}
+        loaded={loaded}
+        className={className}
+        summaryBadge={liveCount > 0 ? `${liveCount} email${liveCount !== 1 ? "s" : ""}` : "no new emails"}
+        defaultExpanded={false}
+      >
         {/* Tab bar */}
         <div
           className="flex gap-0.5 mb-4 rounded-lg p-[3px]"
@@ -160,6 +168,7 @@ export default function EmailTabSection({
               delay={delay}
               embedded
               onRefreshLive={onRefreshLive}
+              onTrashedCountChange={setTrashedCount}
             />
           </div>
         </div>
