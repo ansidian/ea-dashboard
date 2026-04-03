@@ -2,7 +2,7 @@ import db from "../db/connection.js";
 import { decrypt } from "./encryption.js";
 import { fetchEmails as fetchGmailEmails } from "./gmail.js";
 import { fetchEmails as fetchIcloudEmails } from "./icloud.js";
-import { fetchCalendar } from "./calendar.js";
+import { fetchCalendar, getNextWeekRange } from "./calendar.js";
 import { fetchWeather } from "./weather.js";
 import { fetchCTMDeadlines } from "./ctm-events.js";
 import { callClaude } from "./claude.js";
@@ -56,9 +56,13 @@ async function fetchLiveData(userId, accounts, settings) {
   const gmailAccounts = accounts.filter((a) => a.type === "gmail");
   const calendarAccounts = gmailAccounts.filter((a) => a.calendar_enabled);
 
-  const [calendar, weather, ctmDeadlines] = await Promise.all([
+  const [calendar, nextWeekCalendar, weather, ctmDeadlines] = await Promise.all([
     fetchCalendar(calendarAccounts).catch((err) => {
       console.error("Calendar fetch failed:", err.message);
+      return [];
+    }),
+    fetchCalendar(calendarAccounts, getNextWeekRange()).catch((err) => {
+      console.error("Next week calendar fetch failed:", err.message);
       return [];
     }),
     fetchWeather(
@@ -74,7 +78,7 @@ async function fetchLiveData(userId, accounts, settings) {
     }),
   ]);
 
-  return { calendar, weather, ctmDeadlines };
+  return { calendar, nextWeekCalendar, weather, ctmDeadlines };
 }
 
 // Fetch emails from all accounts
@@ -435,7 +439,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing, dismissedIds }, categories, upcomingBills] = await Promise.all([
+    const [{ calendar, nextWeekCalendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing, dismissedIds }, categories, upcomingBills] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
@@ -473,6 +477,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       injectReadEmails(cloned, readNew);
       fixEmailAccounts(cloned, emails, accounts);
       deduplicateBills(cloned);
+      cloned.nextWeekCalendar = nextWeekCalendar;
       cloned.dataUpdatedAt = new Date().toISOString();
       cloned.generatedAt = nowPacific();
       if (scheduleLabel) cloned.scheduleLabel = scheduleLabel;
@@ -509,7 +514,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     if (unreadNew.length > 0 && unreadNew.length < emails.length && prevBriefing) {
       await updateProgress(briefingId, `Sending ${unreadNew.length} new email${unreadNew.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Delta generation: ${unreadNew.length} new unread emails (${readNew.length} read, ${emails.length - newEmails.length} previously triaged)`);
-      briefingJson = await callClaude({ emails: unreadNew, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills });
+      briefingJson = await callClaude({ emails: unreadNew, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar });
 
       // Merge previous triage with new triage using pure function
       const allEmailIds = new Set(emails.map(e => e.id || e.uid));
@@ -521,7 +526,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       const emailsForClaude = unreadNew.length > 0 ? unreadNew : emails;
       await updateProgress(briefingId, `Sending ${emailsForClaude.length} email${emailsForClaude.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Full generation: ${emailsForClaude.length} emails (${readNew.length} read skipped)`);
-      briefingJson = await callClaude({ emails: emailsForClaude, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills });
+      briefingJson = await callClaude({ emails: emailsForClaude, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar });
       // Tag all emails with seenCount 1
       for (const acct of briefingJson.emails?.accounts || []) {
         acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
@@ -554,6 +559,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 
     // Overwrite calendar with server-fetched data (has accurate `passed` flags)
     briefingJson.calendar = calendar;
+    briefingJson.nextWeekCalendar = nextWeekCalendar;
 
     // Fix email account grouping: re-assign emails to correct accounts based on
     // the original account_label from the fetched data (Claude sometimes misgroups)
@@ -595,7 +601,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 // Quick refresh: update calendar, weather, CTM only — emails left to full generation
 export async function quickRefresh(userId) {
   const { accounts, settings } = await loadUserConfig(userId);
-  const { calendar, weather, ctmDeadlines } = await fetchLiveData(userId, accounts, settings);
+  const { calendar, nextWeekCalendar, weather, ctmDeadlines } = await fetchLiveData(userId, accounts, settings);
 
   // Load the latest ready briefing to patch into
   const latestResult = await db.execute({
@@ -619,6 +625,7 @@ export async function quickRefresh(userId) {
   // Overwrite live data fields, keep emails and AI fields untouched
   briefing.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
   briefing.calendar = calendar;
+  briefing.nextWeekCalendar = nextWeekCalendar;
   briefing.ctm = {
     upcoming: ctmDeadlines,
     stats: computeCTMStats(ctmDeadlines),
