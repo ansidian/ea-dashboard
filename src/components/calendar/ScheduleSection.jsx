@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 
@@ -31,30 +31,32 @@ function NowMarker({ time }) {
 }
 
 function buildWeekDays(events) {
-  if (!events || events.length === 0) return [];
-
-  // Find the earliest event to determine the week
-  const earliest = events.reduce((min, e) => (e.startMs < min.startMs ? e : min), events[0]);
-  const d = new Date(earliest.startMs);
-  // Compute Sunday of that week
-  const sunday = new Date(d);
-  sunday.setDate(d.getDate() - d.getDay());
-  sunday.setHours(0, 0, 0, 0);
+  // Compute next Sunday from today (same logic as backend getNextWeekRange)
+  const now = new Date();
+  const dow = now.getDay(); // 0=Sun, 6=Sat
+  const daysUntilNextSunday = (7 - dow) % 7 || 7;
+  const nextSunday = new Date(now);
+  nextSunday.setDate(now.getDate() + daysUntilNextSunday);
+  nextSunday.setHours(0, 0, 0, 0);
 
   // Group events by dayLabel
   const byDay = {};
-  for (const e of events) {
+  for (const e of events || []) {
     const key = e.dayLabel;
     if (!byDay[key]) byDay[key] = [];
     byDay[key].push(e);
   }
 
-  // Generate 7 days
+  // Generate 7 days (Sun–Sat)
   const days = [];
   for (let i = 0; i < 7; i++) {
-    const date = new Date(sunday);
-    date.setDate(sunday.getDate() + i);
-    const label = date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const d = new Date(nextSunday);
+    d.setDate(nextSunday.getDate() + i);
+    const label = d.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
     days.push({
       label,
       events: byDay[label] || [],
@@ -139,8 +141,16 @@ function EventCard({ event, showSource }) {
   );
 }
 
-function NextWeekView({ events, showSource }) {
+function NextWeekView({ events, showSource, scrollRef }) {
+  const containerRef = useRef(null);
   const days = buildWeekDays(events);
+
+  // Restore scroll position on mount
+  useEffect(() => {
+    if (containerRef.current && scrollRef.current) {
+      containerRef.current.scrollTop = scrollRef.current;
+    }
+  }, [scrollRef]);
 
   if (days.length === 0) {
     return (
@@ -157,7 +167,11 @@ function NextWeekView({ events, showSource }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      ref={containerRef}
+      className="flex flex-col gap-3 max-h-[360px] overflow-y-auto"
+      onScroll={(e) => { scrollRef.current = e.target.scrollTop; }}
+    >
       {days.map((day) => (
         <div key={day.label}>
           <div
@@ -190,6 +204,7 @@ function NextWeekView({ events, showSource }) {
 export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, delay, style, className }) {
   const nowTime = useNowTime();
   const [view, setView] = useState("today");
+  const nextWeekScrollRef = useRef(0);
 
   const activeEvents = view === "today" ? calendar : nextWeekCalendar;
   const sources = new Set(activeEvents?.map(e => e.source).filter(Boolean));
@@ -361,7 +376,7 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
       )}
 
       {view === "next-week" && (
-        <NextWeekView events={nextWeekCalendar} showSource={showSource} />
+        <NextWeekView events={nextWeekCalendar} showSource={showSource} scrollRef={nextWeekScrollRef} />
       )}
     </Section>
   );
