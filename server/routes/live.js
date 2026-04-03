@@ -102,7 +102,7 @@ router.get("/all", async (req, res) => {
     let hoursBack = 12;
     if (briefingGeneratedAt) {
       const lastTime = new Date(briefingGeneratedAt + "Z").getTime();
-      hoursBack = Math.max(1, Math.min(24, (Date.now() - lastTime) / 3600000));
+      hoursBack = Math.max(1, Math.min(24, Math.ceil((Date.now() - lastTime) / 3600000)));
     }
 
     // Build important senders list (auto + manual)
