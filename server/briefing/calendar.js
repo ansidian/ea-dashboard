@@ -37,21 +37,29 @@ async function getValidToken(account) {
   return credentials.access_token;
 }
 
-export async function fetchCalendar(gmailAccounts) {
+export async function fetchCalendar(gmailAccounts, { startDate, endDate } = {}) {
   const allEvents = [];
 
   for (const account of gmailAccounts) {
     try {
       const token = await getValidToken(account);
 
-      // Today's boundaries in Pacific time
-      const now = new Date();
-      const todayStart = new Date(
-        now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }),
-      );
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date(todayStart);
-      todayEnd.setHours(23, 59, 59, 999);
+      // Date boundaries — defaults to today in Pacific time
+      let rangeStart, rangeEnd;
+      if (startDate && endDate) {
+        rangeStart = startDate;
+        rangeEnd = endDate;
+      } else {
+        const now = new Date();
+        const todayStart = new Date(
+          now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }),
+        );
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(todayStart);
+        todayEnd.setHours(23, 59, 59, 999);
+        rangeStart = todayStart;
+        rangeEnd = todayEnd;
+      }
 
       // Fetch all calendars for this account (with colors)
       const calListRes = await fetch(
@@ -68,8 +76,8 @@ export async function fetchCalendar(gmailAccounts) {
         const url = new URL(
           `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
         );
-        url.searchParams.set("timeMin", todayStart.toISOString());
-        url.searchParams.set("timeMax", todayEnd.toISOString());
+        url.searchParams.set("timeMin", rangeStart.toISOString());
+        url.searchParams.set("timeMax", rangeEnd.toISOString());
         url.searchParams.set("singleEvents", "true");
         url.searchParams.set("orderBy", "startTime");
 
@@ -83,6 +91,7 @@ export async function fetchCalendar(gmailAccounts) {
           const isAllDay = !event.start?.dateTime && !!event.start?.date;
           const start = event.start?.dateTime || event.start?.date;
           const end = event.end?.dateTime || event.end?.date;
+          const isMultiDay = startDate && endDate;
 
           allEvents.push({
             time: isAllDay ? "All day" : formatTime(start),
@@ -94,6 +103,14 @@ export async function fetchCalendar(gmailAccounts) {
             allDay: isAllDay,
             _start: new Date(start).getTime(),
             _end: new Date(end).getTime(),
+            ...(isMultiDay && {
+              dayLabel: new Date(start).toLocaleDateString("en-US", {
+                timeZone: "America/Los_Angeles",
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              }),
+            }),
           });
         }
       }
@@ -118,6 +135,7 @@ export async function fetchCalendar(gmailAccounts) {
 
   // Sort: all-day events first, then by start time. Mark passed events.
   const nowMs = Date.now();
+  const isFutureRange = startDate && startDate.getTime() > nowMs;
   allEvents.sort((a, b) => {
     if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
     return a._start - b._start;
@@ -125,8 +143,26 @@ export async function fetchCalendar(gmailAccounts) {
   return allEvents.map(({ _start, _end, ...event }) => ({
     ...event,
     startMs: _start,
-    passed: event.allDay ? false : _end <= nowMs,
+    passed: isFutureRange ? false : (event.allDay ? false : _end <= nowMs),
   }));
+}
+
+export function getNextWeekRange() {
+  const now = new Date();
+  const pacific = new Date(
+    now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }),
+  );
+  const dayOfWeek = pacific.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  // Days until next Sunday: if today is Sun (0), next Sun is 7 days away
+  // If today is Mon (1), next Sun is 6 days away, etc.
+  const daysUntilNextSunday = (7 - dayOfWeek) % 7 || 7;
+  const nextSunday = new Date(pacific);
+  nextSunday.setDate(pacific.getDate() + daysUntilNextSunday);
+  nextSunday.setHours(0, 0, 0, 0);
+  const nextSaturday = new Date(nextSunday);
+  nextSaturday.setDate(nextSunday.getDate() + 6);
+  nextSaturday.setHours(23, 59, 59, 999);
+  return { startDate: nextSunday, endDate: nextSaturday };
 }
 
 function formatTime(dateStr) {
