@@ -22,8 +22,10 @@ function saveSet(key, set) {
   localStorage.setItem(key, JSON.stringify(arr));
 }
 
+const hasNotificationAPI = typeof Notification !== "undefined";
+
 function notify(title, body) {
-  if (Notification.permission !== "granted") return;
+  if (!hasNotificationAPI || Notification.permission !== "granted") return;
   try {
     new Notification(title, { body, icon: "/favicon.ico" });
   } catch {
@@ -32,12 +34,12 @@ function notify(title, body) {
 }
 
 export default function useNotifications(liveData) {
-  const permissionRef = useRef(Notification.permission);
+  const permissionRef = useRef(hasNotificationAPI ? Notification.permission : "denied");
   const hasInteractedRef = useRef(false);
 
   // Request permission after first user interaction
   const requestPermission = useCallback(() => {
-    if (hasInteractedRef.current) return;
+    if (!hasNotificationAPI || hasInteractedRef.current) return;
     hasInteractedRef.current = true;
     if (permissionRef.current === "default") {
       Notification.requestPermission().then(p => {
