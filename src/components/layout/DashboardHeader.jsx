@@ -4,12 +4,13 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { skipSchedule, deleteBriefing } from "../../api";
 import { getGreeting, timeAgo, formatShortTime } from "../../lib/dashboard-helpers";
+import useIsMobile from "../../hooks/useIsMobile";
 import Tooltip from "../shared/Tooltip";
 import BriefingHistoryPanel from "../briefing/BriefingHistoryPanel";
 import BriefingSearch from "../briefing/BriefingSearch";
 import WeatherTooltip from "../shared/WeatherTooltip";
 
-const btnHeader = "bg-input-bg border border-white/[0.08] rounded-md px-2.5 py-1 text-[11px] text-muted-foreground font-medium transition-all flex items-center gap-1 cursor-pointer font-[inherit] select-none hover:bg-white/[0.06] hover:border-white/15 hover:text-foreground/80 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed";
+const btnHeader = "bg-input-bg border border-white/[0.08] rounded-md px-2.5 py-1 text-[11px] text-muted-foreground font-medium transition-all flex items-center gap-1 cursor-pointer font-[inherit] select-none hover:bg-white/[0.06] hover:border-white/15 hover:text-foreground/80 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed max-sm:min-h-[44px] max-sm:text-xs max-sm:shrink-0";
 
 const btnHeaderActive = "bg-primary/[0.08] border-primary/20 text-primary hover:bg-primary/[0.08] hover:border-primary/20 hover:text-primary";
 
@@ -47,6 +48,7 @@ export default function DashboardHeader({
   suspending,
   suspended,
 }) {
+  const isMobile = useIsMobile();
   const greeting = useMemo(
     () => getGreeting(d.scheduleLabel),
     [d.scheduleLabel],
@@ -253,22 +255,55 @@ export default function DashboardHeader({
           loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
         )}
       >
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="text-[11px] tracking-[3px] uppercase text-muted-foreground mb-2 font-semibold">
-              {greeting.label}
-            </div>
-            <h1 className="font-serif text-4xl font-normal m-0 text-white/95 leading-tight">
-              {greeting.greeting}
-            </h1>
-            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-              <p className="text-muted-foreground text-[13px] m-0">
+        <div>
+          <div className="flex justify-between items-start gap-3">
+            <div className="min-w-0">
+              <div className="text-[11px] tracking-[3px] uppercase text-muted-foreground mb-2 font-semibold">
+                {greeting.label}
+              </div>
+              <h1 className="font-serif text-2xl sm:text-4xl font-normal m-0 text-white/95 leading-tight">
+                {greeting.greeting}
+              </h1>
+              <p className="text-muted-foreground text-[13px] max-sm:text-xs m-0 mt-1.5">
                 {d.dataUpdatedAt
                   ? `Data updated ${timeAgo(d.dataUpdatedAt)}`
                   : d.generatedAt}
                 {d.aiGeneratedAt &&
                   ` · AI analysis from ${formatShortTime(d.aiGeneratedAt)}`}
               </p>
+            </div>
+            <div
+              ref={weatherRef}
+              onMouseEnter={() => {
+                clearTimeout(weatherLeaveTimer.current);
+                setWeatherHover(true);
+              }}
+              onMouseLeave={() => {
+                weatherLeaveTimer.current = setTimeout(
+                  () => setWeatherHover(false),
+                  150,
+                );
+              }}
+              className="bg-input-bg border border-border rounded-xl p-4 px-5 max-sm:p-2 max-sm:px-3 text-center min-w-[100px] max-sm:min-w-0 cursor-default transition-all hover:bg-surface-hover hover:border-white/10 shrink-0"
+            >
+              <div className="text-4xl max-sm:text-xl leading-none">☀️</div>
+              <div className="text-[28px] max-sm:text-lg font-light text-white mt-1">
+                {d.weather.temp}°
+              </div>
+              <div className="text-[11px] max-sm:text-xs text-muted-foreground mt-0.5">
+                {d.weather.high}° / {d.weather.low}°
+              </div>
+            </div>
+            {weatherHover && !isMobile && (
+              <WeatherTooltip
+                weather={d.weather}
+                triggerRef={weatherRef}
+                onMouseEnter={() => clearTimeout(weatherLeaveTimer.current)}
+                onMouseLeave={() => setWeatherHover(false)}
+              />
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-2 flex-wrap max-sm:gap-1.5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none]">
               <Tooltip
                 text={
                   !refreshing && !generating
@@ -397,7 +432,7 @@ export default function DashboardHeader({
                   </button>
                 </Tooltip>
               )}
-              <a href="/settings" className={cn(btnHeader, "no-underline")}>
+              <a href="/settings" className={cn(btnHeader, "no-underline")} aria-label="Settings">
                 <svg
                   width="12"
                   height="12"
@@ -411,9 +446,9 @@ export default function DashboardHeader({
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
                 </svg>
-                Settings
+                <span className="max-sm:hidden">Settings</span>
               </a>
-              {renderConfigured && (
+              {renderConfigured && !isMobile && (
                 <Tooltip
                   text={
                     suspended
@@ -470,38 +505,7 @@ export default function DashboardHeader({
                   </button>
                 </Tooltip>
               )}
-            </div>
           </div>
-          <div
-            ref={weatherRef}
-            onMouseEnter={() => {
-              clearTimeout(weatherLeaveTimer.current);
-              setWeatherHover(true);
-            }}
-            onMouseLeave={() => {
-              weatherLeaveTimer.current = setTimeout(
-                () => setWeatherHover(false),
-                150,
-              );
-            }}
-            className="bg-input-bg border border-border rounded-xl p-4 px-5 text-center min-w-[100px] cursor-default transition-all hover:bg-surface-hover hover:border-white/10"
-          >
-            <div className="text-4xl leading-none">☀️</div>
-            <div className="text-[28px] font-light text-white mt-1">
-              {d.weather.temp}°
-            </div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">
-              {d.weather.high}° / {d.weather.low}°
-            </div>
-          </div>
-          {weatherHover && (
-            <WeatherTooltip
-              weather={d.weather}
-              triggerRef={weatherRef}
-              onMouseEnter={() => clearTimeout(weatherLeaveTimer.current)}
-              onMouseLeave={() => setWeatherHover(false)}
-            />
-          )}
         </div>
       </div>
 

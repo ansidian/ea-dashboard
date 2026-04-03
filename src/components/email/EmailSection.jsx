@@ -7,6 +7,13 @@ import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motio
 import { useDashboard } from "../../context/DashboardContext";
 import { markEmailAsRead, markAllEmailsAsRead } from "../../api";
 import { CheckCheck } from "lucide-react";
+import useIsMobile from "../../hooks/useIsMobile";
+import SwipeToReveal from "../ui/SwipeToReveal";
+
+function MaybeSwipe({ isMobile, onAction, children }) {
+  if (!isMobile) return children;
+  return <SwipeToReveal onAction={onAction}>{children}</SwipeToReveal>;
+}
 
 const getGmailUrl = (email) => {
   if (!email.message_id) return null;
@@ -21,7 +28,7 @@ function GhostAction({ onClick, disabled, children, className: cls, active }) {
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "text-[10px] font-medium rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 font-[inherit]",
+        "text-[10px] max-sm:text-xs font-medium rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 font-[inherit]",
         active
           ? "text-primary bg-primary/[0.08] border border-primary/20 hover:bg-primary/[0.15] hover:border-primary/30"
           : "text-muted-foreground/40 bg-white/[0.02] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/10",
@@ -39,7 +46,7 @@ function ConfirmChip({ label, color, onConfirm, onCancel }) {
   return (
     <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5">
       <button
-        className="rounded-md text-[10px] font-semibold px-2.5 py-1 cursor-pointer font-[inherit] transition-all duration-150 hover:brightness-125"
+        className="rounded-md text-[10px] max-sm:text-xs font-semibold px-2.5 py-1 cursor-pointer font-[inherit] transition-all duration-150 hover:brightness-125"
         style={{ color, background: `${color}12`, border: `1px solid ${color}25` }}
         onClick={onConfirm}
       >{label}</button>
@@ -56,6 +63,7 @@ function ConfirmChip({ label, color, onConfirm, onCancel }) {
 }
 
 export default function EmailSection({ summary, model, loaded, delay, style, className, embedded }) {
+  const isMobile = useIsMobile();
   const {
     emailAccounts, currentAccount,
     activeAccount, setActiveAccount,
@@ -117,13 +125,13 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
             >
               <span className="text-sm">{acc.icon}</span>
               <span
-                className="text-[11px] font-medium"
+                className="text-[11px] max-sm:text-xs font-medium"
                 style={{ color: isActive ? `${acc.color}dd` : "rgba(205,214,244,0.5)" }}
               >
                 {acc.name}
               </span>
               <span
-                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums"
+                className="text-[10px] max-sm:text-xs font-bold px-1.5 py-0.5 rounded-full tabular-nums"
                 style={{
                   background: `${acc.color}15`,
                   color: `${acc.color}${isActive ? "cc" : "80"}`,
@@ -162,6 +170,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
           const isCarriedOver = (email.seenCount || 1) >= 2;
           return (
             <MotionItem key={email.id}>
+              <MaybeSwipe isMobile={isMobile} onAction={() => onDismiss(email.id)}>
               <div
                 ref={(el) => { emailRowRefs.current[email.id] = el; }}
                 data-email-id={email.id}
@@ -202,105 +211,144 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
 
               <div
                 data-email-header
-                className="relative flex justify-between items-start gap-3"
+                className={cn(
+                  "relative",
+                  isMobile ? "flex flex-col gap-1" : "flex justify-between items-start gap-3",
+                )}
               >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-muted-foreground/50">
-                      {email.from}
-                    </span>
-                    {isCarriedOver && (
-                      <span className="text-[10px] text-muted-foreground/40">
-                        ↩ previous
-                      </span>
-                    )}
-                    {email.hasBill && (
-                      <span
-                        className="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded uppercase"
-                        style={{ color: "#a6e3a1cc", background: "rgba(166,227,161,0.08)" }}
-                      >
-                        💳 Bill
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[13px] font-medium text-foreground/90 mt-0.5">
-                    {email.subject}
-                  </div>
-                  {!isOpen && email.preview && (
-                    <div className="text-[11px] text-muted-foreground/40 mt-1 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
-                      {email.preview}
+                {isMobile ? (
+                  /* Mobile: subject-first minimal layout */
+                  <>
+                    <div className="text-[13px] font-medium text-foreground/90">
+                      {email.subject}
                     </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {confirmDismissId === email.id ? (
-                    <ConfirmChip
-                      label="Dismiss"
-                      color="#a6adc8"
-                      onConfirm={() => { onDismiss(email.id); setConfirmDismissId(null); }}
-                      onCancel={() => setConfirmDismissId(null)}
-                    />
-                  ) : (
-                    <button
-                      className={cn(
-                        "transition-all duration-150 bg-transparent border-none cursor-pointer text-muted-foreground/20 p-1 leading-none rounded hover:text-muted-foreground/60 hover:bg-white/[0.04]",
-                        isCarriedOver ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground/50 truncate">
+                        {email.from}
+                      </span>
+                      {isCarriedOver && (
+                        <span className="text-xs text-muted-foreground/40">↩</span>
                       )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isCarriedOver) onDismiss(email.id);
-                        else setConfirmDismissId(email.id);
-                      }}
-                      title="Dismiss from briefing"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  )}
-                  {email.action && (
-                    <div
-                      className="text-[9px] font-semibold tracking-wider uppercase rounded-md whitespace-nowrap px-2 py-1"
-                      style={{
-                        color: s.text,
-                        background: s.bg,
-                        border: `1px solid ${s.border}20`,
-                      }}
-                    >
-                      {email.action}
+                      {email.hasBill && (
+                        <span className="text-xs font-bold" style={{ color: "#a6e3a1cc" }}>💳</span>
+                      )}
+                      {email.action && (
+                        <span
+                          className="text-xs font-semibold uppercase px-1.5 py-0.5 rounded-md"
+                          style={{ color: s.text, background: s.bg }}
+                        >
+                          {email.action}
+                        </span>
+                      )}
                     </div>
-                  )}
-                  {email.urgentFlag && (
-                    <div
-                      className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 flex items-center gap-1"
-                      style={{
-                        color: "#f97316",
-                        background: "rgba(249,115,22,0.08)",
-                        border: "1px solid rgba(249,115,22,0.2)",
-                      }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                      </svg>
-                      {email.urgentFlag.label}
+                    {!isOpen && email.preview && (
+                      <div className="text-xs text-muted-foreground/40 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
+                        {email.preview}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Desktop: original layout */
+                  <>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground/50">
+                          {email.from}
+                        </span>
+                        {isCarriedOver && (
+                          <span className="text-[10px] text-muted-foreground/40">
+                            ↩ previous
+                          </span>
+                        )}
+                        {email.hasBill && (
+                          <span
+                            className="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded uppercase"
+                            style={{ color: "#a6e3a1cc", background: "rgba(166,227,161,0.08)" }}
+                          >
+                            💳 Bill
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[13px] font-medium text-foreground/90 mt-0.5">
+                        {email.subject}
+                      </div>
+                      {!isOpen && email.preview && (
+                        <div className="text-[11px] text-muted-foreground/40 mt-1 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
+                          {email.preview}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {getGmailUrl(email) && (
-                    <a
-                      href={getGmailUrl(email)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      title="Open in Gmail"
-                      className="opacity-0 group-hover:opacity-100 transition-all duration-150 text-muted-foreground/20 hover:text-muted-foreground/60 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                      </svg>
-                    </a>
-                  )}
-                  <MotionChevron isOpen={isOpen} className="text-muted-foreground/40" />
-                </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {confirmDismissId === email.id ? (
+                        <ConfirmChip
+                          label="Dismiss"
+                          color="#a6adc8"
+                          onConfirm={() => { onDismiss(email.id); setConfirmDismissId(null); }}
+                          onCancel={() => setConfirmDismissId(null)}
+                        />
+                      ) : (
+                        <button
+                          className={cn(
+                            "transition-all duration-150 bg-transparent border-none cursor-pointer text-muted-foreground/20 p-1 leading-none rounded hover:text-muted-foreground/60 hover:bg-white/[0.04]",
+                            isCarriedOver ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isCarriedOver) onDismiss(email.id);
+                            else setConfirmDismissId(email.id);
+                          }}
+                          title="Dismiss from briefing"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      )}
+                      {email.action && (
+                        <div
+                          className="text-[9px] font-semibold tracking-wider uppercase rounded-md whitespace-nowrap px-2 py-1"
+                          style={{
+                            color: s.text,
+                            background: s.bg,
+                            border: `1px solid ${s.border}20`,
+                          }}
+                        >
+                          {email.action}
+                        </div>
+                      )}
+                      {email.urgentFlag && (
+                        <div
+                          className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 flex items-center gap-1"
+                          style={{
+                            color: "#f97316",
+                            background: "rgba(249,115,22,0.08)",
+                            border: "1px solid rgba(249,115,22,0.2)",
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          {email.urgentFlag.label}
+                        </div>
+                      )}
+                      {getGmailUrl(email) && (
+                        <a
+                          href={getGmailUrl(email)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Open in Gmail"
+                          className="opacity-0 group-hover:opacity-100 transition-all duration-150 text-muted-foreground/20 hover:text-muted-foreground/60 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                          </svg>
+                        </a>
+                      )}
+                      <MotionChevron isOpen={isOpen} className="text-muted-foreground/40" />
+                    </div>
+                  </>
+                )}
               </div>
               <MotionExpand isOpen={isOpen}>
                 <div onClick={(e) => e.stopPropagation()}>
@@ -322,6 +370,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                 </div>
               </MotionExpand>
               </div>
+              </MaybeSwipe>
             </MotionItem>
           );
         })}
@@ -350,7 +399,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                         className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
                         style={{ background: acc.color, opacity: 0.7 }}
                       />
-                      <span className="text-[10px] font-medium text-muted-foreground/40">{acc.name}</span>
+                      <span className="text-[10px] max-sm:text-xs font-medium text-muted-foreground/40">{acc.name}</span>
                     </div>
                   )}
                   <div className="flex flex-col">
@@ -365,8 +414,8 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                             onClick={() => setSelectedNoiseId(isNoiseOpen ? null : noiseId)}
                             className="flex items-center gap-2 min-w-0 py-1.5 px-1 rounded cursor-pointer hover:bg-white/[0.04] transition-colors duration-150"
                           >
-                            <span className="text-[11px] text-muted-foreground/35 shrink-0 min-w-[80px] max-w-[140px] truncate">{noiseEmail.from}</span>
-                            <span className="text-[11px] text-muted-foreground/55 truncate flex-1">{noiseEmail.subject}</span>
+                            <span className="text-[11px] max-sm:text-xs text-muted-foreground/35 shrink-0 min-w-[80px] max-w-[140px] truncate">{noiseEmail.from}</span>
+                            <span className="text-[11px] max-sm:text-xs text-muted-foreground/55 truncate flex-1">{noiseEmail.subject}</span>
                             <MotionChevron isOpen={isNoiseOpen} className="text-muted-foreground/20 shrink-0" />
                           </div>
                           <MotionExpand isOpen={isNoiseOpen}>

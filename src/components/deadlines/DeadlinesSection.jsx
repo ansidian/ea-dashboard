@@ -37,7 +37,15 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
   const ctmDueThisWeek = ctm?.stats?.dueThisWeek || 0;
 
   return (
-    <Section title="Deadlines" delay={delay} loaded={loaded} style={style} className={className}>
+    <Section
+      title="Deadlines"
+      delay={delay}
+      loaded={loaded}
+      style={style}
+      className={className}
+      summaryBadge={totalDueToday > 0 ? `${totalDueToday} due today` : `${totalIncomplete} total`}
+      defaultExpanded={false}
+    >
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
         <div
           className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
@@ -47,8 +55,8 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
             <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
-          <span className="text-[11px] font-semibold tabular-nums text-foreground/80">{totalIncomplete}</span>
-          <span className="text-[11px] text-muted-foreground/50">incomplete</span>
+          <span className="text-[11px] max-sm:text-xs font-semibold tabular-nums text-foreground/80">{totalIncomplete}</span>
+          <span className="text-[11px] max-sm:text-xs text-muted-foreground/50">incomplete</span>
         </div>
         {totalDueToday > 0 && (
           <div
@@ -60,8 +68,8 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            <span className="text-[11px] font-semibold tabular-nums" style={{ color: "#f38ba8cc" }}>{totalDueToday}</span>
-            <span className="text-[11px] text-muted-foreground/50">due today</span>
+            <span className="text-[11px] max-sm:text-xs font-semibold tabular-nums" style={{ color: "#f38ba8cc" }}>{totalDueToday}</span>
+            <span className="text-[11px] max-sm:text-xs text-muted-foreground/50">due today</span>
           </div>
         )}
         {ctmDueThisWeek > 0 && (
@@ -75,8 +83,8 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
               <line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
-            <span className="text-[11px] font-semibold tabular-nums" style={{ color: "#f9e2afcc" }}>{ctmDueThisWeek}</span>
-            <span className="text-[11px] text-muted-foreground/50">this week</span>
+            <span className="text-[11px] max-sm:text-xs font-semibold tabular-nums" style={{ color: "#f9e2afcc" }}>{ctmDueThisWeek}</span>
+            <span className="text-[11px] max-sm:text-xs text-muted-foreground/50">this week</span>
           </div>
         )}
         {ctmItems.length > 0 && (
@@ -84,7 +92,7 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
             href="https://ctm.andysu.tech"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium no-underline transition-all duration-200 ml-auto"
+            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] max-sm:text-xs font-medium no-underline transition-all duration-200 ml-auto max-sm:hidden"
             style={{
               color: "#cba6dacc",
               background: "rgba(203,166,218,0.06)",
@@ -180,13 +188,13 @@ export default function DeadlinesSection({ ctm, deadlines, loaded, delay, style,
                   {dl.title}
                 </div>
                 {dl.source && (
-                  <div className="text-[10px] text-muted-foreground/40 mt-0.5">
+                  <div className="text-[10px] max-sm:text-xs text-muted-foreground/40 mt-0.5">
                     {dl.source}
                   </div>
                 )}
               </div>
               <Tooltip text={formatFullDate(dateStr)}>
-                <div className="relative text-[11px] font-semibold tabular-nums" style={{ color: s.text }}>
+                <div className="relative text-[11px] max-sm:text-xs font-semibold tabular-nums" style={{ color: s.text }}>
                   {formatRelativeDate(dateStr)}
                 </div>
               </Tooltip>

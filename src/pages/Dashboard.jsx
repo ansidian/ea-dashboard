@@ -510,7 +510,7 @@ function DashboardMain({
   }
 
   return (
-    <div className="min-h-screen text-foreground font-sans p-6 max-w-[1400px] mx-auto">
+    <div className="min-h-screen text-foreground font-sans p-4 sm:p-6 max-w-[1400px] mx-auto">
       {generating && <RefreshBanner progress={genProgress} />}
 
       <DashboardHeader
@@ -550,7 +550,7 @@ function DashboardMain({
 
       <SummaryBar stats={summaryStats} loaded={loaded} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-6">
         <InsightsSection
           insights={d.aiInsights}
           loaded={loaded}

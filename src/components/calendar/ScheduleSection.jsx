@@ -23,7 +23,7 @@ function NowMarker({ time }) {
         }}
       />
       <div className="flex-1 h-px" style={{ background: "linear-gradient(90deg, #cba6da 0%, transparent 100%)" }} />
-      <span className="text-[10px] font-semibold tabular-nums text-[#cba6da] shrink-0">
+      <span className="text-[10px] max-sm:text-xs font-semibold tabular-nums text-[#cba6da] shrink-0">
         {time}
       </span>
     </div>
@@ -97,7 +97,7 @@ function EventCard({ event, showSource }) {
         <div className="text-[13px] font-semibold tabular-nums text-foreground">
           {event.time}
         </div>
-        <div className="text-[10px] text-muted-foreground/50">
+        <div className="text-[10px] max-sm:text-xs text-muted-foreground/50">
           {event.duration}
         </div>
       </div>
@@ -109,7 +109,7 @@ function EventCard({ event, showSource }) {
         </div>
         {showSource && event.source && (
           <span
-            className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-medium rounded px-1.5 py-px"
+            className="inline-flex items-center gap-1 mt-0.5 text-[10px] max-sm:text-xs font-medium rounded px-1.5 py-px"
             style={{
               color: `${event.color}cc`,
               background: `${event.color}10`,
@@ -128,7 +128,7 @@ function EventCard({ event, showSource }) {
       {event.flag && (
         <div
           className={cn(
-            "text-[9px] font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
+            "text-[9px] max-sm:text-xs font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
             event.flag === "Conflict"
               ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
               : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
@@ -161,7 +161,7 @@ function NextWeekView({ events, showSource, scrollRef }) {
           <line x1="8" y1="2" x2="8" y2="6" />
           <line x1="3" y1="10" x2="21" y2="10" />
         </svg>
-        <div className="text-[11px] text-muted-foreground/50">No events scheduled next week</div>
+        <div className="text-[11px] max-sm:text-xs text-muted-foreground/50">No events scheduled next week</div>
       </div>
     );
   }
@@ -175,7 +175,7 @@ function NextWeekView({ events, showSource, scrollRef }) {
       {days.map((day) => (
         <div key={day.label}>
           <div
-            className="text-[10px] tracking-[1.5px] uppercase font-bold mb-1.5"
+            className="text-[10px] max-sm:text-xs tracking-[1.5px] uppercase font-bold mb-1.5"
             style={{
               color: day.events.length > 0
                 ? "rgba(203,166,218,0.6)"
@@ -191,7 +191,7 @@ function NextWeekView({ events, showSource, scrollRef }) {
               ))}
             </div>
           ) : (
-            <div className="text-[11px] text-muted-foreground/30 py-1">
+            <div className="text-[11px] max-sm:text-xs text-muted-foreground/30 py-1">
               No events
             </div>
           )}
@@ -219,9 +219,9 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
   const titleContent = (
     <div className="flex items-center gap-3">
       <button
-        onClick={() => setView("today")}
+        onClick={(e) => { e.stopPropagation(); setView("today"); }}
         className={cn(
-          "text-[11px] tracking-[2.5px] uppercase font-semibold transition-colors duration-200",
+          "text-[11px] max-sm:text-xs tracking-[2.5px] uppercase font-semibold transition-colors duration-200",
           view === "today"
             ? "text-foreground/40"
             : "text-foreground/15 hover:text-foreground/25",
@@ -230,9 +230,9 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
         Today
       </button>
       <button
-        onClick={() => setView("next-week")}
+        onClick={(e) => { e.stopPropagation(); setView("next-week"); }}
         className={cn(
-          "text-[11px] tracking-[2.5px] uppercase font-semibold transition-colors duration-200",
+          "text-[11px] max-sm:text-xs tracking-[2.5px] uppercase font-semibold transition-colors duration-200",
           view === "next-week"
             ? "text-foreground/40"
             : "text-foreground/15 hover:text-foreground/25",
@@ -244,7 +244,16 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
   );
 
   return (
-    <Section title={titleContent} delay={delay} loaded={loaded} style={style} className={className} tier={2}>
+    <Section
+      title={titleContent}
+      delay={delay}
+      loaded={loaded}
+      style={style}
+      className={className}
+      tier={2}
+      summaryBadge={`${activeEvents?.length || 0} event${(activeEvents?.length || 0) !== 1 ? "s" : ""}`}
+      defaultExpanded
+    >
       {view === "today" && (
         <>
           {calendar?.length > 0 ? (
@@ -303,7 +312,7 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
                         )}>
                           {event.time}
                         </div>
-                        <div className="text-[10px] text-muted-foreground/50">
+                        <div className="text-[10px] max-sm:text-xs text-muted-foreground/50">
                           {event.duration}
                         </div>
                       </div>
@@ -322,7 +331,7 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
                         </div>
                         {showSource && event.source && (
                           <span
-                            className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-medium rounded px-1.5 py-px"
+                            className="inline-flex items-center gap-1 mt-0.5 text-[10px] max-sm:text-xs font-medium rounded px-1.5 py-px"
                             style={{
                               color: `${event.color}cc`,
                               background: `${event.color}10`,
@@ -341,7 +350,7 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
                       {!event.passed && event.flag && (
                         <div
                           className={cn(
-                            "text-[9px] font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
+                            "text-[9px] max-sm:text-xs font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
                             event.flag === "Conflict"
                               ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
                               : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
@@ -369,7 +378,7 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
                 <line x1="8" y1="2" x2="8" y2="6" />
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
-              <div className="text-[11px] text-muted-foreground/50">No events scheduled today</div>
+              <div className="text-[11px] max-sm:text-xs text-muted-foreground/50">No events scheduled today</div>
             </div>
           )}
         </>

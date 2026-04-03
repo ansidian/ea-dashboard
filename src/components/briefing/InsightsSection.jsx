@@ -17,6 +17,8 @@ export default function InsightsSection({
       loaded={loaded}
       style={style}
       className={className}
+      summaryBadge={`${insights.length} item${insights.length !== 1 ? "s" : ""}`}
+      defaultExpanded
     >
       <MotionList
         className="flex flex-col gap-1.5"

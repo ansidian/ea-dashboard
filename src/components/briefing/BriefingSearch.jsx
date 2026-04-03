@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { searchBriefings, analyzeSearchResults, getBriefingById } from "../../api";
 import { transformBriefing } from "../../transform";
 import { cn } from "@/lib/utils";
+import useIsMobile from "../../hooks/useIsMobile";
+import BottomSheet from "../ui/BottomSheet";
 
 const SECTION_META = {
   bills: { icon: "💰", color: "#a6e3a1", label: "Bills" },
@@ -112,6 +114,7 @@ function extractRelatedContext(briefing, sectionType, chunkText) {
 // --- Component ---
 
 export default function BriefingSearch({ onNavigateToEmail }) {
+  const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [searching, setSearching] = useState(false);
@@ -382,30 +385,13 @@ export default function BriefingSearch({ onNavigateToEmail }) {
         </div>
       </div>
 
-      {showDropdown &&
-        pos &&
-        createPortal(
+      {showDropdown && (() => {
+        const dropdownContent = (
+          <>
           <div
-            ref={panelRef}
-            className="z-[9999] isolate flex flex-col animate-in fade-in slide-in-from-top-1 duration-200"
-            style={{
-              position: "fixed",
-              top: pos.top,
-              left: pos.left,
-              width: pos.width,
-              maxHeight: `min(480px, calc(100vh - ${pos.top + 16}px))`,
-              background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.08)",
-              boxShadow:
-                "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-            }}
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto overscroll-contain min-h-0"
           >
-            {/* Scrollable results */}
-            <div
-              ref={scrollRef}
-              className="flex-1 overflow-y-auto overscroll-contain min-h-0"
-            >
               {/* Error state */}
               {error && (
                 <div className="px-5 py-4 text-[11px] text-destructive text-center leading-relaxed">
@@ -670,9 +656,45 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                 </span>
               </div>
             )}
+          </>
+        );
+
+        if (isMobile) {
+          return (
+            <BottomSheet
+              open
+              onClose={() => { setOpen(false); inputRef.current?.blur(); }}
+              title="Search Results"
+            >
+              {dropdownContent}
+            </BottomSheet>
+          );
+        }
+
+        if (!pos) return null;
+
+        return createPortal(
+          <div
+            ref={panelRef}
+            className="z-[9999] isolate flex flex-col animate-in fade-in slide-in-from-top-1 duration-200"
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              width: pos.width,
+              maxHeight: `min(480px, calc(100vh - ${pos.top + 16}px))`,
+              background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow:
+                "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
+            }}
+          >
+            {dropdownContent}
           </div>,
           document.body,
-        )}
+        );
+      })()}
     </>
   );
 }

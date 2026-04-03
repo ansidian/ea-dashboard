@@ -69,14 +69,14 @@ export default function SummaryBar({ stats, loaded }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 flex-wrap mb-6 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] delay-150",
+        "flex items-center gap-1.5 flex-wrap max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[-webkit-overflow-scrolling:touch] mb-6 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] delay-150",
         loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
       )}
     >
       {items.map((item, i) => (
         <div
           key={i}
-          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-colors"
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-colors max-sm:shrink-0"
           style={{
             background: `${item.color}08`,
             border: `1px solid ${item.color}15`,
@@ -84,19 +84,19 @@ export default function SummaryBar({ stats, loaded }) {
         >
           <span style={{ color: `${item.color}99` }}>{item.icon}</span>
           <span
-            className="text-[11px] font-semibold tabular-nums"
+            className="text-[11px] max-sm:text-xs font-semibold tabular-nums"
             style={{ color: `${item.color}cc` }}
           >
             {item.value}
           </span>
           {item.label && (
-            <span className="text-[11px] text-muted-foreground/50">
+            <span className="text-[11px] max-sm:text-xs text-muted-foreground/50">
               {item.label}
             </span>
           )}
           {item.suffix && (
             <span
-              className="text-[10px] font-medium tabular-nums ml-0.5"
+              className="text-[10px] max-sm:text-xs font-medium tabular-nums ml-0.5"
               style={{ color: `${item.color}80` }}
             >
               {item.suffix}

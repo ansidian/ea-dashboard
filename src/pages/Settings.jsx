@@ -16,7 +16,7 @@ import { CSS } from "@dnd-kit/utilities";
 function SettingsCard({ title, children }) {
   return (
     <div className="bg-surface border border-border rounded-xl p-4 px-5 mb-6">
-      <h3 className="text-[11px] tracking-[2.5px] uppercase text-muted-foreground font-semibold mb-3">{title}</h3>
+      <h3 className="text-[11px] max-sm:text-xs tracking-[2.5px] uppercase text-muted-foreground font-semibold mb-3">{title}</h3>
       {children}
     </div>
   );
@@ -54,48 +54,52 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="bg-surface rounded-lg border border-border overflow-hidden">
-      <div className="flex items-center gap-3 px-3.5 py-2.5">
-        <span className="text-base cursor-pointer" onClick={() => setEditing(!editing)} title="Edit">{icon}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-            <div className="text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap">{label}</div>
+      <div className="flex flex-col gap-2.5 px-3.5 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-base cursor-pointer shrink-0" onClick={() => setEditing(!editing)} title="Edit">{icon}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+              <div className="text-[13px] font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap">{label}</div>
+            </div>
+            <div className="text-[11px] max-sm:text-xs text-muted-foreground truncate">{acc.email} · {acc.type}</div>
           </div>
-          <div className="text-[11px] text-muted-foreground">{acc.email} · {acc.type}</div>
         </div>
-        <Button variant="ghost" size="xs" onClick={() => setEditing(!editing)}>
-          {editing ? "Cancel" : "Edit"}
-        </Button>
-        {acc.type === "gmail" && (
-          <button
-            onClick={async () => {
-              const newVal = !acc.calendar_enabled;
-              await updateAccount(acc.id, { calendar_enabled: newVal });
-              setAccounts(accounts.map(a => a.id === acc.id ? { ...a, calendar_enabled: newVal ? 1 : 0 } : a));
-            }}
-            title={acc.calendar_enabled ? "Calendar sync enabled" : "Calendar sync disabled"}
-            aria-label={acc.calendar_enabled ? "Disable calendar sync" : "Enable calendar sync"}
-            className={cn(
-              "flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium cursor-pointer transition-all",
-              acc.calendar_enabled
-                ? "bg-[#cba6da]/15 border border-[#cba6da]/30 text-[#cba6da]"
-                : "bg-input-bg border border-white/[0.08] text-muted-foreground"
-            )}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            {acc.calendar_enabled ? "Calendar on" : "Calendar off"}
-          </button>
-        )}
-        <Button variant="destructive" size="xs" onClick={() => onRemove(acc.id)}>Remove</Button>
+        <div className="flex items-center gap-2 max-sm:border-t max-sm:border-white/[0.04] max-sm:pt-2 max-sm:-mx-3.5 max-sm:px-3.5">
+          <Button variant="ghost" size="xs" onClick={() => setEditing(!editing)}>
+            {editing ? "Cancel" : "Edit"}
+          </Button>
+          {acc.type === "gmail" && (
+            <button
+              onClick={async () => {
+                const newVal = !acc.calendar_enabled;
+                await updateAccount(acc.id, { calendar_enabled: newVal });
+                setAccounts(accounts.map(a => a.id === acc.id ? { ...a, calendar_enabled: newVal ? 1 : 0 } : a));
+              }}
+              title={acc.calendar_enabled ? "Calendar sync enabled" : "Calendar sync disabled"}
+              aria-label={acc.calendar_enabled ? "Disable calendar sync" : "Enable calendar sync"}
+              className={cn(
+                "flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] max-sm:text-xs font-medium cursor-pointer transition-all whitespace-nowrap",
+                acc.calendar_enabled
+                  ? "bg-[#cba6da]/15 border border-[#cba6da]/30 text-[#cba6da]"
+                  : "bg-input-bg border border-white/[0.08] text-muted-foreground"
+              )}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              {acc.calendar_enabled ? "Calendar on" : "Calendar off"}
+            </button>
+          )}
+          <Button variant="destructive" size="xs" onClick={() => onRemove(acc.id)}>Remove</Button>
+        </div>
       </div>
       {editing && (
         <div className="px-3.5 py-3 border-t border-border bg-white/[0.01] flex flex-col gap-3 animate-[fadeIn_0.15s_ease]">
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Display Name</label>
+            <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Display Name</label>
             <Input value={label} onChange={e => setLabel(e.target.value)} placeholder={acc.email} />
           </div>
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Icon</label>
+            <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Icon</label>
             <div className="flex gap-1 flex-wrap">
               {EMOJI_OPTIONS.map(e => (
                 <button key={e} onClick={() => setIcon(e)} className={cn(
@@ -108,10 +112,10 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
             </div>
           </div>
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Color</label>
+            <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Color</label>
             <div className="flex gap-1.5 items-center">
               {COLOR_OPTIONS.map(c => (
-                <button key={c} onClick={() => setColor(c)} className="w-[22px] h-[22px] rounded-full cursor-pointer transition-all" style={{
+                <button key={c} onClick={() => setColor(c)} className="w-[22px] h-[22px] max-sm:w-8 max-sm:h-8 rounded-full cursor-pointer transition-all" style={{
                   background: c,
                   border: color === c ? "2px solid #fff" : "2px solid transparent",
                   boxShadow: color === c ? `0 0 0 2px ${c}` : "none",
@@ -126,7 +130,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
           </div>
           {acc.type === "gmail" && (
             <div>
-              <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">
+              <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">
                 Gmail Account Index
               </label>
               <div className="flex items-center gap-2">
@@ -138,7 +142,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
                   onChange={e => setGmailIndex(parseInt(e.target.value, 10) || 0)}
                   className="w-20"
                 />
-                <span className="text-[11px] text-muted-foreground/50">
+                <span className="text-[11px] max-sm:text-xs text-muted-foreground/50">
                   The /u/N index in Gmail URLs (check your browser address bar)
                 </span>
               </div>
@@ -325,7 +329,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen text-foreground font-sans p-6 max-w-[900px] mx-auto">
+    <div className="min-h-screen text-foreground font-sans p-4 sm:p-6 max-w-[900px] mx-auto">
 
       <div className="flex items-center gap-3 mb-8">
         <Link to="/" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px] font-medium text-muted-foreground/70 hover:bg-white/[0.04] hover:text-foreground transition-colors no-underline">
@@ -367,8 +371,8 @@ export default function Settings() {
 
       {/* Email Lookback */}
       <SettingsCard title="Email Lookback">
-        <div className="flex items-center gap-3">
-          <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium whitespace-nowrap">Fetch emails from the last</label>
+        <div className="flex items-center gap-3 max-sm:flex-wrap">
+          <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium whitespace-nowrap max-sm:whitespace-normal">Fetch emails from the last</label>
           <Input
             type="number" min="1" max="72" value={lookbackHours}
             onChange={e => setLookbackHours(Math.max(1, Math.min(72, parseInt(e.target.value) || 16)))}
@@ -376,7 +380,7 @@ export default function Settings() {
           />
           <span className="text-[13px] text-muted-foreground/70">hours</span>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-2">
+        <p className="text-[11px] max-sm:text-xs text-muted-foreground mt-2">
           Controls how far back to look for emails during briefing generation. Default: 16 hours.
         </p>
       </SettingsCard>
@@ -404,10 +408,10 @@ export default function Settings() {
                 aria-label="Select Claude model"
               >
                 <span>{modelsLoading ? "Loading models..." : selectedLabel}</span>
-                <span className="text-muted-foreground text-[10px]">{open ? "▲" : "▼"}</span>
+                <span className="text-muted-foreground text-[10px] max-sm:text-xs">{open ? "▲" : "▼"}</span>
               </button>
               {open && models.length > 0 && (
-                <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-elevated border border-white/10 rounded-lg max-h-60 overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.7)]">
+                <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-elevated border border-white/10 rounded-lg max-h-60 max-sm:max-h-[calc(100vh-200px)] overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.7)]">
                   {models.map(m => (
                     <div
                       key={m.id}
@@ -431,7 +435,7 @@ export default function Settings() {
             </div>
           );
         })()}
-        <p className="text-[11px] text-muted-foreground mt-2">
+        <p className="text-[11px] max-sm:text-xs text-muted-foreground mt-2">
           Model used for briefing generation. Haiku is cheapest, Sonnet is more capable. Models are fetched from your API key.
         </p>
       </SettingsCard>
@@ -517,15 +521,15 @@ export default function Settings() {
                 <span className="text-[13px] text-foreground/80 truncate">
                   {sender.name || sender.address}
                 </span>
-                <span className="text-[10px] text-muted-foreground/40 truncate">
+                <span className="text-[10px] max-sm:text-xs text-muted-foreground/40 truncate">
                   {sender.address}
                 </span>
                 {sender.source === "auto" && (
-                  <span className="text-[9px] text-muted-foreground/30 shrink-0">(auto)</span>
+                  <span className="text-[9px] max-sm:text-xs text-muted-foreground/30 shrink-0">(auto)</span>
                 )}
               </div>
               <button
-                className="text-muted-foreground/30 hover:text-red-400/80 transition-colors bg-transparent border-none cursor-pointer p-1 rounded hover:bg-white/[0.04]"
+                className="text-muted-foreground/30 hover:text-red-400/80 transition-colors bg-transparent border-none cursor-pointer p-1 rounded hover:bg-white/[0.04] max-sm:min-w-[44px] max-sm:min-h-[44px] max-sm:flex max-sm:items-center max-sm:justify-center"
                 onClick={async () => {
                   const next = importantSenders.filter((_, j) => j !== i);
                   setImportantSenders(next);
@@ -542,7 +546,7 @@ export default function Settings() {
             </div>
           ))}
           {importantSenders.length === 0 && (
-            <p className="text-[11px] text-muted-foreground/30 italic">
+            <p className="text-[11px] max-sm:text-xs text-muted-foreground/30 italic">
               No important senders yet. Add one below, or they will be auto-detected from future briefings.
             </p>
           )}
@@ -610,76 +614,79 @@ export default function Settings() {
                 }
               }
               schedRectsRef.current[oi] = el.getBoundingClientRect().top;
-            }} className="flex items-center gap-3 px-3.5 py-2.5 bg-surface rounded-lg border border-border">
-              <input
-                type="text" value={sched.label || ""} placeholder="Label"
-                onChange={e => {
+            }} className="flex flex-col gap-2 px-3.5 py-2.5 bg-surface rounded-lg border border-border sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <input
+                  type="text" value={sched.label || ""} placeholder="Label"
+                  onChange={e => {
+                    const updated = [...settings.schedules];
+                    updated[oi] = { ...updated[oi], label: e.target.value };
+                    setSettings(s => ({ ...s, schedules: updated }));
+                  }}
+                  onBlur={() => updateSettings({ schedules_json: settings.schedules })}
+                  className="flex-1 text-[13px] font-medium text-foreground bg-transparent border-none outline-none p-0 min-w-0"
+                />
+                <input
+                  type="time" value={sched.time || "08:00"}
+                  onFocus={() => setEditingTimeIdx(oi)}
+                  onBlur={() => {
+                    if (schedContainerRef.current) {
+                      schedContainerRef.current.querySelectorAll("[data-sched-idx]").forEach(el => {
+                        schedRectsRef.current[el.dataset.schedIdx] = el.getBoundingClientRect().top;
+                      });
+                    }
+                    updateSettings({ schedules_json: settings.schedules });
+                    setEditingTimeIdx(null);
+                  }}
+                  onChange={e => {
+                    const updated = [...settings.schedules];
+                    updated[oi] = { ...updated[oi], time: e.target.value };
+                    setSettings(s => ({ ...s, schedules: updated }));
+                  }}
+                  className="text-xs text-muted-foreground/70 bg-transparent border border-white/[0.08] rounded-md px-2 py-1 [color-scheme:dark] shrink-0"
+                />
+                <button onClick={async () => {
                   const updated = [...settings.schedules];
-                  updated[oi] = { ...updated[oi], label: e.target.value };
+                  updated[oi] = { ...updated[oi], enabled: !updated[oi].enabled };
                   setSettings(s => ({ ...s, schedules: updated }));
-                }}
-                onBlur={() => updateSettings({ schedules_json: settings.schedules })}
-                className="flex-1 text-[13px] font-medium text-foreground bg-transparent border-none outline-none p-0"
-              />
-              <input
-                type="time" value={sched.time || "08:00"}
-                onFocus={() => setEditingTimeIdx(oi)}
-                onBlur={() => {
-                  // Snapshot positions before re-sort
+                  await updateSettings({ schedules_json: updated });
+                }} className={cn(
+                  "w-10 h-[22px] rounded-full border-none cursor-pointer relative transition-colors shrink-0",
+                  sched.enabled ? "bg-[#cba6da]" : "bg-white/10"
+                )} aria-label={sched.enabled ? "Disable schedule" : "Enable schedule"}>
+                  <div className={cn(
+                    "w-4 h-4 rounded-full bg-white absolute top-[3px] transition-[left]",
+                    sched.enabled ? "left-[21px]" : "left-[3px]"
+                  )} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 max-sm:border-t max-sm:border-white/[0.04] max-sm:pt-2 max-sm:-mx-3.5 max-sm:px-3.5">
+                {sched.enabled && (
+                  <button onClick={async () => {
+                    const result = await skipSchedule(oi, !isSkipped);
+                    if (result.schedules) setSettings(s => ({ ...s, schedules: result.schedules }));
+                  }} title={isSkipped ? "Unskip this schedule" : "Skip today's run"}
+                  aria-label={isSkipped ? "Unskip this schedule" : "Skip today's run"}
+                  className={cn(
+                    "rounded-md px-2 py-[3px] text-[10px] max-sm:text-xs font-medium cursor-pointer transition-all font-[inherit] whitespace-nowrap",
+                    isSkipped
+                      ? "bg-[#f9e2af]/[0.08] border border-[#f9e2af]/20 text-[#f9e2af]"
+                      : "bg-input-bg border border-white/[0.08] text-muted-foreground hover:bg-white/[0.04] hover:text-muted-foreground/70 hover:border-white/15"
+                  )}>
+                    {isSkipped ? "Skipped" : "Skip Today"}
+                  </button>
+                )}
+                <button onClick={async () => {
                   if (schedContainerRef.current) {
                     schedContainerRef.current.querySelectorAll("[data-sched-idx]").forEach(el => {
                       schedRectsRef.current[el.dataset.schedIdx] = el.getBoundingClientRect().top;
                     });
                   }
-                  updateSettings({ schedules_json: settings.schedules });
-                  setEditingTimeIdx(null);
-                }}
-                onChange={e => {
-                  const updated = [...settings.schedules];
-                  updated[oi] = { ...updated[oi], time: e.target.value };
+                  const updated = settings.schedules.filter((_, j) => j !== oi);
                   setSettings(s => ({ ...s, schedules: updated }));
-                }}
-                className="text-xs text-muted-foreground/70 bg-transparent border border-white/[0.08] rounded-md px-2 py-1 [color-scheme:dark]"
-              />
-              <button onClick={async () => {
-                const updated = [...settings.schedules];
-                updated[oi] = { ...updated[oi], enabled: !updated[oi].enabled };
-                setSettings(s => ({ ...s, schedules: updated }));
-                await updateSettings({ schedules_json: updated });
-              }} className={cn(
-                "w-10 h-[22px] rounded-full border-none cursor-pointer relative transition-colors",
-                sched.enabled ? "bg-[#cba6da]" : "bg-white/10"
-              )} aria-label={sched.enabled ? "Disable schedule" : "Enable schedule"}>
-                <div className={cn(
-                  "w-4 h-4 rounded-full bg-white absolute top-[3px] transition-[left]",
-                  sched.enabled ? "left-[21px]" : "left-[3px]"
-                )} />
-              </button>
-              {sched.enabled && (
-                <button onClick={async () => {
-                  const result = await skipSchedule(oi, !isSkipped);
-                  if (result.schedules) setSettings(s => ({ ...s, schedules: result.schedules }));
-                }} title={isSkipped ? "Unskip this schedule" : "Skip today's run"}
-                aria-label={isSkipped ? "Unskip this schedule" : "Skip today's run"}
-                className={cn(
-                  "rounded-md px-2 py-[3px] text-[10px] font-medium cursor-pointer transition-all font-[inherit] whitespace-nowrap",
-                  isSkipped
-                    ? "bg-[#f9e2af]/[0.08] border border-[#f9e2af]/20 text-[#f9e2af]"
-                    : "bg-input-bg border border-white/[0.08] text-muted-foreground hover:bg-white/[0.04] hover:text-muted-foreground/70 hover:border-white/15"
-                )}>
-                  {isSkipped ? "Skipped" : "Skip Today"}
-                </button>
-              )}
-              <button onClick={async () => {
-                if (schedContainerRef.current) {
-                  schedContainerRef.current.querySelectorAll("[data-sched-idx]").forEach(el => {
-                    schedRectsRef.current[el.dataset.schedIdx] = el.getBoundingClientRect().top;
-                  });
-                }
-                const updated = settings.schedules.filter((_, j) => j !== oi);
-                setSettings(s => ({ ...s, schedules: updated }));
-                await updateSettings({ schedules_json: updated });
-              }} className="bg-transparent border-none cursor-pointer text-muted-foreground text-base px-1 opacity-60 hover:opacity-100 transition-opacity" aria-label="Remove schedule">×</button>
+                  await updateSettings({ schedules_json: updated });
+                }} className="bg-transparent border-none cursor-pointer text-muted-foreground text-base px-1 opacity-60 hover:opacity-100 transition-opacity" aria-label="Remove schedule">×</button>
+              </div>
             </div>
             );
           })}
@@ -697,7 +704,7 @@ export default function Settings() {
       <SettingsCard title="Weather Location">
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">City Name</label>
+            <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">City Name</label>
             <div className="flex gap-2">
               <Input type="text" placeholder="El Monte, CA" value={weatherForm.location}
                 onChange={e => setWeatherForm(f => ({ ...f, location: e.target.value }))}
@@ -712,13 +719,13 @@ export default function Settings() {
             <div className="flex flex-col gap-1">
               {weatherForm.results.map((r, i) => (
                 <button key={i} onClick={() => selectLocation(r)} className="bg-surface border border-border rounded-lg px-3 py-2 text-xs text-foreground cursor-pointer text-left transition-colors hover:bg-white/[0.04]">
-                  {r.name} <span className="text-muted-foreground text-[11px]">({r.lat.toFixed(4)}, {r.lng.toFixed(4)})</span>
+                  {r.name} <span className="text-muted-foreground text-[11px] max-sm:text-xs">({r.lat.toFixed(4)}, {r.lng.toFixed(4)})</span>
                 </button>
               ))}
             </div>
           )}
           {weatherForm.lat && weatherForm.lng && (
-            <p className="text-[11px] text-muted-foreground m-0">
+            <p className="text-[11px] max-sm:text-xs text-muted-foreground m-0">
               Coordinates: {weatherForm.lat}, {weatherForm.lng}
             </p>
           )}
@@ -729,15 +736,15 @@ export default function Settings() {
       <SettingsCard title="Actual Budget">
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Server URL</label>
+            <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Server URL</label>
             <Input type="url" placeholder="https://actual.yourdomain.com" value={actualForm.serverUrl} onChange={e => setActualForm(f => ({ ...f, serverUrl: e.target.value }))} />
           </div>
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Password</label>
+            <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Password</label>
             <Input type="password" placeholder="Actual Budget password" value={actualForm.password} onChange={e => setActualForm(f => ({ ...f, password: e.target.value }))} />
           </div>
           <div>
-            <label className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Sync ID</label>
+            <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Sync ID</label>
             <Input type="text" placeholder="Budget sync ID" value={actualForm.syncId} onChange={e => setActualForm(f => ({ ...f, syncId: e.target.value }))} />
           </div>
           <div className="flex gap-2 items-center mt-1">

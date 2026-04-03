@@ -54,7 +54,17 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
   if (!emailBills.length && !scheduledBills.length) return null;
 
   return (
-    <Section title="Bills & Payments" delay={delay} loaded={loaded} className={className} tier={2}>
+    <Section
+      title="Bills & Payments"
+      delay={delay}
+      loaded={loaded}
+      className={className}
+      tier={2}
+      summaryBadge={combinedTotal > 0
+        ? `$${combinedTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+        : "all paid"}
+      defaultExpanded={false}
+    >
       {/* Combined header stats */}
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
         {emailBills.length > 0 && (
@@ -62,7 +72,7 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
             style={{ background: "rgba(243,139,168,0.06)", border: "1px solid rgba(243,139,168,0.12)" }}
           >
-            <span className="text-[11px] font-semibold" style={{ color: "rgba(243,139,168,0.8)" }}>
+            <span className="text-[11px] max-sm:text-xs font-semibold" style={{ color: "rgba(243,139,168,0.8)" }}>
               ⚠ {emailBills.length} need{emailBills.length === 1 ? "s" : ""} action
             </span>
           </div>
@@ -72,7 +82,7 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
             style={{ background: "rgba(166,227,161,0.06)", border: "1px solid rgba(166,227,161,0.12)" }}
           >
-            <span className="text-[11px] font-semibold" style={{ color: "rgba(166,227,161,0.8)" }}>
+            <span className="text-[11px] max-sm:text-xs font-semibold" style={{ color: "rgba(166,227,161,0.8)" }}>
               ✓ {scheduledBills.length} scheduled
             </span>
           </div>
@@ -82,10 +92,10 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
             style={{ background: "rgba(205,214,244,0.04)", border: "1px solid rgba(205,214,244,0.08)" }}
           >
-            <span className="text-[11px] font-semibold tabular-nums text-foreground/80">
+            <span className="text-[11px] max-sm:text-xs font-semibold tabular-nums text-foreground/80">
               {formatAmount(combinedTotal)}
             </span>
-            <span className="text-[11px] text-muted-foreground/40">total</span>
+            <span className="text-[11px] max-sm:text-xs text-muted-foreground/40">total</span>
           </div>
         )}
       </div>
@@ -93,7 +103,7 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
       {/* Needs Attention — email-detected bills */}
       {emailBills.length > 0 && (
         <div>
-          <div className="text-[10px] uppercase tracking-[1px] font-semibold mb-1.5" style={{ color: "rgba(243,139,168,0.5)" }}>
+          <div className="text-[10px] max-sm:text-xs uppercase tracking-[1px] font-semibold mb-1.5" style={{ color: "rgba(243,139,168,0.5)" }}>
             Needs Attention
           </div>
           <MotionList className="flex flex-col gap-1" loaded={loaded} delay={delay + 100} stagger={0.04}>
@@ -140,15 +150,15 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
                     <div className="text-[12px] font-medium text-foreground/90 truncate">
                       {email.extractedBill.payee}
                       {billCarriedOver && (
-                        <span className="text-[10px] text-muted-foreground/40 ml-2">↩ previous</span>
+                        <span className="text-[10px] max-sm:text-xs text-muted-foreground/40 ml-2">↩ previous</span>
                       )}
                     </div>
-                    <div className="text-[11px] text-muted-foreground/35 mt-0.5">
+                    <div className="text-[11px] max-sm:text-xs text-muted-foreground/35 mt-0.5">
                       Found in email · not yet in budget
                     </div>
                   </div>
                   <span
-                    className="relative text-[9px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 shrink-0"
+                    className="relative text-[9px] max-sm:text-xs font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 shrink-0"
                     style={{ color: `${typeInfo.color}cc`, background: `${typeInfo.color}0d` }}
                   >
                     {typeInfo.label}
@@ -158,7 +168,7 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
                       ${email.extractedBill.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </span>
                   ) : (
-                    <span className="relative text-[11px] text-muted-foreground/40 min-w-[60px] text-right italic shrink-0">
+                    <span className="relative text-[11px] max-sm:text-xs text-muted-foreground/40 min-w-[60px] text-right italic shrink-0">
                       See email
                     </span>
                   )}
@@ -168,7 +178,7 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
                   {confirmDismissId === email.id ? (
                     <div onClick={(e) => e.stopPropagation()} className="relative flex items-center gap-1 shrink-0">
                       <button
-                        className="rounded text-[10px] font-semibold px-2 py-0.5 cursor-pointer font-[inherit] transition-all duration-150"
+                        className="rounded text-[10px] max-sm:text-xs font-semibold px-2 py-0.5 cursor-pointer font-[inherit] transition-all duration-150"
                         style={{ color: "#f38ba8", background: "rgba(243,139,168,0.1)", border: "1px solid rgba(243,139,168,0.2)" }}
                         onClick={() => { onDismiss(email.id); setConfirmDismissId(null); }}
                       >Dismiss</button>
@@ -215,10 +225,10 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
       {scheduledBills.length > 0 && (
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-[10px] uppercase tracking-[1px] font-semibold" style={{ color: "rgba(166,227,161,0.4)" }}>
+            <span className="text-[10px] max-sm:text-xs uppercase tracking-[1px] font-semibold" style={{ color: "rgba(166,227,161,0.4)" }}>
               Scheduled
             </span>
-            <span className="text-[10px] text-muted-foreground/20">· from Actual Budget</span>
+            <span className="text-[10px] max-sm:text-xs text-muted-foreground/20">· from Actual Budget</span>
           </div>
           <MotionList className="flex flex-col gap-1" loaded={loaded} delay={delay + 200} stagger={0.04}>
             {scheduledBills.map((bill) => {
@@ -242,16 +252,16 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
                         <div className="text-[12px] font-medium text-foreground/90">{bill.name}</div>
                         <div className="flex items-center gap-2 mt-0.5">
                           {bill.payee && bill.payee !== bill.name && (
-                            <span className="text-[11px] text-muted-foreground/40">{bill.payee}</span>
+                            <span className="text-[11px] max-sm:text-xs text-muted-foreground/40">{bill.payee}</span>
                           )}
-                          <span className="text-[11px] text-muted-foreground/50">
+                          <span className="text-[11px] max-sm:text-xs text-muted-foreground/50">
                             Due {formatDate(bill.next_date)}
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <span
-                          className="text-[10px] font-semibold tabular-nums px-2 py-0.5 rounded"
+                          className="text-[10px] max-sm:text-xs font-semibold tabular-nums px-2 py-0.5 rounded"
                           style={{ color: uc.text, background: uc.bg }}
                         >
                           {days !== null ? daysLabel(days) : ""}
@@ -269,7 +279,7 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
         </div>
       )}
 
-      <div className="text-[10px] text-muted-foreground/20 mt-2 text-right">
+      <div className="text-[10px] max-sm:text-xs text-muted-foreground/20 mt-2 text-right">
         Email detection · Actual Budget
       </div>
     </Section>

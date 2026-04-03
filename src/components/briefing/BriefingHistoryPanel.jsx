@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { getBriefingHistory, getBriefingById } from "../../api";
 import { transformBriefing } from "../../transform";
+import useIsMobile from "../../hooks/useIsMobile";
+import BottomSheet from "../ui/BottomSheet";
 
 const TZ = "America/Los_Angeles";
 const dateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
@@ -47,6 +49,7 @@ function timeAgo(date) {
 }
 
 export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, onClose, onDelete }) {
+  const isMobile = useIsMobile();
   const [history, setHistory] = useState(null);
   const [loadingId, setLoadingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -156,48 +159,8 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
 
   const groups = history ? groupByDate(history.filter((h) => h.status === "ready")) : [];
 
-  if (!pos) return null;
-
-  return createPortal(
-    <div
-      ref={panelRef}
-      className="z-[9999] isolate flex flex-col overflow-hidden w-[360px] animate-in fade-in slide-in-from-top-2 duration-250"
-      style={{
-        position: "fixed",
-        top: pos.top,
-        right: pos.right,
-        maxHeight: `min(420px, calc(100vh - ${pos.top + 16}px))`,
-        background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
-        borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.08)",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-      }}
-    >
-      {/* Header */}
-      <div
-        className="shrink-0 flex justify-between items-center"
-        style={{
-          padding: "14px 20px 12px",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "rgba(255,255,255,0.015)",
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          <span className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-semibold">
-            History
-          </span>
-        </div>
-        {history && (
-          <span className="text-[10px] text-muted-foreground/60 font-medium tabular-nums">
-            {groups.reduce((sum, g) => sum + g.items.length, 0)} briefings
-          </span>
-        )}
-      </div>
-
+  const content = (
+    <>
       {/* Scrollable content */}
       <div ref={scrollRef} className="overflow-y-auto overscroll-contain flex-1">
 
@@ -205,13 +168,13 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
         {!history && !error && (
           <div className="py-10 px-5 text-center">
             <div className="w-4 h-4 border-2 border-white/[0.06] border-t-primary rounded-full animate-spin mx-auto mb-3" />
-            <div className="text-[11px] text-muted-foreground">Loading history...</div>
+            <div className="text-[11px] max-sm:text-xs text-muted-foreground">Loading history...</div>
           </div>
         )}
 
         {/* Error state */}
         {error && (
-          <div className="py-6 px-5 text-[11px] text-destructive text-center leading-relaxed">
+          <div className="py-6 px-5 text-[11px] max-sm:text-xs text-destructive text-center leading-relaxed">
             {error}
           </div>
         )}
@@ -220,7 +183,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
         {history && groups.length === 0 && (
           <div className="py-10 px-5 text-center">
             <div className="text-2xl mb-2 opacity-60">📋</div>
-            <div className="text-[11px] text-muted-foreground">No past briefings yet</div>
+            <div className="text-[11px] max-sm:text-xs text-muted-foreground">No past briefings yet</div>
           </div>
         )}
 
@@ -230,7 +193,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
           <div key={group.label}>
             {/* Date group header with rule line */}
             <div className="flex items-center gap-3 px-5 pt-4 pb-2">
-              <span className="text-[10px] tracking-[1.5px] uppercase text-muted-foreground/70 font-semibold whitespace-nowrap">
+              <span className="text-[10px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground/70 font-semibold whitespace-nowrap">
                 {group.label}
               </span>
               {gi > 0 && (
@@ -308,7 +271,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                         {time}
                       </div>
                       <div className={cn(
-                        "text-[10px] mt-0.5 leading-tight transition-colors duration-200",
+                        "text-[10px] max-sm:text-xs mt-0.5 leading-tight transition-colors duration-200",
                         isActive ? "text-muted-foreground/60" : "text-muted-foreground/50 group-hover:text-muted-foreground/70",
                       )}>
                         {timeAgo(item._date)}
@@ -323,8 +286,8 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                     {genTime && !isLoading && (
                       <span
                         className={cn(
-                          "text-[9px] font-semibold tracking-wide tabular-nums transition-opacity duration-200",
-                          !isActive && "group-hover:opacity-0",
+                          "text-[9px] max-sm:text-xs font-semibold tracking-wide tabular-nums transition-opacity duration-200",
+                          !isActive && !isMobile && "group-hover:opacity-0",
                           confirmId === item.id && "!opacity-0",
                         )}
                         style={{
@@ -344,7 +307,9 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                           "absolute right-0 flex items-center justify-center rounded-md transition-all duration-200",
                           confirmId === item.id
                             ? "opacity-100 bg-destructive/[0.12] px-2 py-0.5 gap-1"
-                            : "opacity-0 group-hover:opacity-100 w-6 h-6 bg-transparent hover:bg-destructive/[0.12]",
+                            : isMobile
+                              ? "opacity-70 w-8 h-8 bg-transparent"
+                              : "opacity-0 group-hover:opacity-100 w-6 h-6 bg-transparent hover:bg-destructive/[0.12]",
                           "active:scale-90",
                           deletingId === item.id && "opacity-100 pointer-events-none",
                         )}
@@ -357,7 +322,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-destructive">
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
-                            <span className="text-[9px] font-semibold text-destructive">delete?</span>
+                            <span className="text-[9px] max-sm:text-xs font-semibold text-destructive">delete?</span>
                           </>
                         ) : (
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/50 hover:text-destructive transition-colors duration-200">
@@ -375,6 +340,61 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
         ))}
       </div>
       </div>
+    </>
+  );
+
+  // Mobile: bottom sheet
+  if (isMobile) {
+    return (
+      <BottomSheet open onClose={onClose} title="Briefing History">
+        {content}
+      </BottomSheet>
+    );
+  }
+
+  // Desktop: fixed position portal
+  if (!pos) return null;
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      className="z-[9999] isolate flex flex-col overflow-hidden w-[360px] animate-in fade-in slide-in-from-top-2 duration-250"
+      style={{
+        position: "fixed",
+        top: pos.top,
+        right: pos.right,
+        maxHeight: `min(420px, calc(100vh - ${pos.top + 16}px))`,
+        background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}
+    >
+      {/* Header */}
+      <div
+        className="shrink-0 flex justify-between items-center"
+        style={{
+          padding: "14px 20px 12px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          background: "rgba(255,255,255,0.015)",
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <span className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-semibold">
+            History
+          </span>
+        </div>
+        {history && (
+          <span className="text-[10px] text-muted-foreground/60 font-medium tabular-nums">
+            {groups.reduce((sum, g) => sum + g.items.length, 0)} briefings
+          </span>
+        )}
+      </div>
+      {content}
     </div>,
     document.body
   );
