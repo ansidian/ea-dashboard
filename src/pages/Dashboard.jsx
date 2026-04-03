@@ -560,6 +560,7 @@ function DashboardMain({
 
         <ScheduleSection
           calendar={liveData.liveCalendar || d.calendar}
+          nextWeekCalendar={liveData.liveNextWeekCalendar || d.nextWeekCalendar}
           loaded={loaded}
           delay={250}
           className={halfClass}

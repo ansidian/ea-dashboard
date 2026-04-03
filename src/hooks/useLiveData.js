@@ -6,6 +6,7 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000;
 export default function useLiveData() {
   const [liveEmails, setLiveEmails] = useState([]);
   const [liveCalendar, setLiveCalendar] = useState(null);
+  const [liveNextWeekCalendar, setLiveNextWeekCalendar] = useState(null);
   const [liveWeather, setLiveWeather] = useState(null);
   const [liveBills, setLiveBills] = useState([]);
   const [importantSenders, setImportantSenders] = useState([]);
@@ -26,6 +27,7 @@ export default function useLiveData() {
       if (!mountedRef.current) return;
       setLiveEmails(data.emails || []);
       setLiveCalendar(data.calendar || null);
+      setLiveNextWeekCalendar(data.nextWeekCalendar || null);
       setLiveWeather(data.weather || null);
       setLiveBills(data.bills || []);
       setImportantSenders(data.importantSenders || []);
@@ -78,6 +80,7 @@ export default function useLiveData() {
   return {
     liveEmails,
     liveCalendar,
+    liveNextWeekCalendar,
     liveWeather,
     liveBills,
     importantSenders,

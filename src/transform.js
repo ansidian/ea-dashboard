@@ -29,6 +29,7 @@ export function transformBriefing(raw) {
     },
     aiInsights,
     calendar: b.calendar || [],
+    nextWeekCalendar: b.nextWeekCalendar || [],
     ctm: {
       upcoming: ctmDeadlines,
       stats: ctmStats,
