@@ -1,20 +1,33 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 
-function useNowTime() {
+function useNowTick() {
   const fmt = () => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const [time, setTime] = useState(fmt);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTime(fmt()), 60_000);
+    const id = setInterval(() => {
+      setTime(fmt());
+      setTick(t => t + 1);
+    }, 60_000);
     return () => clearInterval(id);
   }, []);
-  return time;
+  return { time, tick };
 }
 
-function NowMarker({ time }) {
+function derivePassedState(events) {
+  if (!events?.length) return events;
+  const nowMs = Date.now();
+  return events.map(e => ({
+    ...e,
+    passed: e.allDay ? false : (e.endMs || e.startMs) <= nowMs,
+  }));
+}
+
+const NowMarker = forwardRef(function NowMarker({ time }, ref) {
   return (
-    <div className="relative flex items-center gap-2 py-2 my-1">
+    <div ref={ref} className="relative flex items-center gap-2 py-2 my-1">
       <div
         className="absolute left-[-19px] w-[9px] h-[9px] rounded-full"
         style={{
@@ -28,7 +41,7 @@ function NowMarker({ time }) {
       </span>
     </div>
   );
-}
+});
 
 function buildWeekDays(events) {
   // Compute next Sunday from today (same logic as backend getNextWeekRange)
@@ -201,19 +214,27 @@ function NextWeekView({ events, showSource, scrollRef }) {
   );
 }
 
-export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, delay, style, className }) {
-  const nowTime = useNowTime();
+export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCalendar, loaded, delay, style, className }) {
+  const { time: nowTime, tick } = useNowTick();
   const [view, setView] = useState("today");
   const nextWeekScrollRef = useRef(0);
 
-  const activeEvents = view === "today" ? calendar : nextWeekCalendar;
-  const sources = new Set(activeEvents?.map(e => e.source).filter(Boolean));
+  // Derive passed state client-side so the now marker moves live
+  const liveCalendar = useMemo(() => derivePassedState(calendar), [calendar, tick]);
+  const hasTomorrow = tomorrowCalendar?.length > 0;
+  const todayEmpty = !liveCalendar?.length;
+
+  const activeEvents = view === "today" ? liveCalendar : nextWeekCalendar;
+  const sources = new Set([
+    ...(activeEvents?.map(e => e.source).filter(Boolean) || []),
+    ...(view === "today" && hasTomorrow ? tomorrowCalendar.map(e => e.source).filter(Boolean) : []),
+  ]);
   const showSource = sources.size > 1;
 
   // Where to insert the now marker (today view only)
-  const firstUpcoming = calendar?.findIndex(e => !e.passed && !e.allDay) ?? -1;
-  const nowPosition = calendar?.length > 0
-    ? (firstUpcoming >= 0 ? firstUpcoming : calendar.length)
+  const firstUpcoming = liveCalendar?.findIndex(e => !e.passed && !e.allDay) ?? -1;
+  const nowPosition = liveCalendar?.length > 0
+    ? (firstUpcoming >= 0 ? firstUpcoming : liveCalendar.length)
     : -1;
 
   const titleContent = (
@@ -256,7 +277,7 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
     >
       {view === "today" && (
         <>
-          {calendar?.length > 0 ? (
+          {liveCalendar?.length > 0 ? (
             <div className="relative pl-5">
               {/* Timeline spine */}
               <div
@@ -268,7 +289,7 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
                 {/* Now marker at the top (no events passed yet) */}
                 {nowPosition === 0 && <NowMarker time={nowTime} />}
 
-                {calendar.map((event, i) => (
+                {liveCalendar.map((event, i) => (
                   <div key={i}>
                     {/* Event card */}
                     <div
@@ -362,12 +383,12 @@ export default function ScheduleSection({ calendar, nextWeekCalendar, loaded, de
                     </div>
 
                     {/* Now marker — between passed and upcoming */}
-                    {nowPosition > 0 && nowPosition < calendar.length && i === nowPosition - 1 && <NowMarker time={nowTime} />}
+                    {nowPosition > 0 && nowPosition < liveCalendar.length && i === nowPosition - 1 && <NowMarker time={nowTime} />}
                   </div>
                 ))}
 
                 {/* Now marker at the bottom (all events passed) */}
-                {nowPosition === calendar.length && <NowMarker time={nowTime} />}
+                {nowPosition === liveCalendar.length && <NowMarker time={nowTime} />}
               </div>
             </div>
           ) : (

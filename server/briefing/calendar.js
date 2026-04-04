@@ -180,6 +180,7 @@ export async function fetchCalendar(gmailAccounts, { startDate, endDate } = {}) 
   return allEvents.map(({ _start, _end, ...event }) => ({
     ...event,
     startMs: _start,
+    endMs: _end,
     passed: isFutureRange ? false : (event.allDay ? false : _end <= nowMs),
   }));
 }
