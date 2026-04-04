@@ -239,6 +239,9 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
   const { time: nowTime, tick } = useNowTick();
   const [view, setView] = useState("today");
   const nextWeekScrollRef = useRef(0);
+  const nowMarkerRef = useRef(null);
+  const timelineRef = useRef(null);
+  const lastUserScrollRef = useRef(0);
 
   // Derive passed state client-side so the now marker moves live
   const liveCalendar = useMemo(() => derivePassedState(calendar), [calendar, tick]);
@@ -257,6 +260,28 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
   const nowPosition = liveCalendar?.length > 0
     ? (firstUpcoming >= 0 ? firstUpcoming : liveCalendar.length)
     : -1;
+  const prevNowPositionRef = useRef(nowPosition);
+
+  // Smooth scroll to now marker on mount and briefing refresh
+  useEffect(() => {
+    if (view !== "today" || !nowMarkerRef.current) return;
+    const timer = setTimeout(() => {
+      nowMarkerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [calendar, view]);
+
+  // Auto-scroll when now marker advances past an event (with user scroll guard)
+  useEffect(() => {
+    if (view !== "today") return;
+    if (prevNowPositionRef.current === nowPosition) return;
+    prevNowPositionRef.current = nowPosition;
+
+    // Skip if user scrolled within last 10 seconds
+    if (Date.now() - lastUserScrollRef.current < 10_000) return;
+
+    nowMarkerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [nowPosition, view]);
 
   const titleContent = (
     <div className="flex items-center gap-3">
@@ -299,122 +324,128 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
       {view === "today" && (
         <>
           {liveCalendar?.length > 0 ? (
-            <div className="relative pl-5">
-              {/* Timeline spine */}
-              <div
-                className="absolute left-[5px] top-2 bottom-2 w-px"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-              />
+            <div
+              ref={timelineRef}
+              className="max-h-[400px] overflow-y-auto"
+              style={{ overscrollBehavior: "contain" }}
+              onScroll={() => { lastUserScrollRef.current = Date.now(); }}
+            >
+              <div className="relative pl-5">
+                {/* Timeline spine */}
+                <div
+                  className="absolute left-[5px] top-2 bottom-2 w-px"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                />
 
-              <div className="flex flex-col gap-1">
-                {/* Now marker at the top (no events passed yet) */}
-                {nowPosition === 0 && <NowMarker time={nowTime} />}
+                <div className="flex flex-col gap-1">
+                  {/* Now marker at the top (no events passed yet) */}
+                  {nowPosition === 0 && <NowMarker ref={nowMarkerRef} time={nowTime} />}
 
-                {liveCalendar.map((event, i) => (
-                  <div key={i}>
-                    {/* Event card */}
-                    <div
-                      className={cn(
-                        "group relative flex items-center gap-3 py-2 px-3 rounded-md transition-all duration-200",
-                        event.flag === "Conflict"
-                          ? "bg-destructive/[0.05]"
-                          : "bg-card/60",
-                        event.passed ? "opacity-40" : "hover:bg-card/80",
-                      )}
-                      style={{
-                        border: event.flag === "Conflict"
-                          ? "1px solid rgba(243,139,168,0.2)"
-                          : "1px solid rgba(255,255,255,0.04)",
-                      }}
-                    >
-                      {/* Timeline dot — on the spine */}
+                  {liveCalendar.map((event, i) => (
+                    <div key={i}>
+                      {/* Event card */}
                       <div
-                        className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0 transition-all duration-200"
+                        className={cn(
+                          "group relative flex items-center gap-3 py-2 px-3 rounded-md transition-all duration-200",
+                          event.flag === "Conflict"
+                            ? "bg-destructive/[0.05]"
+                            : "bg-card/60",
+                          event.passed ? "opacity-40" : "hover:bg-card/80",
+                        )}
                         style={{
-                          background: event.passed ? "rgba(255,255,255,0.1)" : event.color,
-                          boxShadow: event.passed ? "none" : `0 0 6px ${event.color}50`,
+                          border: event.flag === "Conflict"
+                            ? "1px solid rgba(243,139,168,0.2)"
+                            : "1px solid rgba(255,255,255,0.04)",
                         }}
-                      />
-
-                      {/* Color accent bar */}
-                      <div
-                        className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
-                        style={{
-                          background: event.color,
-                          opacity: event.passed ? 0.3 : 0.7,
-                          boxShadow: event.passed ? "none" : `0 0 6px ${event.color}30`,
-                        }}
-                      />
-
-                      {/* Time + duration */}
-                      <div className="min-w-[72px] ml-1">
-                        <div className={cn(
-                          "text-[13px] font-semibold tabular-nums",
-                          event.passed ? "text-muted-foreground" : "text-foreground",
-                        )}>
-                          {event.time}
-                        </div>
-                        <div className="text-[10px] max-sm:text-xs text-muted-foreground/50">
-                          {event.duration}
-                        </div>
-                      </div>
-
-                      {/* Title + source */}
-                      <div className="flex-1 min-w-0">
+                      >
+                        {/* Timeline dot — on the spine */}
                         <div
-                          className={cn(
-                            "text-[12px] font-medium truncate",
-                            event.passed
-                              ? "text-muted-foreground line-through decoration-muted-foreground/30"
-                              : "text-foreground/90",
-                          )}
-                        >
-                          {event.title}
+                          className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0 transition-all duration-200"
+                          style={{
+                            background: event.passed ? "rgba(255,255,255,0.1)" : event.color,
+                            boxShadow: event.passed ? "none" : `0 0 6px ${event.color}50`,
+                          }}
+                        />
+
+                        {/* Color accent bar */}
+                        <div
+                          className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                          style={{
+                            background: event.color,
+                            opacity: event.passed ? 0.3 : 0.7,
+                            boxShadow: event.passed ? "none" : `0 0 6px ${event.color}30`,
+                          }}
+                        />
+
+                        {/* Time + duration */}
+                        <div className="min-w-[72px] ml-1">
+                          <div className={cn(
+                            "text-[13px] font-semibold tabular-nums",
+                            event.passed ? "text-muted-foreground" : "text-foreground",
+                          )}>
+                            {event.time}
+                          </div>
+                          <div className="text-[10px] max-sm:text-xs text-muted-foreground/50">
+                            {event.duration}
+                          </div>
                         </div>
-                        {showSource && event.source && (
-                          <span
-                            className="inline-flex items-center gap-1 mt-0.5 text-[10px] max-sm:text-xs font-medium rounded px-1.5 py-px"
-                            style={{
-                              color: `${event.color}cc`,
-                              background: `${event.color}10`,
-                            }}
+
+                        {/* Title + source */}
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className={cn(
+                              "text-[12px] font-medium truncate",
+                              event.passed
+                                ? "text-muted-foreground line-through decoration-muted-foreground/30"
+                                : "text-foreground/90",
+                            )}
                           >
+                            {event.title}
+                          </div>
+                          {showSource && event.source && (
                             <span
-                              className="w-1.5 h-1.5 rounded-full shrink-0"
-                              style={{ background: event.color, opacity: 0.7 }}
-                            />
-                            {event.source}
-                          </span>
+                              className="inline-flex items-center gap-1 mt-0.5 text-[10px] max-sm:text-xs font-medium rounded px-1.5 py-px"
+                              style={{
+                                color: `${event.color}cc`,
+                                background: `${event.color}10`,
+                              }}
+                            >
+                              <span
+                                className="w-1.5 h-1.5 rounded-full shrink-0"
+                                style={{ background: event.color, opacity: 0.7 }}
+                              />
+                              {event.source}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Flags */}
+                        {!event.passed && event.flag && (
+                          <div
+                            className={cn(
+                              "text-[9px] max-sm:text-xs font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
+                              event.flag === "Conflict"
+                                ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
+                                : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
+                            )}
+                          >
+                            {event.flag}
+                          </div>
                         )}
                       </div>
 
-                      {/* Flags */}
-                      {!event.passed && event.flag && (
-                        <div
-                          className={cn(
-                            "text-[9px] max-sm:text-xs font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
-                            event.flag === "Conflict"
-                              ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
-                              : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
-                          )}
-                        >
-                          {event.flag}
-                        </div>
-                      )}
+                      {/* Now marker — between passed and upcoming */}
+                      {nowPosition > 0 && nowPosition < liveCalendar.length && i === nowPosition - 1 && <NowMarker ref={nowMarkerRef} time={nowTime} />}
                     </div>
+                  ))}
 
-                    {/* Now marker — between passed and upcoming */}
-                    {nowPosition > 0 && nowPosition < liveCalendar.length && i === nowPosition - 1 && <NowMarker time={nowTime} />}
-                  </div>
-                ))}
+                  {/* Now marker at the bottom (all events passed) */}
+                  {nowPosition === liveCalendar.length && <NowMarker ref={nowMarkerRef} time={nowTime} />}
 
-                {/* Now marker at the bottom (all events passed) */}
-                {nowPosition === liveCalendar.length && <NowMarker time={nowTime} />}
-
-                {/* Tomorrow's events on the continuous timeline */}
-                {hasTomorrow && (
-                  <>
-                    <TomorrowDivider />
+                  {/* Tomorrow's events on the continuous timeline */}
+                  {hasTomorrow && (
+                    <>
+                      <TomorrowDivider />
                     {tomorrowCalendar.map((event, i) => (
                       <div key={`tomorrow-${i}`}>
                         <div
@@ -501,15 +532,22 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                 )}
               </div>
             </div>
+          </div>
           ) : hasTomorrow ? (
-            <div className="relative pl-5">
-              {/* Timeline spine */}
-              <div
-                className="absolute left-[5px] top-2 bottom-2 w-px"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-              />
-              <div className="flex flex-col gap-1">
-                <NowMarker time={nowTime} />
+            <div
+              ref={timelineRef}
+              className="max-h-[400px] overflow-y-auto"
+              style={{ overscrollBehavior: "contain" }}
+              onScroll={() => { lastUserScrollRef.current = Date.now(); }}
+            >
+              <div className="relative pl-5">
+                {/* Timeline spine */}
+                <div
+                  className="absolute left-[5px] top-2 bottom-2 w-px"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                />
+                <div className="flex flex-col gap-1">
+                  <NowMarker ref={nowMarkerRef} time={nowTime} />
                 <TomorrowDivider />
                 {tomorrowCalendar.map((event, i) => (
                   <div key={`tomorrow-${i}`}>
@@ -578,6 +616,7 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                     </div>
                   </div>
                 ))}
+                </div>
               </div>
             </div>
           ) : (
