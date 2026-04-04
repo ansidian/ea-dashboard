@@ -206,6 +206,12 @@ export function getNextWeekRange() {
   return { startDate, endDate };
 }
 
+export function getTomorrowRange() {
+  const tomorrow = new Date(Date.now() + 86400000);
+  const { dayStart, dayEnd } = pacificDayBoundaries(tomorrow);
+  return { startDate: dayStart, endDate: dayEnd };
+}
+
 function formatTime(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);

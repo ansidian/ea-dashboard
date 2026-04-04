@@ -2,7 +2,7 @@ import db from "../db/connection.js";
 import { decrypt } from "./encryption.js";
 import { fetchEmails as fetchGmailEmails } from "./gmail.js";
 import { fetchEmails as fetchIcloudEmails } from "./icloud.js";
-import { fetchCalendar, getNextWeekRange } from "./calendar.js";
+import { fetchCalendar, getNextWeekRange, getTomorrowRange } from "./calendar.js";
 import { fetchWeather } from "./weather.js";
 import { fetchCTMDeadlines } from "./ctm.js";
 import { fetchTodoistTasks } from "./todoist.js";
@@ -57,13 +57,17 @@ async function fetchLiveData(userId, accounts, settings) {
   const gmailAccounts = accounts.filter((a) => a.type === "gmail");
   const calendarAccounts = gmailAccounts.filter((a) => a.calendar_enabled);
 
-  const [calendar, nextWeekCalendar, weather, ctmDeadlines, todoistTasks] = await Promise.all([
+  const [calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks] = await Promise.all([
     fetchCalendar(calendarAccounts).catch((err) => {
       console.error("Calendar fetch failed:", err.message);
       return [];
     }),
     fetchCalendar(calendarAccounts, getNextWeekRange()).catch((err) => {
       console.error("Next week calendar fetch failed:", err.message);
+      return [];
+    }),
+    fetchCalendar(calendarAccounts, getTomorrowRange()).catch((err) => {
+      console.error("Tomorrow calendar fetch failed:", err.message);
       return [];
     }),
     fetchWeather(
@@ -83,7 +87,7 @@ async function fetchLiveData(userId, accounts, settings) {
     }),
   ]);
 
-  return { calendar, nextWeekCalendar, weather, ctmDeadlines, todoistTasks };
+  return { calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks };
 }
 
 // Fetch emails from all accounts
@@ -488,7 +492,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, nextWeekCalendar, weather, ctmDeadlines, todoistTasks }, emails, { triagedIds, prevBriefing, dismissedIds }, categories, upcomingBills] = await Promise.all([
+    const [{ calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks }, emails, { triagedIds, prevBriefing, dismissedIds }, categories, upcomingBills] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
@@ -532,6 +536,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       fixEmailAccounts(cloned, emails, accounts);
       deduplicateBills(cloned);
       cloned.nextWeekCalendar = nextWeekCalendar;
+      cloned.tomorrowCalendar = tomorrowCalendar;
       cloned.dataUpdatedAt = new Date().toISOString();
       cloned.generatedAt = nowPacific();
       if (scheduleLabel) cloned.scheduleLabel = scheduleLabel;
@@ -619,6 +624,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     // Overwrite calendar with server-fetched data (has accurate `passed` flags)
     briefingJson.calendar = calendar;
     briefingJson.nextWeekCalendar = nextWeekCalendar;
+    briefingJson.tomorrowCalendar = tomorrowCalendar;
 
     // Fix email account grouping: re-assign emails to correct accounts based on
     // the original account_label from the fetched data (Claude sometimes misgroups)
@@ -660,7 +666,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 // Quick refresh: update calendar, weather, CTM only — emails left to full generation
 export async function quickRefresh(userId) {
   const { accounts, settings } = await loadUserConfig(userId);
-  const { calendar, nextWeekCalendar, weather, ctmDeadlines, todoistTasks } = await fetchLiveData(userId, accounts, settings);
+  const { calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks } = await fetchLiveData(userId, accounts, settings);
   const completedTaskIds = await loadCompletedTaskIds(userId, todoistTasks);
 
   // Load the latest ready briefing to patch into
@@ -685,6 +691,7 @@ export async function quickRefresh(userId) {
   briefing.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
   briefing.calendar = calendar;
   briefing.nextWeekCalendar = nextWeekCalendar;
+  briefing.tomorrowCalendar = tomorrowCalendar;
   const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
   briefing.ctm = {
     upcoming: separated.ctm,
