@@ -6,14 +6,16 @@ function useNowTick() {
   const fmt = () => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const [time, setTime] = useState(fmt);
   const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(Date.now);
   useEffect(() => {
     const id = setInterval(() => {
       setTime(fmt());
       setTick(t => t + 1);
+      setNowMs(Date.now());
     }, 60_000);
     return () => clearInterval(id);
   }, []);
-  return { time, tick };
+  return { time, tick, nowMs };
 }
 
 function derivePassedState(events) {
@@ -306,7 +308,8 @@ function NextWeekView({ events, showSource, scrollRef }) {
 }
 
 export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCalendar, loaded, delay, style, className }) {
-  const { time: nowTime, tick } = useNowTick();
+  // eslint-disable-next-line no-unused-vars
+  const { time: nowTime, tick, nowMs } = useNowTick();
   const [view, setView] = useState("today");
   const nextWeekScrollRef = useRef(0);
   const nowMarkerRef = useRef(null);
