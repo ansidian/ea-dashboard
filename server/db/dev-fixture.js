@@ -49,10 +49,10 @@ export function generateMockBriefing() {
       today.setHours(0, 0, 0, 0);
       const ms = (h, m) => today.getTime() + h * 3600000 + m * 60000;
       return [
-        { time: "9:00 AM", duration: "30m", title: "Daily Standup", source: "Work", color: "#4285f4", flag: null, allDay: false, startMs: ms(9, 0), passed: hour >= 10 },
-        { time: "11:00 AM", duration: "1h", title: "Project Review", source: "Work", color: "#4285f4", flag: null, allDay: false, startMs: ms(11, 0), passed: hour >= 12 },
-        { time: "1:00 PM", duration: "30m", title: "Lunch with Alex", source: "Personal", color: "#34a853", flag: null, allDay: false, startMs: ms(13, 0), passed: hour >= 14 },
-        { time: "3:00 PM", duration: "1h", title: "Team Planning", source: "Work", color: "#4285f4", flag: "Conflict", allDay: false, startMs: ms(15, 0), passed: hour >= 16 },
+        { time: "9:00 AM", duration: "30m", title: "Daily Standup", source: "Work", color: "#4285f4", flag: null, allDay: false, startMs: ms(9, 0), endMs: ms(9, 30), passed: hour >= 10 },
+        { time: "11:00 AM", duration: "1h", title: "Project Review", source: "Work", color: "#4285f4", flag: null, allDay: false, startMs: ms(11, 0), endMs: ms(12, 0), passed: hour >= 12 },
+        { time: "1:00 PM", duration: "30m", title: "Lunch with Alex", source: "Personal", color: "#34a853", flag: null, allDay: false, startMs: ms(13, 0), endMs: ms(13, 30), passed: hour >= 14 },
+        { time: "3:00 PM", duration: "1h", title: "Team Planning", source: "Work", color: "#4285f4", flag: "Conflict", allDay: false, startMs: ms(15, 0), endMs: ms(16, 0), passed: hour >= 16 },
       ];
     })(),
     nextWeekCalendar: [],
