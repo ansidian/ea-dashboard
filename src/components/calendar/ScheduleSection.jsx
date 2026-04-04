@@ -43,6 +43,27 @@ const NowMarker = forwardRef(function NowMarker({ time }, ref) {
   );
 });
 
+function TomorrowDivider() {
+  return (
+    <div className="flex items-center gap-2 py-3 my-1">
+      <div
+        className="absolute left-[-20px] w-[11px] h-[11px] rounded-full"
+        style={{
+          border: "2px solid rgba(203,166,218,0.4)",
+          background: "#16161e",
+        }}
+      />
+      <span
+        className="text-[10px] max-sm:text-xs font-bold tracking-[1.5px] uppercase"
+        style={{ color: "rgba(203,166,218,0.5)" }}
+      >
+        Tomorrow
+      </span>
+      <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+    </div>
+  );
+}
+
 function buildWeekDays(events) {
   // Compute next Sunday from today (same logic as backend getNextWeekRange)
   const now = new Date();
@@ -389,6 +410,174 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
 
                 {/* Now marker at the bottom (all events passed) */}
                 {nowPosition === liveCalendar.length && <NowMarker time={nowTime} />}
+
+                {/* Tomorrow's events on the continuous timeline */}
+                {hasTomorrow && (
+                  <>
+                    <TomorrowDivider />
+                    {tomorrowCalendar.map((event, i) => (
+                      <div key={`tomorrow-${i}`}>
+                        <div
+                          className={cn(
+                            "group relative flex items-center gap-3 py-2 px-3 rounded-md transition-all duration-200",
+                            event.flag === "Conflict"
+                              ? "bg-destructive/[0.05]"
+                              : "bg-card/60",
+                          )}
+                          style={{
+                            border: event.flag === "Conflict"
+                              ? "1px solid rgba(243,139,168,0.2)"
+                              : "1px solid rgba(255,255,255,0.04)",
+                            opacity: todayEmpty ? 0.65 : 0.55,
+                          }}
+                        >
+                          {/* Timeline dot — muted */}
+                          <div
+                            className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0"
+                            style={{
+                              background: event.color,
+                              opacity: 0.4,
+                            }}
+                          />
+
+                          {/* Color accent bar */}
+                          <div
+                            className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                            style={{
+                              background: event.color,
+                              opacity: 0.4,
+                            }}
+                          />
+
+                          {/* Time + duration */}
+                          <div className="min-w-[72px] ml-1">
+                            <div className="text-[13px] font-semibold tabular-nums text-foreground">
+                              {event.time}
+                            </div>
+                            <div className="text-[10px] max-sm:text-xs text-muted-foreground/50">
+                              {event.duration}
+                            </div>
+                          </div>
+
+                          {/* Title + source */}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[12px] font-medium truncate text-foreground/90">
+                              {event.title}
+                            </div>
+                            {showSource && event.source && (
+                              <span
+                                className="inline-flex items-center gap-1 mt-0.5 text-[10px] max-sm:text-xs font-medium rounded px-1.5 py-px"
+                                style={{
+                                  color: `${event.color}cc`,
+                                  background: `${event.color}10`,
+                                }}
+                              >
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                                  style={{ background: event.color, opacity: 0.7 }}
+                                />
+                                {event.source}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Flags */}
+                          {event.flag && (
+                            <div
+                              className={cn(
+                                "text-[9px] max-sm:text-xs font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
+                                event.flag === "Conflict"
+                                  ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
+                                  : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
+                              )}
+                            >
+                              {event.flag}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          ) : hasTomorrow ? (
+            <div className="relative pl-5">
+              {/* Timeline spine */}
+              <div
+                className="absolute left-[5px] top-2 bottom-2 w-px"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+              />
+              <div className="flex flex-col gap-1">
+                <NowMarker time={nowTime} />
+                <TomorrowDivider />
+                {tomorrowCalendar.map((event, i) => (
+                  <div key={`tomorrow-${i}`}>
+                    <div
+                      className={cn(
+                        "group relative flex items-center gap-3 py-2 px-3 rounded-md transition-all duration-200",
+                        event.flag === "Conflict"
+                          ? "bg-destructive/[0.05]"
+                          : "bg-card/60",
+                      )}
+                      style={{
+                        border: event.flag === "Conflict"
+                          ? "1px solid rgba(243,139,168,0.2)"
+                          : "1px solid rgba(255,255,255,0.04)",
+                        opacity: 0.65,
+                      }}
+                    >
+                      <div
+                        className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0"
+                        style={{ background: event.color, opacity: 0.5 }}
+                      />
+                      <div
+                        className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                        style={{ background: event.color, opacity: 0.5 }}
+                      />
+                      <div className="min-w-[72px] ml-1">
+                        <div className="text-[13px] font-semibold tabular-nums text-foreground">
+                          {event.time}
+                        </div>
+                        <div className="text-[10px] max-sm:text-xs text-muted-foreground/50">
+                          {event.duration}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium truncate text-foreground/90">
+                          {event.title}
+                        </div>
+                        {showSource && event.source && (
+                          <span
+                            className="inline-flex items-center gap-1 mt-0.5 text-[10px] max-sm:text-xs font-medium rounded px-1.5 py-px"
+                            style={{
+                              color: `${event.color}cc`,
+                              background: `${event.color}10`,
+                            }}
+                          >
+                            <span
+                              className="w-1.5 h-1.5 rounded-full shrink-0"
+                              style={{ background: event.color, opacity: 0.7 }}
+                            />
+                            {event.source}
+                          </span>
+                        )}
+                      </div>
+                      {event.flag && (
+                        <div
+                          className={cn(
+                            "text-[9px] max-sm:text-xs font-semibold tracking-wider uppercase py-1 px-2 rounded-md shrink-0",
+                            event.flag === "Conflict"
+                              ? "text-[#f38ba8] bg-[#f38ba8]/[0.08]"
+                              : "text-[#f9e2af] bg-[#f9e2af]/[0.08]",
+                          )}
+                        >
+                          {event.flag}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
@@ -399,7 +588,7 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                 <line x1="8" y1="2" x2="8" y2="6" />
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
-              <div className="text-[11px] max-sm:text-xs text-muted-foreground/50">No events scheduled today</div>
+              <div className="text-[11px] max-sm:text-xs text-muted-foreground/50">No events scheduled today or tomorrow</div>
             </div>
           )}
         </>
