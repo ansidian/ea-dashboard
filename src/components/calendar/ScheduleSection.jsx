@@ -27,22 +27,31 @@ function derivePassedState(events) {
   }));
 }
 
-const NowMarker = forwardRef(function NowMarker({ time, top }, ref) {
+const NowMarker = forwardRef(function NowMarker({ time, top, textZone, dodgeFlag }, ref) {
+  const lineStyle = {};
+  if (textZone) {
+    // Solid background — mask controls all visibility
+    lineStyle.background = "#cba6da";
+    const s = textZone.startPct;
+    const e = textZone.endPct;
+    const mask = `linear-gradient(90deg, black 0%, black ${s}%, rgba(0,0,0,0.1) ${s + 2}%, rgba(0,0,0,0.1) ${e}%, black ${e + 4}%, black 92%, transparent 100%)`;
+    lineStyle.maskImage = mask;
+    lineStyle.WebkitMaskImage = mask;
+  } else {
+    lineStyle.background = "linear-gradient(90deg, #cba6da 0%, transparent 100%)";
+  }
+
   return (
     <div
       ref={ref}
       className="absolute left-0 right-0 flex items-center gap-2 z-10 pointer-events-none"
       style={{ top, transition: "top 1s ease" }}
     >
-      <div
-        className="absolute left-[-14px] w-[9px] h-[9px] rounded-full"
-        style={{
-          background: "#cba6da",
-          boxShadow: "0 0 8px rgba(203,166,218,0.5)",
-        }}
-      />
-      <div className="flex-1 h-px" style={{ background: "linear-gradient(90deg, #cba6da 0%, transparent 100%)" }} />
-      <span className="text-[10px] max-sm:text-xs font-semibold tabular-nums text-[#cba6da] shrink-0 pointer-events-auto">
+      <div className="flex-1 h-px" style={lineStyle} />
+      <span
+        className="text-[10px] max-sm:text-xs font-semibold tabular-nums text-[#cba6da] shrink-0 pointer-events-auto"
+        style={dodgeFlag ? { transform: "translateY(-12px)" } : undefined}
+      >
         {time}
       </span>
     </div>
