@@ -504,7 +504,13 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                 />
 
                 {markerTop != null && (
-                  <NowMarker ref={nowMarkerRef} time={nowTime} top={markerTop} />
+                  <NowMarker
+                    ref={nowMarkerRef}
+                    time={nowTime}
+                    top={markerTop}
+                    textZone={textZone}
+                    dodgeFlag={inProgressIdx >= 0 && liveCalendar[inProgressIdx]?.flag}
+                  />
                 )}
 
                 <div ref={listRef} className="flex flex-col gap-1">
@@ -520,17 +526,30 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                           event.passed ? "opacity-40" : "hover:bg-card/80",
                         )}
                         style={{
-                          border: event.flag === "Conflict"
-                            ? "1px solid rgba(243,139,168,0.2)"
-                            : "1px solid rgba(255,255,255,0.04)",
+                          border: i === inProgressIdx
+                            ? "1px solid rgba(203,166,218,0.15)"
+                            : event.flag === "Conflict"
+                              ? "1px solid rgba(243,139,168,0.2)"
+                              : "1px solid rgba(255,255,255,0.04)",
+                          ...(i === inProgressIdx && {
+                            boxShadow: "0 0 12px rgba(203,166,218,0.06), inset 0 0 0 1px rgba(203,166,218,0.05)",
+                          }),
                         }}
                       >
                         {/* Timeline dot — on the spine */}
                         <div
                           className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0 transition-all duration-200"
                           style={{
-                            background: event.passed ? "rgba(255,255,255,0.1)" : event.color,
-                            boxShadow: event.passed ? "none" : `0 0 6px ${event.color}50`,
+                            background: event.passed
+                              ? "rgba(255,255,255,0.1)"
+                              : i === inProgressIdx
+                                ? "#cba6da"
+                                : event.color,
+                            boxShadow: event.passed
+                              ? "none"
+                              : i === inProgressIdx
+                                ? "0 0 8px rgba(203,166,218,0.5)"
+                                : `0 0 6px ${event.color}50`,
                           }}
                         />
 
