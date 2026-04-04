@@ -3,7 +3,7 @@ import { getLiveData } from "../api";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
-export default function useLiveData() {
+export default function useLiveData({ disabled = false } = {}) {
   const [liveEmails, setLiveEmails] = useState([]);
   const [liveCalendar, setLiveCalendar] = useState(null);
   const [liveNextWeekCalendar, setLiveNextWeekCalendar] = useState(null);
@@ -61,6 +61,7 @@ export default function useLiveData() {
 
   useEffect(() => {
     mountedRef.current = true;
+    if (disabled) return;
     fetchLive();
     startInterval();
 

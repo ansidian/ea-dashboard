@@ -53,7 +53,8 @@ export default function Dashboard() {
   const suspendHoldTimerRef = useRef(null);
   const suspendHoldProgressRef = useRef(null);
 
-  const liveData = useLiveData();
+  const isMock = new URLSearchParams(window.location.search).has("mock");
+  const liveData = useLiveData({ disabled: isMock });
   useNotifications(liveData);
 
   // --- Data fetching ---
@@ -95,7 +96,6 @@ export default function Dashboard() {
         setLatestBriefing(transformed);
         setLatestId(res.id);
 
-        const isMock = new URLSearchParams(window.location.search).has("mock");
         if (isMock) return;
         sessionStorage.removeItem("ea_settings_changed");
         setRefreshing(true);
@@ -114,7 +114,7 @@ export default function Dashboard() {
         setLoading(false);
         setTimeout(() => setLoaded(true), 100);
       });
-  }, []);
+  }, [isMock]);
 
   // Reconcile briefing read status from live Gmail data
   useEffect(() => {
