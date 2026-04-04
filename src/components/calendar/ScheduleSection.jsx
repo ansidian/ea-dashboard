@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, forwardRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 
@@ -27,18 +27,22 @@ function derivePassedState(events) {
   }));
 }
 
-const NowMarker = forwardRef(function NowMarker({ time }, ref) {
+const NowMarker = forwardRef(function NowMarker({ time, top }, ref) {
   return (
-    <div ref={ref} className="relative flex items-center gap-2 py-2 my-1">
+    <div
+      ref={ref}
+      className="absolute left-0 right-0 flex items-center gap-2 z-10 pointer-events-none"
+      style={{ top, transition: "top 1s ease" }}
+    >
       <div
-        className="absolute left-[-19px] w-[9px] h-[9px] rounded-full"
+        className="absolute left-[-14px] w-[9px] h-[9px] rounded-full"
         style={{
           background: "#cba6da",
           boxShadow: "0 0 8px rgba(203,166,218,0.5)",
         }}
       />
       <div className="flex-1 h-px" style={{ background: "linear-gradient(90deg, #cba6da 0%, transparent 100%)" }} />
-      <span className="text-[10px] max-sm:text-xs font-semibold tabular-nums text-[#cba6da] shrink-0">
+      <span className="text-[10px] max-sm:text-xs font-semibold tabular-nums text-[#cba6da] shrink-0 pointer-events-auto">
         {time}
       </span>
     </div>
@@ -308,13 +312,14 @@ function NextWeekView({ events, showSource, scrollRef }) {
 }
 
 export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCalendar, loaded, delay, style, className }) {
-  // eslint-disable-next-line no-unused-vars
   const { time: nowTime, tick, nowMs } = useNowTick();
   const [view, setView] = useState("today");
   const nextWeekScrollRef = useRef(0);
   const nowMarkerRef = useRef(null);
   const timelineRef = useRef(null);
   const lastUserScrollRef = useRef(0);
+  const cardRefsRef = useRef([]);
+  const listRef = useRef(null);
 
   // Derive passed state client-side so the now marker moves live
   const liveCalendar = useMemo(() => derivePassedState(calendar), [calendar, tick]);
@@ -328,12 +333,56 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
   ]);
   const showSource = sources.size > 1;
 
-  // Where to insert the now marker (today view only)
-  const firstUpcoming = liveCalendar?.findIndex(e => !e.passed && !e.allDay) ?? -1;
-  const nowPosition = liveCalendar?.length > 0
-    ? (firstUpcoming >= 0 ? firstUpcoming : liveCalendar.length)
-    : -1;
-  const prevNowPositionRef = useRef(nowPosition);
+  // Compute pixel position for the now marker from card DOM measurements.
+  // useLayoutEffect is correct here — we read layout then sync state before paint.
+  const [markerTop, setMarkerTop] = useState(null);
+  const prevMarkerTopRef = useRef(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useLayoutEffect(() => {
+    if (view !== "today" || !liveCalendar?.length) {
+      setMarkerTop(null);
+      return;
+    }
+    const cards = cardRefsRef.current;
+
+    // Find in-progress event (started but not ended)
+    const inProgressIdx = liveCalendar.findIndex(
+      e => !e.allDay && e.startMs <= nowMs && e.endMs && e.endMs > nowMs
+    );
+
+    if (inProgressIdx >= 0 && cards[inProgressIdx]) {
+      const card = cards[inProgressIdx];
+      const progress = (nowMs - liveCalendar[inProgressIdx].startMs)
+        / (liveCalendar[inProgressIdx].endMs - liveCalendar[inProgressIdx].startMs);
+      setMarkerTop(card.offsetTop + progress * card.offsetHeight);
+      return;
+    }
+
+    // Find first future event by start time
+    const firstFutureIdx = liveCalendar.findIndex(e => !e.allDay && e.startMs > nowMs);
+
+    if (firstFutureIdx === 0) {
+      setMarkerTop(0);
+      return;
+    }
+
+    if (firstFutureIdx > 0 && cards[firstFutureIdx - 1]) {
+      const prev = cards[firstFutureIdx - 1];
+      setMarkerTop(prev.offsetTop + prev.offsetHeight);
+      return;
+    }
+
+    // After all events
+    const lastIdx = liveCalendar.length - 1;
+    if (cards[lastIdx]) {
+      setMarkerTop(cards[lastIdx].offsetTop + cards[lastIdx].offsetHeight);
+      return;
+    }
+
+    setMarkerTop(null);
+  }, [liveCalendar, nowMs, view]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Smooth scroll to now marker on mount and briefing refresh
   useEffect(() => {
@@ -344,17 +393,19 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
     return () => clearTimeout(timer);
   }, [calendar, view]);
 
-  // Auto-scroll when now marker advances past an event (with user scroll guard)
+  // Auto-scroll when marker jumps significantly (crossed an event boundary)
   useEffect(() => {
-    if (view !== "today") return;
-    if (prevNowPositionRef.current === nowPosition) return;
-    prevNowPositionRef.current = nowPosition;
+    if (view !== "today" || markerTop == null) return;
+    const prev = prevMarkerTopRef.current;
+    prevMarkerTopRef.current = markerTop;
+    // Only scroll on large jumps (crossed a card), not smooth per-tick movement
+    if (prev != null && Math.abs(markerTop - prev) < 20) return;
 
     // Skip if user scrolled within last 10 seconds
     if (Date.now() - lastUserScrollRef.current < 10_000) return;
 
     nowMarkerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [nowPosition, view]);
+  }, [markerTop, view]);
 
   const titleContent = (
     <div className="flex items-center gap-3">
@@ -410,12 +461,13 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                   style={{ background: "rgba(255,255,255,0.06)" }}
                 />
 
-                <div className="flex flex-col gap-1">
-                  {/* Now marker at the top (no events passed yet) */}
-                  {nowPosition === 0 && <NowMarker ref={nowMarkerRef} time={nowTime} />}
+                {markerTop != null && (
+                  <NowMarker ref={nowMarkerRef} time={nowTime} top={markerTop} />
+                )}
 
+                <div ref={listRef} className="flex flex-col gap-1">
                   {liveCalendar.map((event, i) => (
-                    <div key={i}>
+                    <div key={i} ref={el => { cardRefsRef.current[i] = el; }}>
                       {/* Event card */}
                       <div
                         className={cn(
@@ -507,13 +559,8 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                         )}
                       </div>
 
-                      {/* Now marker — between passed and upcoming */}
-                      {nowPosition > 0 && nowPosition < liveCalendar.length && i === nowPosition - 1 && <NowMarker ref={nowMarkerRef} time={nowTime} />}
                     </div>
                   ))}
-
-                  {/* Now marker at the bottom (all events passed) */}
-                  {nowPosition === liveCalendar.length && <NowMarker ref={nowMarkerRef} time={nowTime} />}
 
                   {/* Tomorrow's events on the continuous timeline */}
                   {hasTomorrow && (
