@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { getDevScenarios, getLatestBriefing } from "../../api";
-import { transformBriefing } from "../../transform";
+import { getDevScenarios } from "../../api";
 
-export default function DevPanel({ onApply }) {
+const isMockActive = new URLSearchParams(window.location.search).has("mock");
+
+export default function DevPanel() {
   const [collapsed, setCollapsed] = useState(false);
   const [scenarios, setScenarios] = useState([]);
-  const [selected, setSelected] = useState(new Set());
-  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(() => {
+    const param = new URLSearchParams(window.location.search).get("scenario");
+    return param ? new Set(param.split(",").filter(Boolean)) : new Set();
+  });
 
   useEffect(() => {
     const handler = (e) => {
@@ -23,18 +26,23 @@ export default function DevPanel({ onApply }) {
     getDevScenarios().then(setScenarios).catch(() => {});
   }, []);
 
-  const handleLoad = useCallback(async () => {
-    setLoading(true);
-    try {
-      const scenarioParam = [...selected].join(",");
-      const res = await getLatestBriefing(scenarioParam || undefined);
-      const transformed = transformBriefing(res.briefing);
-      onApply(transformed, res.id);
-    } catch (err) {
-      console.error("[DevPanel] Load failed:", err.message);
+  const handleLoad = useCallback(() => {
+    const url = new URL(window.location);
+    url.searchParams.set("mock", "1");
+    if (selected.size > 0) {
+      url.searchParams.set("scenario", [...selected].join(","));
+    } else {
+      url.searchParams.delete("scenario");
     }
-    setLoading(false);
-  }, [selected, onApply]);
+    window.location.href = url.toString();
+  }, [selected]);
+
+  const handleExitMock = useCallback(() => {
+    const url = new URL(window.location);
+    url.searchParams.delete("mock");
+    url.searchParams.delete("scenario");
+    window.location.href = url.toString();
+  }, []);
 
   const toggle = (key) => {
     setSelected(prev => {
@@ -105,17 +113,29 @@ export default function DevPanel({ onApply }) {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      {isMockActive && (
+        <button
+          onClick={handleExitMock}
+          style={{
+            width: "100%", padding: "8px 0", borderRadius: 8, border: "1px solid rgba(243,139,168,0.25)",
+            background: "rgba(243,139,168,0.08)", color: "#f38ba8", fontSize: 11, fontWeight: 600,
+            cursor: "pointer", fontFamily: "inherit", marginTop: 12,
+          }}
+        >
+          Exit mock mode
+        </button>
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
         <button
           onClick={handleLoad}
-          disabled={loading}
           style={{
             flex: 1, padding: "8px 0", borderRadius: 8, border: "1px solid rgba(203,166,218,0.25)",
             background: "rgba(203,166,218,0.08)", color: "#cba6da", fontSize: 11, fontWeight: 600,
-            cursor: loading ? "wait" : "pointer", fontFamily: "inherit",
+            cursor: "pointer", fontFamily: "inherit",
           }}
         >
-          {loading ? "Loading…" : selected.size ? `Load ${selected.size} scenario${selected.size > 1 ? "s" : ""}` : "Load base mock"}
+          {selected.size ? `Load ${selected.size} scenario${selected.size > 1 ? "s" : ""}` : "Load base mock"}
         </button>
         {selected.size > 0 && (
           <button

@@ -411,12 +411,7 @@ export default function Dashboard() {
       />
       {DevPanel && (
         <Suspense fallback={null}>
-          <DevPanel onApply={(transformed, id) => {
-            setBriefing(transformed);
-            setLatestBriefing(transformed);
-            setLatestId(id);
-            setLoaded(true);
-          }} />
+          <DevPanel />
         </Suspense>
       )}
     </DashboardProvider>
