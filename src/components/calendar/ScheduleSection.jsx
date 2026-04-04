@@ -337,25 +337,50 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
   // useLayoutEffect is correct here — we read layout then sync state before paint.
   const [markerTop, setMarkerTop] = useState(null);
   const prevMarkerTopRef = useRef(null);
+  const [inProgressIdx, setInProgressIdx] = useState(-1);
+  const [textZone, setTextZone] = useState(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useLayoutEffect(() => {
     if (view !== "today" || !liveCalendar?.length) {
       setMarkerTop(null);
+      setInProgressIdx(-1);
+      setTextZone(null);
       return;
     }
     const cards = cardRefsRef.current;
 
     // Find in-progress event (started but not ended)
-    const inProgressIdx = liveCalendar.findIndex(
+    const ipIdx = liveCalendar.findIndex(
       e => !e.allDay && e.startMs <= nowMs && e.endMs && e.endMs > nowMs
     );
 
-    if (inProgressIdx >= 0 && cards[inProgressIdx]) {
-      const card = cards[inProgressIdx];
-      const progress = (nowMs - liveCalendar[inProgressIdx].startMs)
-        / (liveCalendar[inProgressIdx].endMs - liveCalendar[inProgressIdx].startMs);
+    if (ipIdx >= 0 && cards[ipIdx]) {
+      const card = cards[ipIdx];
+      const progress = (nowMs - liveCalendar[ipIdx].startMs)
+        / (liveCalendar[ipIdx].endMs - liveCalendar[ipIdx].startMs);
       setMarkerTop(card.offsetTop + progress * card.offsetHeight);
+      setInProgressIdx(ipIdx);
+
+      // Measure text zone from the inner card div's flex children
+      const innerCard = card.firstElementChild;
+      if (innerCard) {
+        const children = Array.from(innerCard.children).filter(
+          el => getComputedStyle(el).position !== "absolute"
+        );
+        if (children.length) {
+          const first = children[0];
+          const last = children[children.length - 1];
+          const startPx = first.offsetLeft;
+          const endPx = last.offsetLeft + last.offsetWidth;
+          const cardWidth = innerCard.offsetWidth;
+          setTextZone({ startPct: startPx / cardWidth * 100, endPct: endPx / cardWidth * 100 });
+        } else {
+          setTextZone(null);
+        }
+      } else {
+        setTextZone(null);
+      }
       return;
     }
 
@@ -364,12 +389,16 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
 
     if (firstFutureIdx === 0) {
       setMarkerTop(0);
+      setInProgressIdx(-1);
+      setTextZone(null);
       return;
     }
 
     if (firstFutureIdx > 0 && cards[firstFutureIdx - 1]) {
       const prev = cards[firstFutureIdx - 1];
       setMarkerTop(prev.offsetTop + prev.offsetHeight);
+      setInProgressIdx(-1);
+      setTextZone(null);
       return;
     }
 
@@ -377,10 +406,14 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
     const lastIdx = liveCalendar.length - 1;
     if (cards[lastIdx]) {
       setMarkerTop(cards[lastIdx].offsetTop + cards[lastIdx].offsetHeight);
+      setInProgressIdx(-1);
+      setTextZone(null);
       return;
     }
 
     setMarkerTop(null);
+    setInProgressIdx(-1);
+    setTextZone(null);
   }, [liveCalendar, nowMs, view]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
