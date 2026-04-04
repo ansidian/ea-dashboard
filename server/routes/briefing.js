@@ -170,7 +170,8 @@ router.get("/history", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const result = await db.execute({
-      sql: `SELECT id, status, generated_at, generation_time_ms, error_message
+      sql: `SELECT id, status, generated_at, generation_time_ms, error_message,
+            json_extract(briefing_json, '$.skippedAI') as skipped_ai
             FROM ea_briefings WHERE user_id = ?
             ORDER BY generated_at DESC LIMIT 20`,
       args: [userId],

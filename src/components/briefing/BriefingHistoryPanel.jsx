@@ -299,7 +299,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                           borderRadius: 8,
                         }}
                       >
-                        {genTime}
+                        {genTime}{item.skipped_ai ? " · no AI" : ""}
                       </span>
                     )}
                     {!isActive && !isLoading && (
