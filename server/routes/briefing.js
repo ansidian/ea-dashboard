@@ -7,6 +7,7 @@ import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, tras
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
 import { completeTodoistTask } from "../briefing/todoist.js";
+import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
 import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
 import { applyScenarios, listScenarios } from "../db/scenarios/index.js";
@@ -276,61 +277,62 @@ router.post("/dismiss/:emailId", async (req, res) => {
   }
 });
 
-// --- Complete Todoist task ---
+// --- Complete task (Todoist, Canvas/CTM, or manual CTM) ---
 router.post("/complete-task/:taskId", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const { taskId } = req.params;
   try {
-    await completeTodoistTask(userId, taskId);
-
-    // Persist so CTM items stay hidden across refreshes
-    await db.execute({
-      sql: "INSERT OR IGNORE INTO ea_completed_tasks (user_id, todoist_id) VALUES (?, ?)",
-      args: [userId, taskId],
-    });
-
-    // Remove from latest briefing
+    // Load latest briefing to identify the task
     const latest = await db.execute({
       sql: `SELECT id, briefing_json FROM ea_briefings
             WHERE user_id = ? AND status = 'ready'
             ORDER BY generated_at DESC LIMIT 1`,
       args: [userId],
     });
-    if (latest.rows.length) {
-      const briefing = JSON.parse(latest.rows[0].briefing_json);
+    const briefing = latest.rows.length ? JSON.parse(latest.rows[0].briefing_json) : null;
+
+    // Find the task in CTM or Todoist lists
+    const ctmTask = briefing?.ctm?.upcoming?.find(t => String(t.id) === taskId || t.todoist_id === taskId);
+    const todoistTask = briefing?.todoist?.upcoming?.find(t => t.id === taskId);
+
+    // Sync completions to external services
+    const todoistId = ctmTask?.todoist_id || (todoistTask ? taskId : null);
+    if (todoistId) {
+      await completeTodoistTask(userId, todoistId).catch(err =>
+        console.error("[Briefing] Todoist completion failed:", err.message)
+      );
+      await db.execute({
+        sql: "INSERT OR IGNORE INTO ea_completed_tasks (user_id, todoist_id) VALUES (?, ?)",
+        args: [userId, todoistId],
+      });
+    }
+    if (ctmTask) {
+      await updateCTMEventStatus(ctmTask.id, "complete").catch(err =>
+        console.error("[Briefing] CTM status update failed:", err.message)
+      );
+    }
+
+    // Remove from stored briefing
+    if (briefing) {
       const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
       const today = fmt.format(new Date());
       const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
       let changed = false;
 
-      // Remove from CTM (matched by todoist_id on synced items)
-      if (briefing.ctm?.upcoming) {
-        const before = briefing.ctm.upcoming.length;
-        briefing.ctm.upcoming = briefing.ctm.upcoming.filter(t => t.id !== taskId && t.todoist_id !== taskId);
-        if (briefing.ctm.upcoming.length !== before) {
+      for (const section of ["ctm", "todoist"]) {
+        if (!briefing[section]?.upcoming) continue;
+        const before = briefing[section].upcoming.length;
+        briefing[section].upcoming = briefing[section].upcoming.filter(
+          t => String(t.id) !== taskId && t.todoist_id !== taskId
+        );
+        if (briefing[section].upcoming.length !== before) {
           let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
-          for (const d of briefing.ctm.upcoming) {
+          for (const d of briefing[section].upcoming) {
             if (d.due_date === today) dueToday++;
             if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
             if (d.points_possible) totalPoints += d.points_possible;
           }
-          briefing.ctm.stats = { incomplete: briefing.ctm.upcoming.length, dueToday, dueThisWeek, totalPoints };
-          changed = true;
-        }
-      }
-
-      // Remove from Todoist
-      if (briefing.todoist?.upcoming) {
-        const before = briefing.todoist.upcoming.length;
-        briefing.todoist.upcoming = briefing.todoist.upcoming.filter(t => t.id !== taskId);
-        if (briefing.todoist.upcoming.length !== before) {
-          let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
-          for (const d of briefing.todoist.upcoming) {
-            if (d.due_date === today) dueToday++;
-            if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
-            if (d.points_possible) totalPoints += d.points_possible;
-          }
-          briefing.todoist.stats = { incomplete: briefing.todoist.upcoming.length, dueToday, dueThisWeek, totalPoints };
+          briefing[section].stats = { incomplete: briefing[section].upcoming.length, dueToday, dueThisWeek, totalPoints };
           changed = true;
         }
       }
@@ -344,8 +346,88 @@ router.post("/complete-task/:taskId", async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) {
-    console.error("Error completing Todoist task:", err);
+    console.error("Error completing task:", err);
     res.status(500).json({ message: err.message || "Failed to complete task" });
+  }
+});
+
+// --- Update CTM task status ---
+router.patch("/task-status/:taskId", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { taskId } = req.params;
+  const { status } = req.body;
+
+  if (!["incomplete", "in_progress", "complete"].includes(status)) {
+    return res.status(400).json({ message: "Invalid status" });
+  }
+
+  try {
+    // Update CTM
+    await updateCTMEventStatus(Number(taskId), status);
+
+    // If completing, also close in Todoist if linked
+    if (status === "complete") {
+      const latest = await db.execute({
+        sql: `SELECT id, briefing_json FROM ea_briefings
+              WHERE user_id = ? AND status = 'ready'
+              ORDER BY generated_at DESC LIMIT 1`,
+        args: [userId],
+      });
+      if (latest.rows.length) {
+        const briefing = JSON.parse(latest.rows[0].briefing_json);
+        const ctmTask = briefing.ctm?.upcoming?.find(t => String(t.id) === taskId);
+        if (ctmTask?.todoist_id) {
+          await completeTodoistTask(userId, ctmTask.todoist_id).catch(err =>
+            console.error("[Briefing] Todoist completion failed:", err.message)
+          );
+          await db.execute({
+            sql: "INSERT OR IGNORE INTO ea_completed_tasks (user_id, todoist_id) VALUES (?, ?)",
+            args: [userId, ctmTask.todoist_id],
+          });
+        }
+
+        // Remove completed task from briefing
+        const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
+        const today = fmt.format(new Date());
+        const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
+        briefing.ctm.upcoming = briefing.ctm.upcoming.filter(t => String(t.id) !== taskId);
+        let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
+        for (const d of briefing.ctm.upcoming) {
+          if (d.due_date === today) dueToday++;
+          if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+          if (d.points_possible) totalPoints += d.points_possible;
+        }
+        briefing.ctm.stats = { incomplete: briefing.ctm.upcoming.length, dueToday, dueThisWeek, totalPoints };
+        await db.execute({
+          sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+          args: [JSON.stringify(briefing), latest.rows[0].id],
+        });
+      }
+    } else {
+      // Status change (not complete) — update in-place in briefing
+      const latest = await db.execute({
+        sql: `SELECT id, briefing_json FROM ea_briefings
+              WHERE user_id = ? AND status = 'ready'
+              ORDER BY generated_at DESC LIMIT 1`,
+        args: [userId],
+      });
+      if (latest.rows.length) {
+        const briefing = JSON.parse(latest.rows[0].briefing_json);
+        const task = briefing.ctm?.upcoming?.find(t => String(t.id) === taskId);
+        if (task) {
+          task.status = status;
+          await db.execute({
+            sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+            args: [JSON.stringify(briefing), latest.rows[0].id],
+          });
+        }
+      }
+    }
+
+    res.json({ ok: true, status });
+  } catch (err) {
+    console.error("Error updating task status:", err);
+    res.status(500).json({ message: err.message || "Failed to update task status" });
   }
 });
 

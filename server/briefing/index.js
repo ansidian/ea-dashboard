@@ -4,7 +4,7 @@ import { fetchEmails as fetchGmailEmails } from "./gmail.js";
 import { fetchEmails as fetchIcloudEmails } from "./icloud.js";
 import { fetchCalendar, getNextWeekRange } from "./calendar.js";
 import { fetchWeather } from "./weather.js";
-import { fetchCTMDeadlines } from "./ctm-events.js";
+import { fetchCTMDeadlines } from "./ctm.js";
 import { fetchTodoistTasks } from "./todoist.js";
 import { callClaude } from "./claude.js";
 import { getCategories, getUpcomingBills } from "./actual.js";
