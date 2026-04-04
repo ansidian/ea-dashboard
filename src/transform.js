@@ -32,6 +32,7 @@ export function transformBriefing(raw) {
     aiInsights,
     calendar: b.calendar || [],
     nextWeekCalendar: b.nextWeekCalendar || [],
+    tomorrowCalendar: b.tomorrowCalendar || [],
     ctm: {
       upcoming: ctmDeadlines,
       stats: ctmStats,

@@ -555,6 +555,7 @@ function DashboardMain({
 
         <ScheduleSection
           calendar={liveData.liveCalendar || d.calendar}
+          tomorrowCalendar={liveData.liveTomorrowCalendar || d.tomorrowCalendar}
           nextWeekCalendar={liveData.liveNextWeekCalendar || d.nextWeekCalendar}
           loaded={loaded}
           delay={250}

@@ -7,6 +7,7 @@ export default function useLiveData() {
   const [liveEmails, setLiveEmails] = useState([]);
   const [liveCalendar, setLiveCalendar] = useState(null);
   const [liveNextWeekCalendar, setLiveNextWeekCalendar] = useState(null);
+  const [liveTomorrowCalendar, setLiveTomorrowCalendar] = useState(null);
   const [liveWeather, setLiveWeather] = useState(null);
   const [liveBills, setLiveBills] = useState([]);
   const [importantSenders, setImportantSenders] = useState([]);
@@ -28,6 +29,7 @@ export default function useLiveData() {
       setLiveEmails(data.emails || []);
       setLiveCalendar(data.calendar || null);
       setLiveNextWeekCalendar(data.nextWeekCalendar || null);
+      setLiveTomorrowCalendar(data.tomorrowCalendar || null);
       setLiveWeather(data.weather || null);
       setLiveBills(data.bills || []);
       setImportantSenders(data.importantSenders || []);
@@ -81,6 +83,7 @@ export default function useLiveData() {
     liveEmails,
     liveCalendar,
     liveNextWeekCalendar,
+    liveTomorrowCalendar,
     liveWeather,
     liveBills,
     importantSenders,
