@@ -9,6 +9,7 @@ import noisePreview from "./noise-preview.js";
 import bills from "./bills.js";
 import billMatch from "./bill-match.js";
 import nextWeek from "./next-week.js";
+import tomorrowEvents from "./tomorrow-events.js";
 
 const scenarios = {
   "urgent-flags": urgentFlags,
@@ -16,6 +17,7 @@ const scenarios = {
   "bills": bills,
   "bill-match": billMatch,
   "next-week": nextWeek,
+  "tomorrow-events": tomorrowEvents,
 };
 
 // Returns list of available scenario names + descriptions
