@@ -269,7 +269,7 @@ export default function DashboardHeader({
                   ? `Data updated ${timeAgo(d.dataUpdatedAt)}`
                   : d.generatedAt}
                 {d.aiGeneratedAt &&
-                  ` · AI analysis from ${formatShortTime(d.aiGeneratedAt)}`}
+                  ` · AI analysis from ${formatShortTime(d.aiGeneratedAt)}${d.skippedAI ? " · no new activity" : ""}`}
               </p>
             </div>
             <div
