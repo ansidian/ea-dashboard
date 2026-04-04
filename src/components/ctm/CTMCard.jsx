@@ -1,8 +1,14 @@
 import { useState } from "react";
+import { motion } from "motion/react";
 import { todayPacific, toPacificDate, formatFullDate } from "../../lib/dashboard-helpers";
 import Tooltip from "../shared/Tooltip";
 import { MotionExpand, MotionChevron } from "../ui/motion-wrappers";
 import "./CTMCard.css";
+
+const CTM_STATUSES = ["incomplete", "in_progress", "complete"];
+const TODOIST_STATUSES = ["incomplete", "complete"];
+const SPINE_COLORS = { incomplete: "#5A8FBF", in_progress: "#8C6BC0", complete: "#4B9968" };
+const dotSpring = { type: "spring", stiffness: 500, damping: 15 };
 
 function getDaysUntil(dateStr) {
   const todayStr = todayPacific();
@@ -23,30 +29,113 @@ function getDueUrgency(dateStr) {
   return "low";
 }
 
-export default function CTMCard({ task, expanded, onToggle, onComplete }) {
-  const [completing, setCompleting] = useState(false);
+function StatusSpine({ status, statuses, expanded, onStatusChange }) {
+  const idx = Math.max(0, statuses.indexOf(status));
+  const count = statuses.length;
+
+  const dotSize = expanded ? 10 : 6;
+  const lineHeight = expanded ? 10 : 5;
+  const lineWidth = expanded ? 2.5 : 1.5;
+
+  function lineGradient(lineIdx) {
+    const fromColor = SPINE_COLORS[statuses[lineIdx]];
+    const toColor = SPINE_COLORS[statuses[lineIdx + 1]];
+    if (lineIdx + 1 <= idx) return `linear-gradient(to bottom, ${fromColor}, ${toColor})`;
+    if (lineIdx === idx) return `linear-gradient(to bottom, ${SPINE_COLORS[statuses[idx]]}, rgba(166,173,200,0.15))`;
+    return "rgba(166,173,200,0.12)";
+  }
+
+  return (
+    <div className="ctm-spine-v" onClick={e => e.stopPropagation()}>
+      {statuses.map((s, i) => {
+        const color = SPINE_COLORS[s];
+        const isActive = i <= idx;
+        return (
+          <div key={s} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            {i > 0 && (
+              <motion.div
+                animate={{ height: lineHeight, width: lineWidth }}
+                transition={{ ...dotSpring, delay: expanded ? i * 0.06 : (count - 1 - i) * 0.04 }}
+                style={{ background: lineGradient(i - 1), borderRadius: 1 }}
+              />
+            )}
+            <div
+              className={`ctm-spine-v-dot-wrap${expanded ? " active" : ""}`}
+              data-target={s}
+              onClick={expanded ? () => onStatusChange(s) : undefined}
+            >
+              <motion.div
+                className={`ctm-spine-v-dot ${isActive ? "filled" : "hollow"}`}
+                initial={false}
+                animate={{
+                  width: dotSize,
+                  height: dotSize,
+                  borderWidth: expanded ? 2 : 1.5,
+                }}
+                transition={{ ...dotSpring, delay: expanded ? i * 0.06 : (count - 1 - i) * 0.04 }}
+                style={isActive ? {
+                  background: color,
+                  borderColor: color,
+                  borderStyle: "solid",
+                  borderRadius: "50%",
+                } : {
+                  background: "transparent",
+                  borderColor: "rgba(166,173,200,0.25)",
+                  borderStyle: "solid",
+                  borderRadius: "50%",
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const ExternalLinkIcon = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+  </svg>
+);
+
+export default function CTMCard({ task, expanded, onToggle, onComplete, onStatusChange }) {
   const daysLabel = getDaysUntil(task.due_date);
   const urg = getDueUrgency(task.due_date);
   const isTodoist = task.source === "todoist";
   const isCanvas = task.source === "canvas";
-  const canComplete = isTodoist || !!task.todoist_id;
+  const isCTMSource = isCanvas || task.source === "manual";
+  const isCompleting = !!task._completing;
   const urgColor = { high: "#f38ba8", medium: "#f9e2af", low: "#a6adc8" }[urg];
+  const statuses = isTodoist ? TODOIST_STATUSES : CTM_STATUSES;
+  function handleSpineChange(newStatus) {
+    if (newStatus === task.status) return;
+    if (newStatus === "complete") {
+      if (isTodoist) {
+        onComplete(task.id);
+      } else {
+        onStatusChange(task.id, "complete");
+      }
+      return;
+    }
+    onStatusChange(task.id, newStatus);
+  }
 
   return (
     <div
       onClick={onToggle}
       role="button"
       tabIndex={0}
-      className="group relative rounded-lg p-4 px-5 pl-5 cursor-pointer transition-all duration-150"
+      className={`group relative rounded-lg p-3 px-4 pl-5 cursor-pointer transition-all duration-150${isCompleting ? " ctm-card-completing" : ""}`}
       style={{
-        background: "rgba(36,36,58,0.5)",
-        border: "1px solid rgba(255,255,255,0.04)",
+        background: isCompleting ? "rgba(75,153,104,0.08)" : "rgba(36,36,58,0.5)",
+        border: `1px solid ${isCompleting ? "rgba(75,153,104,0.25)" : "rgba(255,255,255,0.04)"}`,
       }}
     >
       {/* Hover bg */}
       <div className="absolute inset-0 rounded-lg bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-150" />
 
-      {/* Color accent bar — full height */}
+      {/* Color accent bar */}
       <div
         className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
         style={{
@@ -56,7 +145,7 @@ export default function CTMCard({ task, expanded, onToggle, onComplete }) {
         }}
       />
 
-      <div className="relative flex items-start gap-3">
+      <div className="relative flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-medium" style={{ color: task.class_color }}>{task.class_name}</span>
@@ -72,53 +161,67 @@ export default function CTMCard({ task, expanded, onToggle, onComplete }) {
           </div>
           <div className="text-[13px] font-medium text-foreground/90 mt-0.5">{task.title}</div>
           <MotionExpand isOpen={expanded}>
-            <div className="mt-3 pt-3 border-t border-white/[0.04]">
+            <div className="mt-2 pt-2 border-t border-white/[0.04]">
               {task.description && <div className="ctm-desc" dangerouslySetInnerHTML={{ __html: task.description }} />}
-              <div className="flex gap-2 mt-3">
-                {task.url && (
-                  <a
-                    href={task.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={e => e.stopPropagation()}
-                    className="text-[11px] inline-flex items-center gap-1.5 no-underline py-1.5 px-3 rounded-md font-medium transition-all duration-200 hover:-translate-y-px"
-                    style={{
-                      color: `${task.class_color}cc`,
-                      background: `${task.class_color}0d`,
-                      border: `1px solid ${task.class_color}20`,
-                    }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                    </svg>
-                    Open in {task.source === "todoist" ? "Todoist" : "Canvas"}
-                  </a>
-                )}
-                {canComplete && onComplete && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      setCompleting(true);
-                      onComplete(task.todoist_id || task.id);
-                    }}
-                    disabled={completing}
-                    className="text-[11px] inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md font-medium transition-all duration-200 hover:-translate-y-px border-0 cursor-pointer"
-                    style={{
-                      color: completing ? "#a6adc8" : "#a6e3a1cc",
-                      background: completing ? "rgba(166,173,200,0.06)" : "rgba(166,227,161,0.08)",
-                      border: `1px solid ${completing ? "rgba(166,173,200,0.12)" : "rgba(166,227,161,0.16)"}`,
-                    }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    {completing ? "Completing..." : "Mark complete"}
-                  </button>
-                )}
-              </div>
             </div>
           </MotionExpand>
         </div>
+
+        {/* Inline action buttons */}
+        <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+          {isCanvas && task.url && (
+            <Tooltip text="Open in Canvas">
+              <a
+                href={task.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ctm-icon-btn"
+                style={{
+                  color: `${task.class_color}aa`,
+                  background: `${task.class_color}08`,
+                  border: `1px solid ${task.class_color}15`,
+                }}
+              >
+                <ExternalLinkIcon />
+              </a>
+            </Tooltip>
+          )}
+          {isCTMSource && (
+            <Tooltip text="Open in CTM">
+              <a
+                href={`https://ctm.andysu.tech/#/event/${task.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ctm-icon-btn"
+                style={{
+                  color: "#6366f1aa",
+                  background: "rgba(99,102,241,0.05)",
+                  border: "1px solid rgba(99,102,241,0.1)",
+                }}
+              >
+                <ExternalLinkIcon />
+              </a>
+            </Tooltip>
+          )}
+          {isTodoist && task.url && (
+            <Tooltip text="Open in Todoist">
+              <a
+                href={task.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ctm-icon-btn"
+                style={{
+                  color: "#cba6daaa",
+                  background: "rgba(203,166,218,0.05)",
+                  border: "1px solid rgba(203,166,218,0.1)",
+                }}
+              >
+                <ExternalLinkIcon />
+              </a>
+            </Tooltip>
+          )}
+        </div>
+
         <div className="flex items-start gap-2 shrink-0">
           <div className="text-right">
             <Tooltip text={formatFullDate(task.due_date)}>
@@ -140,7 +243,13 @@ export default function CTMCard({ task, expanded, onToggle, onComplete }) {
               </div>
             )}
           </div>
-          <MotionChevron isOpen={expanded} className="text-muted-foreground/40 mt-1" />
+          <StatusSpine
+            status={task.status}
+            statuses={statuses}
+            expanded={expanded}
+            onStatusChange={handleSpineChange}
+          />
+          <MotionChevron isOpen={expanded} className="text-muted-foreground/40 mt-0.5" />
         </div>
       </div>
     </div>

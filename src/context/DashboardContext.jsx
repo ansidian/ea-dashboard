@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useMemo } from "react";
-import { dismissEmail, completeTask } from "../api";
+import { dismissEmail, completeTask, updateTaskStatus } from "../api";
 
 const DashboardContext = createContext(null);
 
@@ -35,41 +35,75 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
     });
   }, [selectedEmail, setBriefing]);
 
-  const handleCompleteTask = useCallback(async (taskId) => {
-    completeTask(taskId).catch(() => {});
+  const removeCompletedTask = useCallback((taskId) => {
     setBriefing(prev => {
       const updated = JSON.parse(JSON.stringify(prev));
       const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
       const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
 
-      // Remove from CTM (matched by todoist_id on synced items)
-      if (updated.ctm?.upcoming) {
-        updated.ctm.upcoming = updated.ctm.upcoming.filter(t => t.id !== taskId && t.todoist_id !== taskId);
+      for (const section of ["ctm", "todoist"]) {
+        if (!updated[section]?.upcoming) continue;
+        updated[section].upcoming = updated[section].upcoming.filter(
+          t => String(t.id) !== String(taskId) && t.todoist_id !== String(taskId)
+        );
         let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
-        for (const d of updated.ctm.upcoming) {
+        for (const d of updated[section].upcoming) {
           if (d.due_date === today) dueToday++;
           if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
           if (d.points_possible) totalPoints += d.points_possible;
         }
-        updated.ctm.stats = { incomplete: updated.ctm.upcoming.length, dueToday, dueThisWeek, totalPoints };
-      }
-
-      // Remove from Todoist
-      if (updated.todoist?.upcoming) {
-        updated.todoist.upcoming = updated.todoist.upcoming.filter(t => t.id !== taskId);
-        let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
-        for (const d of updated.todoist.upcoming) {
-          if (d.due_date === today) dueToday++;
-          if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
-          if (d.points_possible) totalPoints += d.points_possible;
-        }
-        updated.todoist.stats = { incomplete: updated.todoist.upcoming.length, dueToday, dueThisWeek, totalPoints };
+        updated[section].stats = { incomplete: updated[section].upcoming.length, dueToday, dueThisWeek, totalPoints };
       }
 
       return updated;
     });
+  }, [setBriefing]);
+
+  const handleCompleteTask = useCallback(async (taskId) => {
+    completeTask(taskId).catch(() => {});
+
+    // Mark as completing (triggers green flash animation)
+    setBriefing(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      for (const section of ["ctm", "todoist"]) {
+        const task = updated[section]?.upcoming?.find(
+          t => String(t.id) === String(taskId) || t.todoist_id === String(taskId)
+        );
+        if (task) task._completing = true;
+      }
+      return updated;
+    });
+
+    // Remove after animation
+    setTimeout(() => removeCompletedTask(taskId), 600);
     if (expandedTask === taskId) setExpandedTask(null);
-  }, [expandedTask, setBriefing]);
+  }, [expandedTask, setBriefing, removeCompletedTask]);
+
+  const handleUpdateTaskStatus = useCallback(async (taskId, status) => {
+    updateTaskStatus(taskId, status).catch(() => {});
+
+    if (status === "complete") {
+      // Green flash then remove
+      setBriefing(prev => {
+        const updated = JSON.parse(JSON.stringify(prev));
+        const task = updated.ctm?.upcoming?.find(t => String(t.id) === String(taskId));
+        if (task) task._completing = true;
+        return updated;
+      });
+      setTimeout(() => removeCompletedTask(taskId), 600);
+      if (String(expandedTask) === String(taskId)) setExpandedTask(null);
+      return;
+    }
+
+    setBriefing(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      const task = updated.ctm?.upcoming?.find(t => String(t.id) === String(taskId));
+      if (task) task.status = status;
+
+      return updated;
+    });
+    if (status === "complete" && String(expandedTask) === String(taskId)) setExpandedTask(null);
+  }, [expandedTask, setBriefing, removeCompletedTask]);
 
   const emailAccounts = useMemo(
     () => briefing?.emails?.accounts || [],
@@ -115,6 +149,7 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
       setExpandedTask,
       handleDismiss,
       handleCompleteTask,
+      handleUpdateTaskStatus,
       markAccountEmailsRead,
       emailAccounts,
       currentAccount,

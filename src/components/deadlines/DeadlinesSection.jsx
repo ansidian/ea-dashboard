@@ -5,7 +5,7 @@ import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
 
 export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, className }) {
-  const { expandedTask, setExpandedTask, handleCompleteTask } = useDashboard();
+  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus } = useDashboard();
   const ctmItems = (ctm?.upcoming || []).map(t => ({ ...t, _type: "ctm" }));
   const todoistItems = (todoist?.upcoming || []).map(t => ({ ...t, _type: "ctm" }));
   const allItems = [...ctmItems, ...todoistItems].sort((a, b) => {
@@ -74,26 +74,6 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
             <span className="text-[11px] max-sm:text-xs text-muted-foreground/50">this week</span>
           </div>
         )}
-        {ctmItems.length > 0 && (
-          <a
-            href="https://ctm.andysu.tech"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] max-sm:text-xs font-medium no-underline transition-all duration-200 ml-auto max-sm:hidden"
-            style={{
-              color: "#cba6dacc",
-              background: "rgba(203,166,218,0.06)",
-              border: "1px solid rgba(203,166,218,0.12)",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(203,166,218,0.12)"; e.currentTarget.style.borderColor = "rgba(203,166,218,0.25)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(203,166,218,0.06)"; e.currentTarget.style.borderColor = "rgba(203,166,218,0.12)"; }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-            </svg>
-            CTM
-          </a>
-        )}
       </div>
       <MotionList className="flex flex-col gap-1.5" loaded={loaded} delay={delay + 100} stagger={0.04}>
         {allItems.map((item) => {
@@ -107,6 +87,7 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
                     setExpandedTask(expandedTask === item.id ? null : item.id)
                   }
                   onComplete={handleCompleteTask}
+                  onStatusChange={handleUpdateTaskStatus}
                 />
               </MotionItem>
             );

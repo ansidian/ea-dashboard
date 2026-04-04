@@ -1,3 +1,80 @@
+/* Icon-only link buttons */
+.ctm-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.ctm-icon-btn:hover {
+  transform: translateY(-1px);
+  opacity: 0.9;
+}
+
+/* Vertical status spine */
+.ctm-spine-v {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 4px;
+}
+.ctm-spine-v-dot-wrap {
+  padding: 3px;
+  margin: -3px;
+  position: relative;
+  z-index: 1;
+}
+.ctm-spine-v-dot-wrap.active {
+  padding: 6px;
+  margin: -6px;
+  cursor: pointer;
+}
+.ctm-spine-v-dot {
+  border-radius: 50%;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+/* Hover effects — only when expanded (active) */
+.ctm-spine-v-dot-wrap.active:hover .ctm-spine-v-dot {
+  transform: scale(1.5);
+}
+.ctm-spine-v-dot-wrap.active[data-target="incomplete"]:hover .ctm-spine-v-dot {
+  box-shadow: 0 0 8px rgba(90,143,191,0.4);
+  border-color: #5A8FBF !important;
+  background: rgba(90,143,191,0.15) !important;
+}
+.ctm-spine-v-dot-wrap.active[data-target="incomplete"]:hover .ctm-spine-v-dot.filled {
+  background: #5A8FBF !important;
+}
+.ctm-spine-v-dot-wrap.active[data-target="in_progress"]:hover .ctm-spine-v-dot {
+  box-shadow: 0 0 8px rgba(140,107,192,0.4);
+  border-color: #8C6BC0 !important;
+  background: rgba(140,107,192,0.15) !important;
+}
+.ctm-spine-v-dot-wrap.active[data-target="in_progress"]:hover .ctm-spine-v-dot.filled {
+  background: #8C6BC0 !important;
+}
+.ctm-spine-v-dot-wrap.active[data-target="complete"]:hover .ctm-spine-v-dot {
+  box-shadow: 0 0 8px rgba(75,153,104,0.4);
+  border-color: #4B9968 !important;
+  background: rgba(75,153,104,0.15) !important;
+}
+
+/* Completion animation */
+.ctm-card-completing {
+  animation: ctm-complete-flash 0.6s ease-out;
+  opacity: 0.5;
+  pointer-events: none;
+}
+@keyframes ctm-complete-flash {
+  0% { opacity: 1; }
+  30% { opacity: 1; border-color: rgba(75,153,104,0.4); box-shadow: 0 0 16px rgba(75,153,104,0.15); }
+  100% { opacity: 0.5; }
+}
+
 /* CTM description HTML rendering */
 .ctm-desc {
   font-size: 13px !important;
