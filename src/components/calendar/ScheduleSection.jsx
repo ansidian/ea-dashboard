@@ -567,11 +567,11 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                     >
                       <div
                         className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0"
-                        style={{ background: event.color, opacity: 0.5 }}
+                        style={{ background: event.color, opacity: 0.4 }}
                       />
                       <div
                         className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
-                        style={{ background: event.color, opacity: 0.5 }}
+                        style={{ background: event.color, opacity: 0.4 }}
                       />
                       <div className="min-w-[72px] ml-1">
                         <div className="text-[13px] font-semibold tabular-nums text-foreground">
