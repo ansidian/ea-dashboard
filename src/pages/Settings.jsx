@@ -170,6 +170,9 @@ export default function Settings() {
   const shouldAnimateRef = useRef(false);
   const [icloudForm, setIcloudForm] = useState({ email: "", password: "", show: false });
   const [actualForm, setActualForm] = useState({ serverUrl: "", password: "", syncId: "" });
+  const [todoistToken, setTodoistToken] = useState("");
+  const [todoistConfigured, setTodoistConfigured] = useState(false);
+  const [todoistDirty, setTodoistDirty] = useState(false);
   const [weatherForm, setWeatherForm] = useState({ location: "", lat: "", lng: "", geocoding: false, results: null });
   const [lookbackHours, setLookbackHours] = useState(16);
   const [testStatus, setTestStatus] = useState(null);
@@ -225,6 +228,7 @@ export default function Settings() {
             syncId: sett.actual_budget_sync_id || "",
           });
         }
+        if (sett.todoist_configured) setTodoistConfigured(true);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -298,6 +302,9 @@ export default function Settings() {
       };
       if (actualForm.password) {
         payload.actual_budget_password = actualForm.password;
+      }
+      if (todoistDirty) {
+        payload.todoist_api_token = todoistToken;
       }
       if (weatherForm.location) {
         payload.weather_location = weatherForm.location;
@@ -768,6 +775,34 @@ export default function Settings() {
               </span>
             )}
           </div>
+        </div>
+      </SettingsCard>
+
+      {/* Todoist */}
+      <SettingsCard title="Todoist">
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">API Token</label>
+            <Input type="password" placeholder={todoistConfigured && !todoistDirty ? "••••••••  (saved)" : "Todoist API token"} value={todoistToken} onChange={e => { setTodoistToken(e.target.value); setTodoistDirty(true); }} />
+            <p className="text-[10px] text-muted-foreground/50 mt-1">
+              Find your token at Settings &gt; Integrations &gt; Developer in Todoist
+            </p>
+          </div>
+          {todoistConfigured && !todoistDirty && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-success" />
+                <span className="text-[11px] text-success">Connected</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setTodoistToken(""); setTodoistDirty(true); setTodoistConfigured(false); }}
+                className="text-[11px] text-muted-foreground/50 hover:text-danger transition-colors cursor-pointer bg-transparent border-0 p-0"
+              >
+                Disconnect
+              </button>
+            </div>
+          )}
         </div>
       </SettingsCard>
 

@@ -67,7 +67,7 @@ RULES:
 - "read" MUST be passed through from the input email's "read" field as-is.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.`;
 
-export async function callClaude({ emails, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar }) {
+export async function callClaude({ emails, calendar, ctmDeadlines, todoistTasks, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar }) {
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
 
   const selectedModel = model || PREFERRED_MODELS[0];
@@ -108,9 +108,14 @@ export async function callClaude({ emails, calendar, ctmDeadlines, model, emailI
       ).join("; ")
     : "";
 
-  // Compact CTM summary for insights
-  const ctmSummary = ctmDeadlines.length
+  // Compact CTM summary for insights (Canvas academic deadlines only)
+  const ctmSummary = ctmDeadlines?.length
     ? ctmDeadlines.map(d => `"${d.title}" due ${d.due_date} ${d.due_time || ""} (${d.class_name}, ${d.points_possible || 0}pts)`).join("; ")
+    : "None";
+
+  // Compact Todoist summary for insights (personal tasks)
+  const todoistSummary = todoistTasks?.length
+    ? todoistTasks.map(d => `"${d.title}" due ${d.due_date} ${d.due_time || ""} (${d.class_name})`).join("; ")
     : "None";
 
   // Compact category list for bill matching
@@ -131,6 +136,9 @@ ${calendarSummary || "No events"}
 
 ## Academic Deadlines (for insights only — do NOT include in output)
 ${ctmSummary}
+
+## Todoist Tasks (for insights only — do NOT include in output)
+${todoistSummary}
 
 ## Next Week's Calendar (for insights only — do NOT include in output)
 ${nextWeekSummary || "No events"}

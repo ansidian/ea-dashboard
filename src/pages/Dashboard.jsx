@@ -19,7 +19,7 @@ import DeadlinesSection from "../components/deadlines/DeadlinesSection";
 import BillsPaymentsSection from "../components/bills/BillsPaymentsSection";
 import EmailTabSection from "../components/email/EmailTabSection";
 import SummaryBar from "../components/layout/SummaryBar";
-import { parseDueDate } from "../lib/dashboard-helpers";
+
 import { DashboardProvider, useDashboard } from "../context/DashboardContext";
 import { Button } from "@/components/ui/button";
 import useLiveData from "../hooks/useLiveData";
@@ -481,12 +481,7 @@ function DashboardMain({
     billTotal: totalBills,
     dueToday:
       (d.ctm?.stats?.dueToday || 0) +
-      (d.deadlines || []).filter((dl) => {
-        const dateStr = dl.due_date || dl.due;
-        if (!dateStr) return false;
-        const due = parseDueDate(dateStr);
-        return due.getTime() === today.getTime();
-      }).length,
+      (d.todoist?.stats?.dueToday || 0),
     events: (liveData.liveCalendar || d.calendar)?.filter((e) => !e.allDay)?.length || 0,
     temp: (liveData.liveWeather || d.weather)?.temp,
   };
@@ -568,7 +563,7 @@ function DashboardMain({
 
         <DeadlinesSection
           ctm={d.ctm}
-          deadlines={d.deadlines}
+          todoist={d.todoist}
           loaded={loaded}
           delay={350}
           className={halfClass}

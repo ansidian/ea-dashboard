@@ -47,7 +47,8 @@ export async function fetchCTMDeadlines(userId) {
           FROM events e
           LEFT JOIN classes c ON e.class_id = c.id AND c.user_id = e.user_id
           WHERE e.user_id = ? AND e.status IN ('incomplete', 'in_progress')
-            AND e.due_date BETWEEN ? AND ?
+            AND substr(e.due_date, 1, 10) BETWEEN ? AND ?
+            AND (e.canvas_id IS NOT NULL OR e.todoist_id IS NULL)
           ORDER BY e.due_date, e.due_time`,
     args: [userId, today, weekOut],
   });
@@ -65,7 +66,8 @@ export async function fetchCTMDeadlines(userId) {
     class_color: row.class_color || "#6b7280",
     points_possible: row.points_possible || null,
     status: row.status,
-    source: row.canvas_id ? "canvas" : row.todoist_id ? "todoist" : "manual",
+    source: row.canvas_id ? "canvas" : "manual",
+    todoist_id: row.todoist_id || null,
     description: row.description || "",
     url: row.url || null,
   }));

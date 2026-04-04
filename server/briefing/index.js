@@ -5,6 +5,7 @@ import { fetchEmails as fetchIcloudEmails } from "./icloud.js";
 import { fetchCalendar, getNextWeekRange } from "./calendar.js";
 import { fetchWeather } from "./weather.js";
 import { fetchCTMDeadlines } from "./ctm-events.js";
+import { fetchTodoistTasks } from "./todoist.js";
 import { callClaude } from "./claude.js";
 import { getCategories, getUpcomingBills } from "./actual.js";
 import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../embeddings/index.js";
@@ -56,7 +57,7 @@ async function fetchLiveData(userId, accounts, settings) {
   const gmailAccounts = accounts.filter((a) => a.type === "gmail");
   const calendarAccounts = gmailAccounts.filter((a) => a.calendar_enabled);
 
-  const [calendar, nextWeekCalendar, weather, ctmDeadlines] = await Promise.all([
+  const [calendar, nextWeekCalendar, weather, ctmDeadlines, todoistTasks] = await Promise.all([
     fetchCalendar(calendarAccounts).catch((err) => {
       console.error("Calendar fetch failed:", err.message);
       return [];
@@ -76,9 +77,13 @@ async function fetchLiveData(userId, accounts, settings) {
       console.error("CTM events fetch failed:", err.message);
       return [];
     }),
+    fetchTodoistTasks(userId).catch((err) => {
+      console.error("Todoist fetch failed:", err.message);
+      return [];
+    }),
   ]);
 
-  return { calendar, nextWeekCalendar, weather, ctmDeadlines };
+  return { calendar, nextWeekCalendar, weather, ctmDeadlines, todoistTasks };
 }
 
 // Fetch emails from all accounts
@@ -118,8 +123,52 @@ function nowPacific() {
   });
 }
 
-// Compute CTM stats from deadlines array (so quick refresh can rebuild them)
-function computeCTMStats(deadlines) {
+// Load todoist IDs completed from the dashboard, reconciling against live Todoist tasks.
+// If a task was un-completed in Todoist (reappears in the API), remove it from the table.
+async function loadCompletedTaskIds(userId, todoistTasks) {
+  const result = await db.execute({
+    sql: "SELECT todoist_id FROM ea_completed_tasks WHERE user_id = ?",
+    args: [userId],
+  });
+  const completedIds = new Set(result.rows.map(r => r.todoist_id));
+
+  if (todoistTasks?.length && completedIds.size) {
+    const reopened = todoistTasks.filter(t => completedIds.has(t.id)).map(t => t.id);
+    if (reopened.length) {
+      console.log(`[Briefing] Reconciling ${reopened.length} un-completed Todoist task(s)`);
+      await db.execute({
+        sql: `DELETE FROM ea_completed_tasks WHERE user_id = ? AND todoist_id IN (${reopened.map(() => "?").join(",")})`,
+        args: [userId, ...reopened],
+      });
+      for (const id of reopened) completedIds.delete(id);
+    }
+  }
+
+  return completedIds;
+}
+
+// Separate CTM and Todoist tasks, deduplicating by todoist_id (CTM wins), filtering completed
+function separateDeadlines(ctmDeadlines, todoistTasks, completedIds) {
+  // CTM items with a todoist_id suppress the matching Todoist task
+  const ctmTodoistIds = new Set(ctmDeadlines.filter(d => d.todoist_id).map(d => d.todoist_id));
+  const uniqueTodoist = todoistTasks.filter(t => !ctmTodoistIds.has(t.id));
+
+  let ctm = ctmDeadlines;
+  let todoist = uniqueTodoist;
+
+  if (completedIds?.size) {
+    ctm = ctm.filter(t => {
+      const tid = t.todoist_id;
+      return !tid || !completedIds.has(tid);
+    });
+    todoist = todoist.filter(t => !completedIds.has(t.id));
+  }
+
+  return { ctm, todoist };
+}
+
+// Compute stats from a deadlines array (works for both CTM and Todoist)
+function computeDeadlineStats(deadlines) {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
   const today = fmt.format(new Date());
   const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
@@ -439,7 +488,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, nextWeekCalendar, weather, ctmDeadlines }, emails, { triagedIds, prevBriefing, dismissedIds }, categories, upcomingBills] = await Promise.all([
+    const [{ calendar, nextWeekCalendar, weather, ctmDeadlines, todoistTasks }, emails, { triagedIds, prevBriefing, dismissedIds }, categories, upcomingBills] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
@@ -452,6 +501,9 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
         return [];
       }),
     ]);
+
+    // Reconcile after Todoist tasks are available (un-completed tasks get removed from table)
+    const completedTaskIds = await loadCompletedTaskIds(userId, todoistTasks);
 
     // Optimization #2: Skip if nothing new (also exclude dismissed emails)
     const newEmails = emails.filter(e => !triagedIds.has(e.id || e.uid) && !dismissedIds.has(e.id || e.uid));
@@ -466,7 +518,9 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       console.log("[EA] No new emails or data changes — cloning previous briefing with fresh weather");
       const cloned = { ...prevBriefing };
       cloned.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
-      cloned.ctm = { upcoming: ctmDeadlines, stats: computeCTMStats(ctmDeadlines) };
+      const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
+      cloned.ctm = { upcoming: separated.ctm, stats: computeDeadlineStats(separated.ctm) };
+      cloned.todoist = { upcoming: separated.todoist, stats: computeDeadlineStats(separated.todoist) };
       // Increment seenCount and filter dismissed/expired emails on clone
       for (const acct of cloned.emails?.accounts || []) {
         acct.important = acct.important
@@ -514,7 +568,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     if (unreadNew.length > 0 && unreadNew.length < emails.length && prevBriefing) {
       await updateProgress(briefingId, `Sending ${unreadNew.length} new email${unreadNew.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Delta generation: ${unreadNew.length} new unread emails (${readNew.length} read, ${emails.length - newEmails.length} previously triaged)`);
-      briefingJson = await callClaude({ emails: unreadNew, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar });
+      briefingJson = await callClaude({ emails: unreadNew, calendar, ctmDeadlines, todoistTasks, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar });
 
       // Merge previous triage with new triage using pure function
       const allEmailIds = new Set(emails.map(e => e.id || e.uid));
@@ -526,7 +580,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       const emailsForClaude = unreadNew.length > 0 ? unreadNew : emails;
       await updateProgress(briefingId, `Sending ${emailsForClaude.length} email${emailsForClaude.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
       console.log(`[EA] Full generation: ${emailsForClaude.length} emails (${readNew.length} read skipped)`);
-      briefingJson = await callClaude({ emails: emailsForClaude, calendar, ctmDeadlines, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar });
+      briefingJson = await callClaude({ emails: emailsForClaude, calendar, ctmDeadlines, todoistTasks, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar });
       // Tag all emails with seenCount 1
       for (const acct of briefingJson.emails?.accounts || []) {
         acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
@@ -548,10 +602,15 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 
     await updateProgress(briefingId, "Finalizing briefing...");
 
-    // Always overwrite CTM stats with server-computed values (Claude may hallucinate these)
+    // Always overwrite deadline data with server-fetched values (Claude may hallucinate these)
+    const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
     briefingJson.ctm = {
-      upcoming: ctmDeadlines,
-      stats: computeCTMStats(ctmDeadlines),
+      upcoming: separated.ctm,
+      stats: computeDeadlineStats(separated.ctm),
+    };
+    briefingJson.todoist = {
+      upcoming: separated.todoist,
+      stats: computeDeadlineStats(separated.todoist),
     };
 
     // Server owns all deadline data (CTM, Todoist) — discard any Claude output
@@ -601,7 +660,8 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 // Quick refresh: update calendar, weather, CTM only — emails left to full generation
 export async function quickRefresh(userId) {
   const { accounts, settings } = await loadUserConfig(userId);
-  const { calendar, nextWeekCalendar, weather, ctmDeadlines } = await fetchLiveData(userId, accounts, settings);
+  const { calendar, nextWeekCalendar, weather, ctmDeadlines, todoistTasks } = await fetchLiveData(userId, accounts, settings);
+  const completedTaskIds = await loadCompletedTaskIds(userId, todoistTasks);
 
   // Load the latest ready briefing to patch into
   const latestResult = await db.execute({
@@ -618,7 +678,6 @@ export async function quickRefresh(userId) {
     briefing = {
       aiInsights: [],
       emails: { summary: "", accounts: [] },
-      deadlines: [],
     };
   }
 
@@ -626,9 +685,14 @@ export async function quickRefresh(userId) {
   briefing.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
   briefing.calendar = calendar;
   briefing.nextWeekCalendar = nextWeekCalendar;
+  const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
   briefing.ctm = {
-    upcoming: ctmDeadlines,
-    stats: computeCTMStats(ctmDeadlines),
+    upcoming: separated.ctm,
+    stats: computeDeadlineStats(separated.ctm),
+  };
+  briefing.todoist = {
+    upcoming: separated.todoist,
+    stats: computeDeadlineStats(separated.todoist),
   };
   briefing.dataUpdatedAt = new Date().toISOString();
 

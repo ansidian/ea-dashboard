@@ -6,6 +6,7 @@ import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, trashM
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
+import { completeTodoistTask } from "../briefing/todoist.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
 import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
 import { applyScenarios, listScenarios } from "../db/scenarios/index.js";
@@ -272,6 +273,79 @@ router.post("/dismiss/:emailId", async (req, res) => {
   } catch (err) {
     console.error("Error dismissing email:", err);
     res.status(500).json({ message: "Failed to dismiss email" });
+  }
+});
+
+// --- Complete Todoist task ---
+router.post("/complete-task/:taskId", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { taskId } = req.params;
+  try {
+    await completeTodoistTask(userId, taskId);
+
+    // Persist so CTM items stay hidden across refreshes
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO ea_completed_tasks (user_id, todoist_id) VALUES (?, ?)",
+      args: [userId, taskId],
+    });
+
+    // Remove from latest briefing
+    const latest = await db.execute({
+      sql: `SELECT id, briefing_json FROM ea_briefings
+            WHERE user_id = ? AND status = 'ready'
+            ORDER BY generated_at DESC LIMIT 1`,
+      args: [userId],
+    });
+    if (latest.rows.length) {
+      const briefing = JSON.parse(latest.rows[0].briefing_json);
+      const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
+      const today = fmt.format(new Date());
+      const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
+      let changed = false;
+
+      // Remove from CTM (matched by todoist_id on synced items)
+      if (briefing.ctm?.upcoming) {
+        const before = briefing.ctm.upcoming.length;
+        briefing.ctm.upcoming = briefing.ctm.upcoming.filter(t => t.id !== taskId && t.todoist_id !== taskId);
+        if (briefing.ctm.upcoming.length !== before) {
+          let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
+          for (const d of briefing.ctm.upcoming) {
+            if (d.due_date === today) dueToday++;
+            if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+            if (d.points_possible) totalPoints += d.points_possible;
+          }
+          briefing.ctm.stats = { incomplete: briefing.ctm.upcoming.length, dueToday, dueThisWeek, totalPoints };
+          changed = true;
+        }
+      }
+
+      // Remove from Todoist
+      if (briefing.todoist?.upcoming) {
+        const before = briefing.todoist.upcoming.length;
+        briefing.todoist.upcoming = briefing.todoist.upcoming.filter(t => t.id !== taskId);
+        if (briefing.todoist.upcoming.length !== before) {
+          let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
+          for (const d of briefing.todoist.upcoming) {
+            if (d.due_date === today) dueToday++;
+            if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+            if (d.points_possible) totalPoints += d.points_possible;
+          }
+          briefing.todoist.stats = { incomplete: briefing.todoist.upcoming.length, dueToday, dueThisWeek, totalPoints };
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await db.execute({
+          sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+          args: [JSON.stringify(briefing), latest.rows[0].id],
+        });
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error completing Todoist task:", err);
+    res.status(500).json({ message: err.message || "Failed to complete task" });
   }
 });
 

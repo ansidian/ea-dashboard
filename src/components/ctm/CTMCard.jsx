@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { todayPacific, toPacificDate, formatFullDate } from "../../lib/dashboard-helpers";
 import Tooltip from "../shared/Tooltip";
 import { MotionExpand, MotionChevron } from "../ui/motion-wrappers";
@@ -22,10 +23,13 @@ function getDueUrgency(dateStr) {
   return "low";
 }
 
-export default function CTMCard({ task, expanded, onToggle }) {
+export default function CTMCard({ task, expanded, onToggle, onComplete }) {
+  const [completing, setCompleting] = useState(false);
   const daysLabel = getDaysUntil(task.due_date);
   const urg = getDueUrgency(task.due_date);
+  const isTodoist = task.source === "todoist";
   const isCanvas = task.source === "canvas";
+  const canComplete = isTodoist || !!task.todoist_id;
   const urgColor = { high: "#f38ba8", medium: "#f9e2af", low: "#a6adc8" }[urg];
 
   return (
@@ -59,11 +63,11 @@ export default function CTMCard({ task, expanded, onToggle }) {
             <span
               className="text-[9px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded"
               style={{
-                color: isCanvas ? "#fab387cc" : "#cba6dacc",
-                background: isCanvas ? "rgba(250,179,135,0.08)" : "rgba(203,166,218,0.08)",
+                color: isTodoist ? "#cba6dacc" : isCanvas ? "#fab387cc" : "#a6adc8cc",
+                background: isTodoist ? "rgba(203,166,218,0.08)" : isCanvas ? "rgba(250,179,135,0.08)" : "rgba(166,173,200,0.08)",
               }}
             >
-              {isCanvas ? "Canvas" : "Todoist"}
+              {isTodoist ? "Todoist" : isCanvas ? "Canvas" : "CTM"}
             </span>
           </div>
           <div className="text-[13px] font-medium text-foreground/90 mt-0.5">{task.title}</div>
@@ -89,6 +93,27 @@ export default function CTMCard({ task, expanded, onToggle }) {
                     </svg>
                     Open in {task.source === "todoist" ? "Todoist" : "Canvas"}
                   </a>
+                )}
+                {canComplete && onComplete && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      setCompleting(true);
+                      onComplete(task.todoist_id || task.id);
+                    }}
+                    disabled={completing}
+                    className="text-[11px] inline-flex items-center gap-1.5 py-1.5 px-3 rounded-md font-medium transition-all duration-200 hover:-translate-y-px border-0 cursor-pointer"
+                    style={{
+                      color: completing ? "#a6adc8" : "#a6e3a1cc",
+                      background: completing ? "rgba(166,173,200,0.06)" : "rgba(166,227,161,0.08)",
+                      border: `1px solid ${completing ? "rgba(166,173,200,0.12)" : "rgba(166,227,161,0.16)"}`,
+                    }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    {completing ? "Completing..." : "Mark complete"}
+                  </button>
                 )}
               </div>
             </div>

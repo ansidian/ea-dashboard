@@ -10,9 +10,10 @@ export function transformBriefing(raw) {
 
   // Handle both camelCase (from Haiku prompt) and snake_case (from older format)
   const aiInsights = b.aiInsights || b.ai_insights || [];
-  const deadlines = b.deadlines || [];
   const ctmDeadlines = b.ctm?.upcoming || b.ctm_deadlines || [];
   const ctmStats = b.ctm?.stats || computeCTMStats(ctmDeadlines);
+  const todoistItems = b.todoist?.upcoming || [];
+  const todoistStats = b.todoist?.stats || computeCTMStats(todoistItems);
   const emailSummary = b.emails?.summary || b.email_summary || "";
   const emailAccounts = b.emails?.accounts || [];
 
@@ -34,8 +35,11 @@ export function transformBriefing(raw) {
       upcoming: ctmDeadlines,
       stats: ctmStats,
     },
+    todoist: {
+      upcoming: todoistItems,
+      stats: todoistStats,
+    },
     model: b.model || null,
-    deadlines,
     emails: {
       summary: emailSummary,
       accounts: emailAccounts.map(acc => ({

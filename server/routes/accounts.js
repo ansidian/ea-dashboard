@@ -293,11 +293,13 @@ router.get("/settings", async (req, res) => {
     }
     const {
       actual_budget_password_encrypted,
+      todoist_api_token_encrypted,
       schedules_json,
       email_interests_json,
       ...safe
     } = result.rows[0];
     safe.actual_budget_configured = !!actual_budget_password_encrypted;
+    safe.todoist_configured = !!todoist_api_token_encrypted;
     safe.schedules = schedules_json
       ? JSON.parse(schedules_json)
       : [
@@ -334,7 +336,7 @@ router.get("/settings", async (req, res) => {
 
 router.put("/settings", async (req, res) => {
   const userId = process.env.EA_USER_ID;
-  const { schedules_json, email_lookback_hours, weather_lat, weather_lng, weather_location, actual_budget_url, actual_budget_password, actual_budget_sync_id, claude_model, email_interests_json } = req.body;
+  const { schedules_json, email_lookback_hours, weather_lat, weather_lng, weather_location, actual_budget_url, actual_budget_password, actual_budget_sync_id, claude_model, email_interests_json, todoist_api_token } = req.body;
 
   try {
     await db.execute({ sql: "INSERT OR IGNORE INTO ea_settings (user_id) VALUES (?)", args: [userId] });
@@ -351,10 +353,33 @@ router.put("/settings", async (req, res) => {
     if (actual_budget_sync_id !== undefined) { updates.push("actual_budget_sync_id = ?"); args.push(actual_budget_sync_id); }
     if (claude_model !== undefined) { updates.push("claude_model = ?"); args.push(claude_model || null); }
     if (email_interests_json !== undefined) { updates.push("email_interests_json = ?"); args.push(typeof email_interests_json === "string" ? email_interests_json : JSON.stringify(email_interests_json)); }
+    if (todoist_api_token !== undefined) { updates.push("todoist_api_token_encrypted = ?"); args.push(todoist_api_token ? encrypt(todoist_api_token) : null); }
 
     if (updates.length > 0) {
       args.push(userId);
       await db.execute({ sql: `UPDATE ea_settings SET ${updates.join(", ")} WHERE user_id = ?`, args });
+    }
+
+    // Purge Todoist items from latest briefing and completed tasks on disconnect
+    if (todoist_api_token !== undefined && !todoist_api_token) {
+      await db.execute({
+        sql: "DELETE FROM ea_completed_tasks WHERE user_id = ?",
+        args: [userId],
+      });
+      const latest = await db.execute({
+        sql: `SELECT id, briefing_json FROM ea_briefings
+              WHERE user_id = ? AND status = 'ready'
+              ORDER BY generated_at DESC LIMIT 1`,
+        args: [userId],
+      });
+      if (latest.rows.length) {
+        const briefing = JSON.parse(latest.rows[0].briefing_json);
+        briefing.todoist = { upcoming: [], stats: { incomplete: 0, dueToday: 0, dueThisWeek: 0, totalPoints: 0 } };
+        await db.execute({
+          sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+          args: [JSON.stringify(briefing), latest.rows[0].id],
+        });
+      }
     }
 
     // Hot-reload cron jobs when schedules change (no server restart needed)
