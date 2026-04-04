@@ -4,7 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { loadUserConfig } from "../briefing/index.js";
 import { fetchEmails as fetchGmailEmails } from "../briefing/gmail.js";
 import { fetchEmails as fetchIcloudEmails } from "../briefing/icloud.js";
-import { fetchCalendar, getNextWeekRange } from "../briefing/calendar.js";
+import { fetchCalendar, getNextWeekRange, getTomorrowRange } from "../briefing/calendar.js";
 import { fetchWeather } from "../briefing/weather.js";
 import { getUpcomingBills } from "../briefing/actual.js";
 import { decrypt } from "../briefing/encryption.js";
@@ -146,7 +146,7 @@ router.get("/all", async (req, res) => {
       }),
     ];
 
-    const [emailArrays, calendar, nextWeekCalendar, weather, bills] = await Promise.all([
+    const [emailArrays, calendar, nextWeekCalendar, tomorrowCalendar, weather, bills] = await Promise.all([
       Promise.all(emailPromises).then(arrays => arrays.flat()),
       fetchCalendar(calendarAccounts).catch(err => {
         console.error("[Live] Calendar fetch failed:", err.message);
@@ -154,6 +154,10 @@ router.get("/all", async (req, res) => {
       }),
       fetchCalendar(calendarAccounts, getNextWeekRange()).catch(err => {
         console.error("[Live] Next week calendar fetch failed:", err.message);
+        return [];
+      }),
+      fetchCalendar(calendarAccounts, getTomorrowRange()).catch(err => {
+        console.error("[Live] Tomorrow calendar fetch failed:", err.message);
         return [];
       }),
       fetchWeather(
@@ -197,6 +201,7 @@ router.get("/all", async (req, res) => {
       emails: newEmails,
       calendar,
       nextWeekCalendar,
+      tomorrowCalendar,
       weather: weatherWithLocation,
       bills,
       importantSenders: Array.from(importantSendersMap.values()),
