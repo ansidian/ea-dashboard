@@ -16,7 +16,7 @@ export default function useLiveData({ disabled = false } = {}) {
   const [lastFetched, setLastFetched] = useState(null);
   const [isPolling, setIsPolling] = useState(false);
   const [billsLoading, setBillsLoading] = useState(true);
-  const [actualConfigured, setActualConfigured] = useState(false);
+  const [actualConfigured, setActualConfigured] = useState(true);
   const intervalRef = useRef(null);
   const mountedRef = useRef(true);
   const fetchingRef = useRef(false);
