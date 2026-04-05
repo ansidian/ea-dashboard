@@ -492,18 +492,10 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks }, emails, { triagedIds, prevBriefing, dismissedIds }, categories, upcomingBills] = await Promise.all([
+    const [{ calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks }, emails, { triagedIds, prevBriefing, dismissedIds }] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
-      getCategories(userId).catch((err) => {
-        console.error("Actual Budget categories fetch failed:", err.message);
-        return [];
-      }),
-      getUpcomingBills(userId).catch((err) => {
-        console.error("Actual Budget upcoming bills fetch failed:", err.message);
-        return [];
-      }),
     ]);
 
     // Reconcile after Todoist tasks are available (un-completed tasks get removed from table)
@@ -573,6 +565,18 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     } else {
       console.warn("[EA] OPENAI_API_KEY not set — briefing will lack historical context");
     }
+
+    // Lazy-load Actual Budget data — only needed when Claude runs (avoids 20k+ CRDT sync on clone path)
+    const [categories, upcomingBills] = await Promise.all([
+      getCategories(userId).catch((err) => {
+        console.error("Actual Budget categories fetch failed:", err.message);
+        return [];
+      }),
+      getUpcomingBills(userId).catch((err) => {
+        console.error("Actual Budget upcoming bills fetch failed:", err.message);
+        return [];
+      }),
+    ]);
 
     let briefingJson;
     if (unreadNew.length > 0 && unreadNew.length < emails.length && prevBriefing) {

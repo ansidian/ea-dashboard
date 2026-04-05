@@ -3,7 +3,7 @@ import Section from "../layout/Section";
 import { typeLabels } from "../../lib/dashboard-helpers";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 const LOADING_MESSAGES = [
   "Pulling in bills from Actual...",
@@ -96,8 +96,28 @@ export default function BillsPaymentsSection({ bills, billsLoading: billsLoading
     confirmDismissId, setConfirmDismissId, handleDismiss: onDismiss,
   } = useDashboard();
 
-  const emailBills = billEmails.filter((e) => e.extractedBill);
-  const scheduledBills = bills || [];
+  const allEmailBills = billEmails.filter((e) => e.extractedBill);
+  const scheduledBills = useMemo(() => bills || [], [bills]);
+
+  // Client-side cross-reference: suppress email bills that match a scheduled payment
+  // (same payee, amount within 10%, due dates within 7 days)
+  const emailBills = useMemo(() => {
+    if (!scheduledBills.length) return allEmailBills;
+    return allEmailBills.filter((e) => {
+      const eb = e.extractedBill;
+      return !scheduledBills.some((sb) => {
+        if (!sb.payee || !eb.payee) return false;
+        if (sb.payee.toLowerCase() !== eb.payee.toLowerCase()) return false;
+        if (eb.amount > 0 && sb.amount > 0 && Math.abs(sb.amount - eb.amount) / sb.amount > 0.1) return false;
+        if (eb.due_date && sb.next_date) {
+          const diff = Math.abs(new Date(eb.due_date) - new Date(sb.next_date));
+          if (diff > 7 * 86400000) return false;
+        }
+        return true;
+      });
+    });
+  }, [allEmailBills, scheduledBills]);
+
   const scheduledTotal = scheduledBills.reduce((sum, b) => sum + (b.amount || 0), 0);
   const combinedTotal = totalBills + scheduledTotal;
 
