@@ -10,6 +10,7 @@ import bills from "./bills.js";
 import billMatch from "./bill-match.js";
 import nextWeek from "./next-week.js";
 import tomorrowEvents from "./tomorrow-events.js";
+import noBills from "./no-bills.js";
 
 const scenarios = {
   "urgent-flags": urgentFlags,
@@ -18,6 +19,7 @@ const scenarios = {
   "bill-match": billMatch,
   "next-week": nextWeek,
   "tomorrow-events": tomorrowEvents,
+  "no-bills": noBills,
 };
 
 // Returns list of available scenario names + descriptions
