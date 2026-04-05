@@ -102,19 +102,32 @@ export default function BillsPaymentsSection({ bills, billsLoading: billsLoading
   const combinedTotal = totalBills + scheduledTotal;
 
   const showLoading = billsLoading && actualConfigured;
+  const doneEmpty = !billsLoading && !scheduledBills.length && actualConfigured;
 
-  // fade out when loading finishes with no content
+  // after loading finishes with no content at all, show confirmation then fade out
   useEffect(() => {
-    if (!billsLoading && !emailBills.length && !scheduledBills.length && actualConfigured) {
-      const timer = setTimeout(() => setFadingOut(true), 300);
+    if (doneEmpty && !emailBills.length) {
+      const timer = setTimeout(() => setFadingOut(true), 5000);
       return () => clearTimeout(timer);
     }
-  }, [billsLoading, emailBills.length, scheduledBills.length, actualConfigured]);
+  }, [doneEmpty, emailBills.length]);
 
-  if (!showLoading && !emailBills.length && !scheduledBills.length) return null;
-  if (fadingOut && !emailBills.length && !scheduledBills.length) return null;
+  const [gone, setGone] = useState(false);
+  if (!showLoading && !doneEmpty && !emailBills.length && !scheduledBills.length) return null;
+  if (gone) return null;
+
+  const collapsing = fadingOut && !emailBills.length && !scheduledBills.length;
 
   return (
+    <div
+      style={{
+        maxHeight: collapsing ? 0 : 500,
+        opacity: collapsing ? 0 : 1,
+        overflow: "hidden",
+        transition: collapsing ? "max-height 400ms ease-in, opacity 300ms ease-out" : "none",
+      }}
+      onTransitionEnd={(e) => { if (collapsing && e.propertyName === "max-height") setGone(true); }}
+    >
     <Section
       title="Bills & Payments"
       delay={delay}
@@ -161,43 +174,6 @@ export default function BillsPaymentsSection({ bills, billsLoading: billsLoading
         )}
       </div>
 
-      {/* Loading state — Actual Budget bills being fetched */}
-      {showLoading && (
-        <div style={{ padding: "12px 0 4px" }}>
-          <div
-            style={{
-              color: "rgba(205,214,244,0.4)",
-              fontSize: 12,
-              marginBottom: 8,
-              transition: "opacity 200ms ease",
-            }}
-          >
-            {loadingMsg}
-          </div>
-          <div
-            style={{
-              height: 2,
-              borderRadius: 2,
-              background: "rgba(166,227,161,0.1)",
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                height: "100%",
-                width: "40%",
-                borderRadius: 2,
-                background: "linear-gradient(90deg, transparent, rgba(166,227,161,0.5), transparent)",
-                animation: "shimmerSlide 1.5s ease-in-out infinite",
-              }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Needs Attention — email-detected bills */}
       {emailBills.length > 0 && (
@@ -315,20 +291,78 @@ export default function BillsPaymentsSection({ bills, billsLoading: billsLoading
         </div>
       )}
 
-      {/* Divider between subsections */}
-      {emailBills.length > 0 && scheduledBills.length > 0 && (
-        <div className="my-2.5" style={{ height: 1, background: "rgba(255,255,255,0.04)" }} />
-      )}
-
-      {/* Scheduled — from Actual Budget */}
-      {scheduledBills.length > 0 && (
+      {/* Scheduled — from Actual Budget (loading, empty, or populated) */}
+      {(showLoading || doneEmpty || scheduledBills.length > 0) && (
         <div>
+          {emailBills.length > 0 && (
+            <div className="my-2.5" style={{ height: 1, background: "rgba(255,255,255,0.04)" }} />
+          )}
           <div className="flex items-center gap-1.5 mb-1.5">
             <span className="text-[10px] max-sm:text-xs uppercase tracking-[1px] font-semibold" style={{ color: "rgba(166,227,161,0.4)" }}>
               Scheduled
             </span>
             <span className="text-[10px] max-sm:text-xs text-muted-foreground/20">· from Actual Budget</span>
           </div>
+
+          {/* Shimmer loading */}
+          {showLoading && (
+            <div style={{ padding: "4px 0" }}>
+              <div
+                style={{
+                  color: "rgba(205,214,244,0.4)",
+                  fontSize: 12,
+                  marginBottom: 8,
+                  transition: "opacity 200ms ease",
+                }}
+              >
+                {loadingMsg}
+              </div>
+              <div
+                style={{
+                  height: 2,
+                  borderRadius: 2,
+                  background: "rgba(166,227,161,0.1)",
+                  overflow: "hidden",
+                  position: "relative",
+                }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    height: "100%",
+                    width: "40%",
+                    borderRadius: 2,
+                    background: "linear-gradient(90deg, transparent, rgba(166,227,161,0.5), transparent)",
+                    animation: "shimmerSlide 1.5s ease-in-out infinite",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Empty state after loading */}
+          {doneEmpty && !showLoading && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "12px 16px",
+                borderRadius: 8,
+                background: "linear-gradient(135deg, rgba(166,227,161,0.12), rgba(166,227,161,0.04))",
+                border: "1px solid rgba(166,227,161,0.15)",
+                animation: "glowPulse 2s ease-in-out infinite",
+              }}
+            >
+              <div style={{ fontSize: 20, marginBottom: 4, animation: "scaleIn 0.3s ease-out" }}>✓</div>
+              <div style={{ color: "rgba(166,227,161,0.7)", fontSize: 12, fontWeight: 500 }}>
+                You're all clear — no upcoming bills
+              </div>
+            </div>
+          )}
+
+          {/* Populated bills */}
+          {scheduledBills.length > 0 && (
           <MotionList className="flex flex-col gap-1" loaded={loaded} delay={delay + 200} stagger={0.04}>
             {scheduledBills.map((bill) => {
               const days = daysUntil(bill.next_date);
@@ -375,6 +409,7 @@ export default function BillsPaymentsSection({ bills, billsLoading: billsLoading
               );
             })}
           </MotionList>
+          )}
         </div>
       )}
 
@@ -382,5 +417,6 @@ export default function BillsPaymentsSection({ bills, billsLoading: billsLoading
         Email detection · Actual Budget
       </div>
     </Section>
+    </div>
   );
 }
