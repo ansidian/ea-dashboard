@@ -155,28 +155,30 @@ export default function Dashboard() {
       <DashboardMain
         d={bd.briefing}
         loaded={bd.loaded}
-        refreshing={bd.refreshing}
         generating={bd.generating}
         genProgress={bd.genProgress}
-        refreshHold={refreshHold}
-        onGenerate={handleFullGeneration}
-        historyOpen={historyOpen}
-        setHistoryOpen={setHistoryOpen}
-        historyTriggerRef={historyTriggerRef}
-        viewingPast={bd.viewingPast}
-        latestId={bd.latestId}
-        onSelectHistory={onSelectHistory}
-        onBackToLatest={bd.backToLatest}
-        onNavigateToEmail={bd.navigateToEmail}
-        schedules={bd.schedules}
-        setSchedules={bd.setSchedules}
-        modelLabel={bd.modelLabel}
-        renderConfigured={bd.renderConfigured}
-        suspendHold={suspendHold}
-        onSuspend={handleSuspend}
-        suspending={suspending}
-        suspended={suspended}
         liveData={liveData}
+        onNavigateToEmail={bd.navigateToEmail}
+        headerProps={{
+          refreshing: bd.refreshing,
+          refreshHold,
+          onGenerate: handleFullGeneration,
+          historyOpen,
+          setHistoryOpen,
+          historyTriggerRef,
+          viewingPast: bd.viewingPast,
+          latestId: bd.latestId,
+          onSelectHistory,
+          onBackToLatest: bd.backToLatest,
+          schedules: bd.schedules,
+          setSchedules: bd.setSchedules,
+          modelLabel: bd.modelLabel,
+          renderConfigured: bd.renderConfigured,
+          suspendHold,
+          onSuspend: handleSuspend,
+          suspending,
+          suspended,
+        }}
       />
       {DevPanel && (
         <Suspense fallback={null}>
@@ -190,28 +192,11 @@ export default function Dashboard() {
 function DashboardMain({
   d,
   loaded,
-  refreshing,
   generating,
   genProgress,
-  refreshHold,
-  onGenerate,
-  historyOpen,
-  setHistoryOpen,
-  historyTriggerRef,
-  viewingPast,
-  latestId,
-  onSelectHistory,
-  onBackToLatest,
-  onNavigateToEmail,
-  schedules,
-  setSchedules,
-  modelLabel,
-  renderConfigured,
-  suspendHold,
-  onSuspend,
-  suspending,
-  suspended,
   liveData,
+  onNavigateToEmail,
+  headerProps,
 }) {
   const {
     emailAccounts,
@@ -265,26 +250,9 @@ function DashboardMain({
       <DashboardHeader
         d={d}
         loaded={loaded}
-        refreshing={refreshing}
         generating={generating}
-        refreshHold={refreshHold}
-        onGenerate={onGenerate}
-        historyOpen={historyOpen}
-        setHistoryOpen={setHistoryOpen}
-        historyTriggerRef={historyTriggerRef}
-        viewingPast={viewingPast}
-        latestId={latestId}
-        onSelectHistory={onSelectHistory}
-        onBackToLatest={onBackToLatest}
-        schedules={schedules}
-        setSchedules={setSchedules}
-        modelLabel={modelLabel}
         onNavigateToEmail={handleNavigateToEmail}
-        renderConfigured={renderConfigured}
-        suspendHold={suspendHold}
-        onSuspend={onSuspend}
-        suspending={suspending}
-        suspended={suspended}
+        {...headerProps}
       />
 
       <SummaryBar stats={summaryStats} loaded={loaded} />
