@@ -1,14 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
-import {
-  getLatestBriefing,
-  triggerGeneration,
-  quickRefresh,
-  pollStatus,
-  checkInProgress,
-  getSettings,
-  suspendService,
-} from "../api";
-import { transformBriefing } from "../transform";
+import { suspendService } from "../api";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import ErrorState from "../components/layout/ErrorState";
 import RefreshBanner from "../components/layout/RefreshBanner";
@@ -24,180 +15,26 @@ import { DashboardProvider, useDashboard } from "../context/DashboardContext";
 import { Button } from "@/components/ui/button";
 import useLiveData from "../hooks/useLiveData";
 import useHoldGesture from "../hooks/useHoldGesture";
+import useBriefingData from "../hooks/useBriefingData";
 const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevPanel.jsx")) : null;
 import useNotifications from "../hooks/useNotifications";
 
 export default function Dashboard() {
-  const [briefing, setBriefing] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState(null);
-  const [loaded, setLoaded] = useState(false);
-  const [modelLabel, setModelLabel] = useState("Claude");
-  const [genProgress, setGenProgress] = useState(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [viewingPast, setViewingPast] = useState(null);
-  const [latestBriefing, setLatestBriefing] = useState(null);
-  const [latestId, setLatestId] = useState(null);
-  const [schedules, setSchedules] = useState([]);
-  const historyTriggerRef = useRef(null);
-  const [renderConfigured, setRenderConfigured] = useState(false);
-  const [suspending, setSuspending] = useState(false);
-  const [suspended, setSuspended] = useState(false);
-
   const isMock = new URLSearchParams(window.location.search).has("mock");
   const liveData = useLiveData({ disabled: isMock });
   useNotifications(liveData);
 
-  // --- Data fetching ---
-
-  useEffect(() => {
-    getSettings()
-      .then((s) => {
-        const id = s?.claude_model || "claude-haiku-4-5-20251001";
-        const name = id
-          .replace(/^claude-/, "")
-          .replace(/-\d{8,}$/, "")
-          .replace(
-            /(\w+)-(\d+)-(\d+)/,
-            (_, n, maj, min) =>
-              `${n.charAt(0).toUpperCase() + n.slice(1)} ${maj}.${min}`,
-          )
-          .replace(/(\w+)$/, (m) => m.charAt(0).toUpperCase() + m.slice(1));
-        setModelLabel(`Claude ${name}`);
-        if (s?.schedules) setSchedules(s.schedules);
-        if (s?.render_configured) setRenderConfigured(true);
-      })
-      .catch(() => {});
-
-    checkInProgress()
-      .then(({ generating: inProgress, id, progress }) => {
-        if (inProgress && id) {
-          if (progress) setGenProgress(progress);
-          startPolling(id);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    getLatestBriefing()
-      .then((res) => {
-        const transformed = transformBriefing(res.briefing);
-        setBriefing(transformed);
-        setLatestBriefing(transformed);
-        setLatestId(res.id);
-
-        if (isMock) return;
-        sessionStorage.removeItem("ea_settings_changed");
-        setRefreshing(true);
-        quickRefresh()
-          .then((result) => {
-            const updated = transformBriefing(result.briefingJson);
-            setBriefing(updated);
-            setLatestBriefing(updated);
-            setLatestId(result.id);
-          })
-          .catch(() => {})
-          .finally(() => setRefreshing(false));
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => {
-        setLoading(false);
-        setTimeout(() => setLoaded(true), 100);
-      });
-  }, [isMock]);
-
-  // Reconcile briefing read status from live Gmail data
-  useEffect(() => {
-    const status = liveData.briefingReadStatus;
-    if (!status || !Object.keys(status).length) return;
-    setBriefing(prev => {
-      if (!prev?.emails?.accounts) return prev;
-      let changed = false;
-      const updated = JSON.parse(JSON.stringify(prev));
-      for (const acct of updated.emails.accounts) {
-        for (const e of acct.important) {
-          if (!e.read && (status[e.uid] || status[e.id])) {
-            e.read = true;
-            changed = true;
-          }
-        }
-        if (changed) acct.unread = acct.important.filter(e => !e.read).length;
-      }
-      return changed ? updated : prev;
-    });
-  }, [liveData.briefingReadStatus]);
-
-  // --- Actions ---
-
-  async function handleQuickRefresh() {
-    if (refreshing || generating) return;
-    setRefreshing(true);
-    try {
-      const [result] = await Promise.all([
-        quickRefresh(),
-        liveData.refreshNow(),
-      ]);
-      const transformed = transformBriefing(result.briefingJson);
-      setBriefing(transformed);
-      setLatestBriefing(transformed);
-      setLatestId(result.id);
-      setViewingPast(null);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  function startPolling(id) {
-    setGenerating(true);
-    const poll = setInterval(async () => {
-      try {
-        const { status, error_message, progress } = await pollStatus(id);
-        if (progress) setGenProgress(progress);
-        if (status === "ready") {
-          clearInterval(poll);
-          setGenProgress(null);
-          const res = await getLatestBriefing();
-          const transformed = transformBriefing(res.briefing);
-          setBriefing(transformed);
-          setLatestBriefing(transformed);
-          setLatestId(res.id);
-          setViewingPast(null);
-          setGenerating(false);
-        } else if (status === "error") {
-          clearInterval(poll);
-          setGenProgress(null);
-          setError(error_message);
-          setGenerating(false);
-        }
-      } catch {
-        clearInterval(poll);
-        setGenProgress(null);
-        setError("Lost connection while generating briefing.");
-        setGenerating(false);
-      }
-    }, 2000);
-  }
-
-  // --- Hold gestures ---
-
-  const refreshHold = useHoldGesture({ onShortPress: handleQuickRefresh });
+  const bd = useBriefingData({ liveData, isMock });
+  const refreshHold = useHoldGesture({ onShortPress: bd.handleQuickRefresh });
   const suspendHold = useHoldGesture();
+
+  // Suspend handler (not briefing-related)
+  const [suspending, setSuspending] = useState(false);
+  const [suspended, setSuspended] = useState(false);
 
   async function handleFullGeneration() {
     refreshHold.setShowConfirm(false);
-    setGenerating(true);
-    try {
-      const genResult = await triggerGeneration();
-      startPolling(genResult.id);
-    } catch (err) {
-      setError(err.message);
-      setGenerating(false);
-    }
+    bd.handleFullGeneration();
   }
 
   async function handleSuspend() {
@@ -223,7 +60,7 @@ export default function Dashboard() {
         e.target.tagName === "TEXTAREA"
       )
         return;
-      if (refreshing || generating) return;
+      if (bd.refreshing || bd.generating) return;
       if (refreshHold.showConfirm) {
         handleFullGeneration();
         return;
@@ -245,14 +82,45 @@ export default function Dashboard() {
     };
   });
 
+  // Reconcile briefing read status from live Gmail data
+  useEffect(() => {
+    const status = liveData.briefingReadStatus;
+    if (!status || !Object.keys(status).length) return;
+    bd.setBriefing(prev => {
+      if (!prev?.emails?.accounts) return prev;
+      let changed = false;
+      const updated = JSON.parse(JSON.stringify(prev));
+      for (const acct of updated.emails.accounts) {
+        for (const e of acct.important) {
+          if (!e.read && (status[e.uid] || status[e.id])) {
+            e.read = true;
+            changed = true;
+          }
+        }
+        if (changed) acct.unread = acct.important.filter(e => !e.read).length;
+      }
+      return changed ? updated : prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- bd.setBriefing is a stable setState
+  }, [liveData.briefingReadStatus]);
+
+  // historyOpen + historyTriggerRef (pure UI state)
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyTriggerRef = useRef(null);
+
+  function onSelectHistory(briefingData, meta) {
+    bd.selectHistory(briefingData, meta);
+    setHistoryOpen(false);
+  }
+
   // --- Loading / error / empty states ---
 
-  if (loading) return <LoadingSkeleton />;
-  if (error && !briefing)
+  if (bd.loading) return <LoadingSkeleton />;
+  if (bd.error && !bd.briefing)
     return (
-      <ErrorState message={error} onRetry={() => window.location.reload()} />
+      <ErrorState message={bd.error} onRetry={() => window.location.reload()} />
     );
-  if (!briefing)
+  if (!bd.briefing)
     return (
       <div className="min-h-screen text-foreground font-sans flex flex-col items-center justify-center gap-4 p-6">
         <div className="text-5xl">☀️</div>
@@ -271,9 +139,9 @@ export default function Dashboard() {
             <a href="/settings">Settings</a>
           </Button>
         </div>
-        {generating && (
+        {bd.generating && (
           <div className="mt-4">
-            <RefreshBanner progress={genProgress} />
+            <RefreshBanner progress={bd.genProgress} />
           </div>
         )}
       </div>
@@ -282,47 +150,27 @@ export default function Dashboard() {
   // --- Render ---
 
   return (
-    <DashboardProvider briefing={briefing} setBriefing={setBriefing}>
+    <DashboardProvider briefing={bd.briefing} setBriefing={bd.setBriefing}>
       <DashboardMain
-        d={briefing}
-        loaded={loaded}
-        refreshing={refreshing}
-        generating={generating}
-        genProgress={genProgress}
+        d={bd.briefing}
+        loaded={bd.loaded}
+        refreshing={bd.refreshing}
+        generating={bd.generating}
+        genProgress={bd.genProgress}
         refreshHold={refreshHold}
         onGenerate={handleFullGeneration}
         historyOpen={historyOpen}
         setHistoryOpen={setHistoryOpen}
         historyTriggerRef={historyTriggerRef}
-        viewingPast={viewingPast}
-        latestId={latestId}
-        onSelectHistory={(briefingData, meta) => {
-          setBriefing(briefingData);
-          setViewingPast(meta.id === latestId ? null : meta);
-          setHistoryOpen(false);
-        }}
-        onBackToLatest={() => {
-          setBriefing(latestBriefing);
-          setViewingPast(null);
-        }}
-        onNavigateToEmail={({
-          briefing: navBriefing,
-          briefingId,
-          generated_at,
-          emailId,
-          accountName,
-        }) => {
-          if (!latestBriefing) setLatestBriefing(briefing);
-          setBriefing(navBriefing);
-          if (briefingId !== latestId) {
-            setViewingPast({ id: briefingId, generated_at });
-          }
-          return { navBriefing, emailId, accountName };
-        }}
-        schedules={schedules}
-        setSchedules={setSchedules}
-        modelLabel={modelLabel}
-        renderConfigured={renderConfigured}
+        viewingPast={bd.viewingPast}
+        latestId={bd.latestId}
+        onSelectHistory={onSelectHistory}
+        onBackToLatest={bd.backToLatest}
+        onNavigateToEmail={bd.navigateToEmail}
+        schedules={bd.schedules}
+        setSchedules={bd.setSchedules}
+        modelLabel={bd.modelLabel}
+        renderConfigured={bd.renderConfigured}
         suspendHold={suspendHold}
         onSuspend={handleSuspend}
         suspending={suspending}
