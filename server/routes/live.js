@@ -79,7 +79,7 @@ router.get("/all", async (req, res) => {
 
     // Load latest briefing for email dedup and timing
     const latestResult = await db.execute({
-      sql: `SELECT briefing_json, generated_at FROM ea_briefings
+      sql: `SELECT id, briefing_json, generated_at FROM ea_briefings
             WHERE user_id = ? AND status = 'ready'
             ORDER BY generated_at DESC LIMIT 1`,
       args: [userId],
@@ -196,6 +196,50 @@ router.get("/all", async (req, res) => {
         ...e,
         isImportantSender: importantSenderAddresses.has(extractEmailAddress(e.from)),
       }));
+
+    // Strip email bills that match actioned items in Actual Budget (schedules + recent transactions)
+    if (latestResult.rows.length && (bills.length || recentTransactions.length)) {
+      const actionedItems = [
+        ...bills.map(b => ({ payee: b.payee, amount: b.amount, date: b.next_date })),
+        ...recentTransactions.map(t => ({ payee: t.payee, amount: t.amount, date: t.date })),
+      ];
+      try {
+        const briefing = JSON.parse(latestResult.rows[0].briefing_json);
+        let stripped = 0;
+        for (const acct of briefing.emails?.accounts || []) {
+          for (const email of acct.important || []) {
+            if (!email.hasBill || !email.extractedBill) continue;
+            const eb = email.extractedBill;
+            const matched = actionedItems.some((item) => {
+              if (!item.payee || !eb.payee) return false;
+              const a = item.payee.toLowerCase();
+              const b = eb.payee.toLowerCase();
+              if (a !== b && !a.includes(b) && !b.includes(a)) return false;
+              if (eb.amount > 0 && item.amount > 0 && Math.abs(item.amount - eb.amount) / item.amount > 0.05) return false;
+              if (eb.due_date && item.date) {
+                const diff = Math.abs(new Date(eb.due_date) - new Date(item.date));
+                if (diff > 30 * 86400000) return false;
+              }
+              return true;
+            });
+            if (matched) {
+              email.hasBill = false;
+              email.extractedBill = null;
+              stripped++;
+            }
+          }
+        }
+        if (stripped > 0) {
+          console.log(`[Live] Stripped ${stripped} actioned bill(s) from briefing`);
+          db.execute({
+            sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+            args: [JSON.stringify(briefing), latestResult.rows[0].id],
+          }).catch(err => console.error("[Live] Failed to persist bill strip:", err.message));
+        }
+      } catch {
+        // malformed briefing, skip stripping
+      }
+    }
 
     // Add weather location
     const weatherWithLocation = {
