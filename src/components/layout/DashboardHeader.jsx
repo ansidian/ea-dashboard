@@ -24,13 +24,8 @@ export default function DashboardHeader({
   loaded,
   refreshing,
   generating,
-  holdProgress,
-  holdConfirm,
-  onPointerDown,
-  onPointerUp,
-  onPointerLeave,
+  refreshHold,
   onGenerate,
-  setHoldConfirm,
   historyOpen,
   setHistoryOpen,
   historyTriggerRef,
@@ -43,12 +38,7 @@ export default function DashboardHeader({
   modelLabel,
   onNavigateToEmail,
   renderConfigured,
-  suspendConfirm,
-  setSuspendConfirm,
-  suspendHoldProgress,
-  onSuspendPointerDown,
-  onSuspendPointerUp,
-  onSuspendPointerLeave,
+  suspendHold,
   onSuspend,
   suspending,
   suspended,
@@ -138,7 +128,7 @@ export default function DashboardHeader({
     <>
       {/* Full generation confirm dialog */}
       <AnimatePresence>
-        {holdConfirm && (
+        {refreshHold.showConfirm && (
           <motion.div
             initial={CONFIRM_INITIAL}
             animate={CONFIRM_ANIMATE}
@@ -171,7 +161,7 @@ export default function DashboardHeader({
               </button>
               <button
                 className="bg-white/[0.06] text-muted-foreground border border-white/10 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all font-[inherit] hover:bg-white/10 hover:text-foreground/80 hover:border-white/20"
-                onClick={() => setHoldConfirm(false)}
+                onClick={() => refreshHold.setShowConfirm(false)}
               >
                 Cancel
               </button>
@@ -182,7 +172,7 @@ export default function DashboardHeader({
 
       {/* Suspend service confirm dialog */}
       <AnimatePresence>
-        {suspendConfirm && (
+        {suspendHold.showConfirm && (
           <motion.div
             initial={CONFIRM_INITIAL}
             animate={CONFIRM_ANIMATE}
@@ -214,7 +204,7 @@ export default function DashboardHeader({
               </button>
               <button
                 className="bg-white/[0.06] text-muted-foreground border border-white/10 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all font-[inherit] hover:bg-white/10 hover:text-foreground/80 hover:border-white/20"
-                onClick={() => setSuspendConfirm(false)}
+                onClick={() => suspendHold.setShowConfirm(false)}
               >
                 Cancel
               </button>
@@ -325,15 +315,15 @@ export default function DashboardHeader({
                     (refreshing || generating) &&
                       "opacity-70 cursor-not-allowed",
                   )}
-                  onPointerDown={onPointerDown}
-                  onPointerUp={onPointerUp}
-                  onPointerLeave={onPointerLeave}
+                  onPointerDown={refreshHold.onPointerDown}
+                  onPointerUp={refreshHold.onPointerUp}
+                  onPointerLeave={refreshHold.onPointerLeave}
                   disabled={refreshing || generating}
                 >
-                  {holdProgress > 0 && (
+                  {refreshHold.holdProgress > 0 && (
                     <div
                       className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-primary/20 to-primary/10 rounded-md"
-                      style={{ width: `${holdProgress}%` }}
+                      style={{ width: `${refreshHold.holdProgress}%` }}
                     />
                   )}
                   <svg
@@ -356,7 +346,7 @@ export default function DashboardHeader({
                     <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
                   </svg>
                   <span className="relative">
-                    {holdProgress > 0
+                    {refreshHold.holdProgress > 0
                       ? "Hold for new briefing..."
                       : refreshing
                         ? "Updating..."
@@ -474,15 +464,15 @@ export default function DashboardHeader({
                         !suspending &&
                         "hover:bg-[#f97316]/[0.08] hover:border-[#f97316]/20 hover:text-[#f97316]",
                     )}
-                    onPointerDown={onSuspendPointerDown}
-                    onPointerUp={onSuspendPointerUp}
-                    onPointerLeave={onSuspendPointerLeave}
+                    onPointerDown={suspendHold.onPointerDown}
+                    onPointerUp={suspendHold.onPointerUp}
+                    onPointerLeave={suspendHold.onPointerLeave}
                     disabled={suspending || suspended}
                   >
-                    {suspendHoldProgress > 0 && (
+                    {suspendHold.holdProgress > 0 && (
                       <div
                         className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-[#f97316]/20 to-[#f97316]/10 rounded-md"
-                        style={{ width: `${suspendHoldProgress}%` }}
+                        style={{ width: `${suspendHold.holdProgress}%` }}
                       />
                     )}
                     <svg
@@ -504,7 +494,7 @@ export default function DashboardHeader({
                         ? "Suspended"
                         : suspending
                           ? "Suspending..."
-                          : suspendHoldProgress > 0
+                          : suspendHold.holdProgress > 0
                             ? "Hold to suspend..."
                             : "Suspend"}
                     </span>

@@ -23,6 +23,7 @@ import SummaryBar from "../components/layout/SummaryBar";
 import { DashboardProvider, useDashboard } from "../context/DashboardContext";
 import { Button } from "@/components/ui/button";
 import useLiveData from "../hooks/useLiveData";
+import useHoldGesture from "../hooks/useHoldGesture";
 const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevPanel.jsx")) : null;
 import useNotifications from "../hooks/useNotifications";
 
@@ -33,7 +34,6 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
   const [loaded, setLoaded] = useState(false);
-  const [holdConfirm, setHoldConfirm] = useState(false);
   const [modelLabel, setModelLabel] = useState("Claude");
   const [genProgress, setGenProgress] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -41,17 +41,10 @@ export default function Dashboard() {
   const [latestBriefing, setLatestBriefing] = useState(null);
   const [latestId, setLatestId] = useState(null);
   const [schedules, setSchedules] = useState([]);
-  const [holdProgress, setHoldProgress] = useState(0);
-  const holdTimerRef = useRef(null);
-  const holdProgressRef = useRef(null);
   const historyTriggerRef = useRef(null);
   const [renderConfigured, setRenderConfigured] = useState(false);
-  const [suspendConfirm, setSuspendConfirm] = useState(false);
-  const [suspendHoldProgress, setSuspendHoldProgress] = useState(0);
   const [suspending, setSuspending] = useState(false);
   const [suspended, setSuspended] = useState(false);
-  const suspendHoldTimerRef = useRef(null);
-  const suspendHoldProgressRef = useRef(null);
 
   const isMock = new URLSearchParams(window.location.search).has("mock");
   const liveData = useLiveData({ disabled: isMock });
@@ -190,8 +183,13 @@ export default function Dashboard() {
     }, 2000);
   }
 
+  // --- Hold gestures ---
+
+  const refreshHold = useHoldGesture({ onShortPress: handleQuickRefresh });
+  const suspendHold = useHoldGesture();
+
   async function handleFullGeneration() {
-    setHoldConfirm(false);
+    refreshHold.setShowConfirm(false);
     setGenerating(true);
     try {
       const genResult = await triggerGeneration();
@@ -202,77 +200,8 @@ export default function Dashboard() {
     }
   }
 
-  // --- Long press handlers ---
-
-  const HOLD_DURATION = 1500;
-  function startHold() {
-    if (refreshing || generating) return;
-    setHoldProgress(0);
-    const start = Date.now();
-    holdProgressRef.current = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const pct = Math.min((elapsed / HOLD_DURATION) * 100, 100);
-      setHoldProgress(pct);
-    }, 16);
-    holdTimerRef.current = setTimeout(() => {
-      holdTimerRef.current = "fired";
-      clearInterval(holdProgressRef.current);
-      setHoldProgress(0);
-      setHoldConfirm(true);
-    }, HOLD_DURATION);
-  }
-  function endHold(cancel) {
-    clearInterval(holdProgressRef.current);
-    setHoldProgress(0);
-    if (holdTimerRef.current === "fired") {
-      holdTimerRef.current = null;
-      return;
-    }
-    clearTimeout(holdTimerRef.current);
-    holdTimerRef.current = null;
-    if (!cancel) handleQuickRefresh();
-  }
-  function onPointerDown() {
-    startHold();
-  }
-  function onPointerUp() {
-    endHold(false);
-  }
-  function onPointerLeave() {
-    endHold(true);
-  }
-
-  // --- Suspend hold handlers ---
-
-  function startSuspendHold() {
-    if (suspending || suspended) return;
-    setSuspendHoldProgress(0);
-    const start = Date.now();
-    suspendHoldProgressRef.current = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const pct = Math.min((elapsed / HOLD_DURATION) * 100, 100);
-      setSuspendHoldProgress(pct);
-    }, 16);
-    suspendHoldTimerRef.current = setTimeout(() => {
-      suspendHoldTimerRef.current = "fired";
-      clearInterval(suspendHoldProgressRef.current);
-      setSuspendHoldProgress(0);
-      setSuspendConfirm(true);
-    }, HOLD_DURATION);
-  }
-  function endSuspendHold() {
-    clearInterval(suspendHoldProgressRef.current);
-    setSuspendHoldProgress(0);
-    if (suspendHoldTimerRef.current === "fired") {
-      suspendHoldTimerRef.current = null;
-      return;
-    }
-    clearTimeout(suspendHoldTimerRef.current);
-    suspendHoldTimerRef.current = null;
-    // No quick action on short tap — intentional
-  }
   async function handleSuspend() {
-    setSuspendConfirm(false);
+    suspendHold.setShowConfirm(false);
     setSuspending(true);
     try {
       await suspendService();
@@ -294,18 +223,19 @@ export default function Dashboard() {
         e.target.tagName === "TEXTAREA"
       )
         return;
-      if (holdConfirm) {
+      if (refreshing || generating) return;
+      if (refreshHold.showConfirm) {
         handleFullGeneration();
         return;
       }
-      startHold();
+      refreshHold.startHold();
     }
     function onKeyUp(e) {
       if (e.key !== "r") return;
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
         return;
-      if (!holdTimerRef.current) return;
-      endHold(false);
+      if (!refreshHold.holdTimerRef.current) return;
+      refreshHold.endHold(false);
     }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -359,13 +289,8 @@ export default function Dashboard() {
         refreshing={refreshing}
         generating={generating}
         genProgress={genProgress}
-        holdProgress={holdProgress}
-        holdConfirm={holdConfirm}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerLeave}
+        refreshHold={refreshHold}
         onGenerate={handleFullGeneration}
-        setHoldConfirm={setHoldConfirm}
         historyOpen={historyOpen}
         setHistoryOpen={setHistoryOpen}
         historyTriggerRef={historyTriggerRef}
@@ -398,12 +323,7 @@ export default function Dashboard() {
         setSchedules={setSchedules}
         modelLabel={modelLabel}
         renderConfigured={renderConfigured}
-        suspendConfirm={suspendConfirm}
-        setSuspendConfirm={setSuspendConfirm}
-        suspendHoldProgress={suspendHoldProgress}
-        onSuspendPointerDown={() => startSuspendHold()}
-        onSuspendPointerUp={() => endSuspendHold(false)}
-        onSuspendPointerLeave={() => endSuspendHold(true)}
+        suspendHold={suspendHold}
         onSuspend={handleSuspend}
         suspending={suspending}
         suspended={suspended}
@@ -424,13 +344,8 @@ function DashboardMain({
   refreshing,
   generating,
   genProgress,
-  holdProgress,
-  holdConfirm,
-  onPointerDown,
-  onPointerUp,
-  onPointerLeave,
+  refreshHold,
   onGenerate,
-  setHoldConfirm,
   historyOpen,
   setHistoryOpen,
   historyTriggerRef,
@@ -443,12 +358,7 @@ function DashboardMain({
   setSchedules,
   modelLabel,
   renderConfigured,
-  suspendConfirm,
-  setSuspendConfirm,
-  suspendHoldProgress,
-  onSuspendPointerDown,
-  onSuspendPointerUp,
-  onSuspendPointerLeave,
+  suspendHold,
   onSuspend,
   suspending,
   suspended,
@@ -508,13 +418,8 @@ function DashboardMain({
         loaded={loaded}
         refreshing={refreshing}
         generating={generating}
-        holdProgress={holdProgress}
-        holdConfirm={holdConfirm}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerLeave}
+        refreshHold={refreshHold}
         onGenerate={onGenerate}
-        setHoldConfirm={setHoldConfirm}
         historyOpen={historyOpen}
         setHistoryOpen={setHistoryOpen}
         historyTriggerRef={historyTriggerRef}
@@ -527,12 +432,7 @@ function DashboardMain({
         modelLabel={modelLabel}
         onNavigateToEmail={handleNavigateToEmail}
         renderConfigured={renderConfigured}
-        suspendConfirm={suspendConfirm}
-        setSuspendConfirm={setSuspendConfirm}
-        suspendHoldProgress={suspendHoldProgress}
-        onSuspendPointerDown={onSuspendPointerDown}
-        onSuspendPointerUp={onSuspendPointerUp}
-        onSuspendPointerLeave={onSuspendPointerLeave}
+        suspendHold={suspendHold}
         onSuspend={onSuspend}
         suspending={suspending}
         suspended={suspended}
