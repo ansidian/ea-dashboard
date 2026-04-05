@@ -3,9 +3,10 @@ import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 import { urgencyStyles } from "../../lib/dashboard-helpers";
 import EmailBody from "./EmailBody";
+import EmailRow from "./EmailRow";
 import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
-import { markEmailAsRead, markAllEmailsAsRead } from "../../api";
+import { markAllEmailsAsRead } from "../../api";
 import { CheckCheck } from "lucide-react";
 import useIsMobile from "../../hooks/useIsMobile";
 import SwipeToReveal from "../ui/SwipeToReveal";
@@ -14,12 +15,6 @@ function MaybeSwipe({ isMobile, onAction, children }) {
   if (!isMobile) return children;
   return <SwipeToReveal onAction={onAction}>{children}</SwipeToReveal>;
 }
-
-const getGmailUrl = (email) => {
-  if (!email.message_id) return null;
-  const idx = email.gmail_index ?? 0;
-  return `https://mail.google.com/mail/u/${idx}/#search/rfc822msgid:${encodeURIComponent(email.message_id)}`;
-};
 
 // Reusable ghost button — eliminates duplicated inline hover handlers
 function GhostAction({ onClick, disabled, children, className: cls, active }) {
@@ -170,207 +165,132 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
           const isCarriedOver = (email.seenCount || 1) >= 2;
           return (
             <MotionItem key={email.id}>
-              <MaybeSwipe isMobile={isMobile} onAction={() => onDismiss(email.id)}>
-              <div
-                ref={(el) => { emailRowRefs.current[email.id] = el; }}
-                data-email-id={email.id}
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  if (isOpen && !e.target.closest("[data-email-header]")) return;
-                  const opening = !isOpen;
-                  setSelectedEmail(opening ? email : null);
-                  if (opening && !markedRead.has(email.id)) {
-                    setMarkedRead(prev => new Set(prev).add(email.id));
-                    markEmailAsRead(email.id).catch(() => {});
-                  }
-                }}
-                className={cn(
-                  "group relative rounded-lg cursor-pointer transition-all duration-150 py-3.5 px-4 pl-5",
-                  isCarriedOver && !isOpen && "opacity-50",
-                )}
-                style={{
-                  background: isOpen ? "rgba(36,36,58,0.6)" : "rgba(36,36,58,0.4)",
-                  border: isOpen ? `1px solid ${currentAccount.color}25` : "1px solid rgba(255,255,255,0.04)",
-                }}
-            >
-              {/* Urgency accent bar */}
-              <div
-                className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
-                style={{
-                  background: s.dot,
-                  opacity: isCarriedOver ? 0.3 : 0.7,
-                  boxShadow: isCarriedOver ? "none" : `0 0 6px ${s.dot}30`,
-                }}
-              />
-
-              {/* Hover bg */}
-              {!isOpen && (
-                <div className="absolute inset-0 rounded-lg bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-150" />
-              )}
-
-              <div
-                data-email-header
-                className={cn(
-                  "relative",
-                  isMobile ? "flex flex-col gap-1" : "flex justify-between items-start gap-3",
-                )}
-              >
-                {isMobile ? (
-                  /* Mobile: subject-first minimal layout */
+              <EmailRow
+                email={email}
+                isOpen={isOpen}
+                dimmed={isCarriedOver}
+                onToggle={(opening) => setSelectedEmail(opening ? email : null)}
+                onMarkRead={!markedRead.has(email.id) ? () => setMarkedRead(prev => new Set(prev).add(email.id)) : undefined}
+                rowRef={(el) => { emailRowRefs.current[email.id] = el; }}
+                borderColor={`${currentAccount.color}25`}
+                preview={email.preview}
+                accentBar={
+                  <div
+                    className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                    style={{
+                      background: s.dot,
+                      opacity: isCarriedOver ? 0.3 : 0.7,
+                      boxShadow: isCarriedOver ? "none" : `0 0 6px ${s.dot}30`,
+                    }}
+                  />
+                }
+                desktopAfterFrom={
                   <>
-                    <div className="text-[13px] font-medium text-foreground/90">
-                      {email.subject}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground/50 truncate">
-                        {email.from}
+                    {isCarriedOver && (
+                      <span className="text-[10px] text-muted-foreground/40">
+                        ↩ previous
                       </span>
-                      {isCarriedOver && (
-                        <span className="text-xs text-muted-foreground/40">↩</span>
-                      )}
-                      {email.hasBill && (
-                        <span className="text-xs font-bold" style={{ color: "#a6e3a1cc" }}>💳</span>
-                      )}
-                      {email.action && (
-                        <span
-                          className="text-xs font-semibold uppercase px-1.5 py-0.5 rounded-md"
-                          style={{ color: s.text, background: s.bg }}
-                        >
-                          {email.action}
-                        </span>
-                      )}
-                    </div>
-                    {!isOpen && email.preview && (
-                      <div className="text-xs text-muted-foreground/40 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
-                        {email.preview}
+                    )}
+                    {email.hasBill && (
+                      <span
+                        className="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded uppercase"
+                        style={{ color: "#a6e3a1cc", background: "rgba(166,227,161,0.08)" }}
+                      >
+                        💳 Bill
+                      </span>
+                    )}
+                  </>
+                }
+                mobileMeta={
+                  <>
+                    {isCarriedOver && (
+                      <span className="text-xs text-muted-foreground/40">↩</span>
+                    )}
+                    {email.hasBill && (
+                      <span className="text-xs font-bold" style={{ color: "#a6e3a1cc" }}>💳</span>
+                    )}
+                    {email.action && (
+                      <span
+                        className="text-xs font-semibold uppercase px-1.5 py-0.5 rounded-md"
+                        style={{ color: s.text, background: s.bg }}
+                      >
+                        {email.action}
+                      </span>
+                    )}
+                  </>
+                }
+                desktopActions={
+                  <>
+                    {confirmDismissId === email.id ? (
+                      <ConfirmChip
+                        label="Dismiss"
+                        color="#a6adc8"
+                        onConfirm={() => { onDismiss(email.id); setConfirmDismissId(null); }}
+                        onCancel={() => setConfirmDismissId(null)}
+                      />
+                    ) : (
+                      <button
+                        className={cn(
+                          "transition-all duration-150 bg-transparent border-none cursor-pointer text-muted-foreground/20 p-1 leading-none rounded hover:text-muted-foreground/60 hover:bg-white/[0.04]",
+                          isCarriedOver ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isCarriedOver) onDismiss(email.id);
+                          else setConfirmDismissId(email.id);
+                        }}
+                        title="Dismiss from briefing"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    )}
+                    {email.action && (
+                      <div
+                        className="text-[9px] font-semibold tracking-wider uppercase rounded-md whitespace-nowrap px-2 py-1"
+                        style={{
+                          color: s.text,
+                          background: s.bg,
+                          border: `1px solid ${s.border}20`,
+                        }}
+                      >
+                        {email.action}
+                      </div>
+                    )}
+                    {email.urgentFlag && (
+                      <div
+                        className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 flex items-center gap-1"
+                        style={{
+                          color: "#f97316",
+                          background: "rgba(249,115,22,0.08)",
+                          border: "1px solid rgba(249,115,22,0.2)",
+                        }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        {email.urgentFlag.label}
                       </div>
                     )}
                   </>
-                ) : (
-                  /* Desktop: original layout */
-                  <>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground/50">
-                          {email.from}
-                        </span>
-                        {isCarriedOver && (
-                          <span className="text-[10px] text-muted-foreground/40">
-                            ↩ previous
-                          </span>
-                        )}
-                        {email.hasBill && (
-                          <span
-                            className="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded uppercase"
-                            style={{ color: "#a6e3a1cc", background: "rgba(166,227,161,0.08)" }}
-                          >
-                            💳 Bill
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[13px] font-medium text-foreground/90 mt-0.5">
-                        {email.subject}
-                      </div>
-                      {!isOpen && email.preview && (
-                        <div className="text-[11px] text-muted-foreground/40 mt-1 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
-                          {email.preview}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {confirmDismissId === email.id ? (
-                        <ConfirmChip
-                          label="Dismiss"
-                          color="#a6adc8"
-                          onConfirm={() => { onDismiss(email.id); setConfirmDismissId(null); }}
-                          onCancel={() => setConfirmDismissId(null)}
-                        />
-                      ) : (
-                        <button
-                          className={cn(
-                            "transition-all duration-150 bg-transparent border-none cursor-pointer text-muted-foreground/20 p-1 leading-none rounded hover:text-muted-foreground/60 hover:bg-white/[0.04]",
-                            isCarriedOver ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isCarriedOver) onDismiss(email.id);
-                            else setConfirmDismissId(email.id);
-                          }}
-                          title="Dismiss from briefing"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </button>
-                      )}
-                      {email.action && (
-                        <div
-                          className="text-[9px] font-semibold tracking-wider uppercase rounded-md whitespace-nowrap px-2 py-1"
-                          style={{
-                            color: s.text,
-                            background: s.bg,
-                            border: `1px solid ${s.border}20`,
-                          }}
-                        >
-                          {email.action}
-                        </div>
-                      )}
-                      {email.urgentFlag && (
-                        <div
-                          className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 flex items-center gap-1"
-                          style={{
-                            color: "#f97316",
-                            background: "rgba(249,115,22,0.08)",
-                            border: "1px solid rgba(249,115,22,0.2)",
-                          }}
-                        >
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                          </svg>
-                          {email.urgentFlag.label}
-                        </div>
-                      )}
-                      {getGmailUrl(email) && (
-                        <a
-                          href={getGmailUrl(email)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          title="Open in Gmail"
-                          className="opacity-0 group-hover:opacity-100 transition-all duration-150 text-muted-foreground/20 hover:text-muted-foreground/60 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
-                        >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                          </svg>
-                        </a>
-                      )}
-                      <MotionChevron isOpen={isOpen} className="text-muted-foreground/40" />
-                    </div>
-                  </>
-                )}
-              </div>
-              <MotionExpand isOpen={isOpen}>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <EmailBody
-                    email={email}
-                    model={model}
-                    onDismiss={onDismiss}
-                    onLoaded={() => {
-                      setLoadingBillId(null);
-                      const row = emailRowRefs.current[email.id];
-                      if (!row) return;
-                      const rect = row.getBoundingClientRect();
-                      // only scroll if the bottom of the expanded row is below the viewport
-                      if (rect.bottom > window.innerHeight) {
-                        row.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                      }
-                    }}
-                  />
-                </div>
-              </MotionExpand>
-              </div>
-              </MaybeSwipe>
+                }
+                hideUrgentFlag
+                wrapper={isMobile ? (props) => <MaybeSwipe isMobile={true} onAction={() => onDismiss(email.id)}>{props.children}</MaybeSwipe> : undefined}
+                emailBodyProps={{
+                  model,
+                  onDismiss,
+                  onLoaded: () => {
+                    setLoadingBillId(null);
+                    const row = emailRowRefs.current[email.id];
+                    if (!row) return;
+                    const rect = row.getBoundingClientRect();
+                    if (rect.bottom > window.innerHeight) {
+                      row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                    }
+                  },
+                }}
+              />
             </MotionItem>
           );
         })}

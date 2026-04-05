@@ -1,19 +1,12 @@
 import { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
-import EmailBody from "./EmailBody";
+import EmailRow from "./EmailRow";
 import BillBadge from "../bills/BillBadge";
-import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motion-wrappers";
-import { markEmailAsRead, markAllEmailsAsRead } from "../../api";
+import { MotionExpand, MotionList, MotionItem } from "../ui/motion-wrappers";
+import { markAllEmailsAsRead } from "../../api";
 import { timeAgo } from "../../lib/dashboard-helpers";
 import { CheckCheck } from "lucide-react";
-import useIsMobile from "../../hooks/useIsMobile";
-
-const getGmailUrl = (email) => {
-  if (!email.message_id) return null;
-  const idx = email.gmail_index ?? 0;
-  return `https://mail.google.com/mail/u/${idx}/#search/rfc822msgid:${encodeURIComponent(email.message_id)}`;
-};
 
 
 function getTimestampColor(dateStr) {
@@ -38,7 +31,6 @@ function getSectionTitle(briefingGeneratedAt) {
 }
 
 export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, delay, className, embedded, onRefreshLive, onTrashedCountChange }) {
-  const isMobile = useIsMobile();
   const [selectedId, setSelectedId] = useState(null);
   const [markedRead, setMarkedRead] = useState(() => new Set());
   const [billPayId, setBillPayId] = useState(null);
@@ -131,239 +123,133 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
           const tsColor = getTimestampColor(email.date);
           return (
             <MotionItem key={email.uid}>
-              <div
-                ref={(el) => { emailRowRefs.current[email.uid] = el; }}
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  if (isOpen && !e.target.closest("[data-email-header]")) return;
-                  const opening = !isOpen;
-                  setSelectedId(opening ? email.uid : null);
-                  if (opening && !markedRead.has(email.uid)) {
-                    setMarkedRead(prev => {
-                      const next = new Set(prev).add(email.uid);
-                      onTrashedCountChange?.(trashedUids.size + next.size);
-                      return next;
-                    });
-                    markEmailAsRead(email.uid).catch(() => {});
-                  }
-                }}
-                className={cn(
-                  "group relative rounded-lg cursor-pointer transition-all duration-150 py-3.5 px-4",
-                  isRead && !isOpen && "opacity-50",
-                )}
-                style={{
-                  background: isOpen ? "rgba(36,36,58,0.6)" : "rgba(36,36,58,0.4)",
-                  border: isOpen
-                    ? "1px solid rgba(99,102,241,0.2)"
-                    : "1px solid rgba(255,255,255,0.04)",
-                }}
-              >
-                {/* Important sender accent */}
-                {email.isImportantSender && (
+              <EmailRow
+                email={email}
+                isOpen={isOpen}
+                dimmed={isRead}
+                onToggle={(opening) => setSelectedId(opening ? email.uid : null)}
+                onMarkRead={!markedRead.has(email.uid) ? () => {
+                  setMarkedRead(prev => {
+                    const next = new Set(prev).add(email.uid);
+                    onTrashedCountChange?.(trashedUids.size + next.size);
+                    return next;
+                  });
+                } : undefined}
+                rowRef={(el) => { emailRowRefs.current[email.uid] = el; }}
+                preview={email.body_preview}
+                accentBar={email.isImportantSender ? (
                   <div
                     className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
                     style={{ background: "#f97316", opacity: 0.7, boxShadow: "0 0 6px rgba(249,115,22,0.3)" }}
                   />
-                )}
-
-                {!isOpen && (
-                  <div className="absolute inset-0 rounded-lg bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-150" />
-                )}
-
-                <div
-                  data-email-header
-                  className={cn(
-                    "relative",
-                    isMobile ? "flex flex-col gap-1" : "flex justify-between items-start gap-3",
-                  )}
-                >
-                  {isMobile ? (
-                    /* Mobile: subject-first minimal layout */
-                    <>
-                      <div className="text-[13px] font-medium text-foreground/90">
-                        {email.subject}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {email.account_icon && (
-                          <span className="text-xs">{email.account_icon}</span>
-                        )}
-                        <span className="text-xs text-muted-foreground/50 truncate">
-                          {email.from}
-                        </span>
-                        {email.isImportantSender && (
-                          <span className="text-xs text-orange-400/80 font-semibold">★</span>
-                        )}
-                        <span className="text-xs text-muted-foreground/30 tabular-nums" style={tsColor ? { color: tsColor } : undefined}>
-                          · {timeAgo(email.date, { compact: true })}
-                        </span>
-                        <button
-                          className={cn(
-                            "transition-all duration-150 bg-transparent border-none cursor-pointer p-0.5 leading-none rounded shrink-0",
-                            isBillPayOpen
-                              ? "text-green-400/80"
-                              : "text-muted-foreground/25",
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setBillPayId(isBillPayOpen ? null : email.uid);
-                          }}
-                          title="Send to Actual Budget"
-                        >
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="12" y1="1" x2="12" y2="23" />
-                            <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-                          </svg>
-                        </button>
-                      </div>
-                      {email.urgentFlag && (
-                        <div
-                          className="text-xs font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 mt-0.5 inline-flex items-center gap-1 w-fit"
-                          style={{
-                            color: "#f97316",
-                            background: "rgba(249,115,22,0.08)",
-                            border: "1px solid rgba(249,115,22,0.2)",
-                          }}
-                        >
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                          </svg>
-                          {email.urgentFlag.label}
-                        </div>
-                      )}
-                      {!isOpen && email.body_preview && (
-                        <div className="text-xs text-muted-foreground/40 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
-                          {email.body_preview}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    /* Desktop: original layout */
-                    <>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          {email.account_icon && (
-                            <span className="text-[10px]">{email.account_icon}</span>
-                          )}
-                          {email.account_label && (
-                            <span className="text-[10px] text-muted-foreground/35">{email.account_label}</span>
-                          )}
-                          <span
-                            className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ background: email.account_color || "#6366f1" }}
-                          />
-                          <span className="text-[11px] text-muted-foreground/50">
-                            {email.from}
-                          </span>
-                          {email.isImportantSender && (
-                            <span className="text-[9px] text-orange-400/80 font-semibold tracking-wide">
-                              ★
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[13px] font-medium text-foreground/90 mt-0.5">
-                          {email.subject}
-                        </div>
-                        {email.urgentFlag && (
-                          <div
-                            className="text-[9px] font-semibold tracking-wide rounded-md whitespace-nowrap px-2 py-1 mt-1 inline-flex items-center gap-1 w-fit"
-                            style={{
-                              color: "#f97316",
-                              background: "rgba(249,115,22,0.08)",
-                              border: "1px solid rgba(249,115,22,0.2)",
-                            }}
-                          >
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                            </svg>
-                            {email.urgentFlag.label}
-                          </div>
-                        )}
-                        {!isOpen && email.body_preview && (
-                          <div className="text-[11px] text-muted-foreground/40 mt-1 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
-                            {email.body_preview}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span
-                          className="text-[10px] text-muted-foreground/30 tabular-nums"
-                          style={tsColor ? { color: tsColor } : undefined}
-                        >
-                          {timeAgo(email.date, { compact: true })}
-                        </span>
-                        <button
-                          className={cn(
-                            "transition-all duration-150 bg-transparent border-none cursor-pointer p-1 leading-none rounded",
-                            isBillPayOpen
-                              ? "text-green-400/80 bg-green-400/[0.08]"
-                              : "text-muted-foreground/20 opacity-0 group-hover:opacity-100 hover:text-green-400/60 hover:bg-white/[0.04]",
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setBillPayId(isBillPayOpen ? null : email.uid);
-                          }}
-                          title="Send to Actual Budget"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="12" y1="1" x2="12" y2="23" />
-                            <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-                          </svg>
-                        </button>
-                        {getGmailUrl(email) && (
-                          <a
-                            href={getGmailUrl(email)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            title="Open in Gmail"
-                            className="opacity-0 group-hover:opacity-100 transition-all duration-150 text-muted-foreground/20 hover:text-muted-foreground/60 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
-                          >
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-                            </svg>
-                          </a>
-                        )}
-                        <MotionChevron isOpen={isOpen} className="text-muted-foreground/40" />
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Bill pay panel — opens inline below header */}
-                <MotionExpand isOpen={isBillPayOpen}>
-                  <div onClick={(e) => e.stopPropagation()} className="mt-3 pt-3 border-t border-white/[0.06]">
-                    <BillBadge bill={{}} model={null} />
-                  </div>
-                </MotionExpand>
-
-                {/* Email body */}
-                <MotionExpand isOpen={isOpen}>
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <EmailBody
-                      email={email}
-                      model={null}
-                      onDismiss={(uid) => {
-                        setTrashedUids(prev => {
-                          const next = new Set(prev).add(uid);
-                          onTrashedCountChange?.(next.size + markedRead.size);
-                          return next;
-                        });
-                        setSelectedId(null);
-                      }}
-                      onLoaded={() => {
-                        const row = emailRowRefs.current[email.uid];
-                        if (!row) return;
-                        const rect = row.getBoundingClientRect();
-                        // only scroll if the bottom of the expanded row is below the viewport
-                        if (rect.bottom > window.innerHeight) {
-                          row.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                        }
-                      }}
+                ) : null}
+                desktopMeta={
+                  <>
+                    {email.account_icon && (
+                      <span className="text-[10px]">{email.account_icon}</span>
+                    )}
+                    {email.account_label && (
+                      <span className="text-[10px] text-muted-foreground/35">{email.account_label}</span>
+                    )}
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                      style={{ background: email.account_color || "#6366f1" }}
                     />
-                  </div>
-                </MotionExpand>
-              </div>
+                  </>
+                }
+                desktopAfterFrom={email.isImportantSender ? (
+                  <span className="text-[9px] text-orange-400/80 font-semibold tracking-wide">
+                    ★
+                  </span>
+                ) : null}
+                mobileBeforeFrom={email.account_icon ? (
+                  <span className="text-xs">{email.account_icon}</span>
+                ) : null}
+                mobileMeta={
+                  <>
+                    {email.isImportantSender && (
+                      <span className="text-xs text-orange-400/80 font-semibold">★</span>
+                    )}
+                    <span className="text-xs text-muted-foreground/30 tabular-nums" style={tsColor ? { color: tsColor } : undefined}>
+                      · {timeAgo(email.date, { compact: true })}
+                    </span>
+                  </>
+                }
+                mobileActions={
+                  <button
+                    className={cn(
+                      "transition-all duration-150 bg-transparent border-none cursor-pointer p-0.5 leading-none rounded shrink-0",
+                      isBillPayOpen
+                        ? "text-green-400/80"
+                        : "text-muted-foreground/25",
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBillPayId(isBillPayOpen ? null : email.uid);
+                    }}
+                    title="Send to Actual Budget"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="1" x2="12" y2="23" />
+                      <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                    </svg>
+                  </button>
+                }
+                desktopActions={
+                  <>
+                    <span
+                      className="text-[10px] text-muted-foreground/30 tabular-nums"
+                      style={tsColor ? { color: tsColor } : undefined}
+                    >
+                      {timeAgo(email.date, { compact: true })}
+                    </span>
+                    <button
+                      className={cn(
+                        "transition-all duration-150 bg-transparent border-none cursor-pointer p-1 leading-none rounded",
+                        isBillPayOpen
+                          ? "text-green-400/80 bg-green-400/[0.08]"
+                          : "text-muted-foreground/20 opacity-0 group-hover:opacity-100 hover:text-green-400/60 hover:bg-white/[0.04]",
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBillPayId(isBillPayOpen ? null : email.uid);
+                      }}
+                      title="Send to Actual Budget"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="1" x2="12" y2="23" />
+                        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                      </svg>
+                    </button>
+                  </>
+                }
+                extraExpanded={
+                  <MotionExpand isOpen={isBillPayOpen}>
+                    <div onClick={(e) => e.stopPropagation()} className="mt-3 pt-3 border-t border-white/[0.06]">
+                      <BillBadge bill={{}} model={null} />
+                    </div>
+                  </MotionExpand>
+                }
+                emailBodyProps={{
+                  model: null,
+                  onDismiss: (uid) => {
+                    setTrashedUids(prev => {
+                      const next = new Set(prev).add(uid);
+                      onTrashedCountChange?.(next.size + markedRead.size);
+                      return next;
+                    });
+                    setSelectedId(null);
+                  },
+                  onLoaded: () => {
+                    const row = emailRowRefs.current[email.uid];
+                    if (!row) return;
+                    const rect = row.getBoundingClientRect();
+                    if (rect.bottom > window.innerHeight) {
+                      row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                    }
+                  },
+                }}
+              />
             </MotionItem>
           );
         })}
