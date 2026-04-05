@@ -22,7 +22,8 @@ export default function InsightsSection({
   staleCount = 0,
   aiGeneratedAt,
 }) {
-  if (!insights?.length || staleCount >= 2) return null;
+  if (!insights?.length) return null;
+  const isStale = staleCount >= 1;
 
   return (
     <Section
@@ -34,7 +35,7 @@ export default function InsightsSection({
       summaryBadge={`${insights.length} item${insights.length !== 1 ? "s" : ""}`}
       defaultExpanded
     >
-      {staleCount === 1 && aiGeneratedAt && (
+      {isStale && aiGeneratedAt && (
         <p
           className="text-[10px] leading-none mb-2"
           style={{ color: "rgba(255,255,255,0.25)" }}
@@ -47,6 +48,7 @@ export default function InsightsSection({
         loaded={loaded}
         delay={delay + 100}
         stagger={0.06}
+        style={isStale ? { opacity: 0.5 } : undefined}
       >
         {insights.map((insight, i) => (
           <MotionItem
