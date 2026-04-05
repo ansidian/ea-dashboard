@@ -68,7 +68,13 @@ export default function useLiveData({ disabled = false } = {}) {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (disabled) return;
+    if (disabled) {
+      setLiveBills([]);
+      setRecentTransactions([]);
+      setBillsLoading(true);
+      setActualConfigured(true);
+      return;
+    }
     fetchLive();
     startInterval();
 

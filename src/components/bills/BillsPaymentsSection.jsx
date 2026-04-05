@@ -61,9 +61,8 @@ function urgencyColor(days) {
   return { accent: "#a6e3a1", text: "rgba(205,214,244,0.5)", bg: "rgba(205,214,244,0.04)" };
 }
 
-export default function BillsPaymentsSection({ bills, recentTransactions, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, loaded, delay, className }) {
+export default function BillsPaymentsSection({ bills, recentTransactions, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, isMock, loaded, delay, className }) {
   // in mock mode, simulate loading for 8s then stop
-  const isMock = new URLSearchParams(window.location.search).has("mock");
   const [mockLoading, setMockLoading] = useState(true);
   useEffect(() => {
     if (!isMock) return;
@@ -130,7 +129,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
   const scheduledTotal = scheduledBills.reduce((sum, b) => sum + (b.amount || 0), 0);
   const combinedTotal = totalBills + scheduledTotal;
 
-  const showLoading = billsLoading && actualConfigured;
+  const showLoading = billsLoading && actualConfigured && !scheduledBills.length;
   const doneEmpty = !billsLoading && !scheduledBills.length && actualConfigured;
 
   // after loading finishes with no content at all, show confirmation then fade out
@@ -150,7 +149,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
   return (
     <div
       style={{
-        maxHeight: collapsing ? 0 : 500,
+        maxHeight: collapsing ? 0 : 1000,
         opacity: collapsing ? 0 : 1,
         overflow: "hidden",
         transition: collapsing ? "max-height 400ms ease-in, opacity 300ms ease-out" : "none",
@@ -392,6 +391,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
 
           {/* Populated bills */}
           {scheduledBills.length > 0 && (
+          <div style={{ maxHeight: 320, overflowY: "auto", overscrollBehavior: "contain" }}>
           <MotionList className="flex flex-col gap-1" loaded={loaded} delay={delay + 200} stagger={0.04}>
             {scheduledBills.map((bill) => {
               const days = daysUntil(bill.next_date);
@@ -438,6 +438,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
               );
             })}
           </MotionList>
+          </div>
           )}
         </div>
       )}
