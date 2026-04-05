@@ -3,6 +3,29 @@ import Section from "../layout/Section";
 import { typeLabels } from "../../lib/dashboard-helpers";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
+import { useState, useEffect, useRef } from "react";
+
+const LOADING_MESSAGES = [
+  "Pulling in bills from Actual...",
+  "Asking Actual nicely...",
+  "Crunching the numbers...",
+  "Fetching the damage...",
+  "Rounding up the usual suspects...",
+  "Shaking the budget tree...",
+  "Checking what you owe the universe...",
+  "Consulting the financial oracle...",
+  "Counting your obligations...",
+  "Seeing who wants your money...",
+];
+
+function shuffleArray(arr) {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
 function formatAmount(amount) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
@@ -38,7 +61,22 @@ function urgencyColor(days) {
   return { accent: "#a6e3a1", text: "rgba(205,214,244,0.5)", bg: "rgba(205,214,244,0.04)" };
 }
 
-export default function BillsPaymentsSection({ bills, loaded, delay, className }) {
+export default function BillsPaymentsSection({ bills, billsLoading, actualConfigured, loaded, delay, className }) {
+  const [loadingMsg, setLoadingMsg] = useState(() => LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
+  const [fadingOut, setFadingOut] = useState(false);
+  const shuffledRef = useRef(shuffleArray(LOADING_MESSAGES));
+  const indexRef = useRef(0);
+
+  useEffect(() => {
+    if (!billsLoading || !actualConfigured) return;
+    const interval = setInterval(() => {
+      indexRef.current = (indexRef.current + 1) % shuffledRef.current.length;
+      if (indexRef.current === 0) shuffledRef.current = shuffleArray(LOADING_MESSAGES);
+      setLoadingMsg(shuffledRef.current[indexRef.current]);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [billsLoading, actualConfigured]);
+
   const {
     billEmails, totalBills, emailAccounts,
     selectedEmail, setSelectedEmail,
@@ -51,7 +89,18 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
   const scheduledTotal = scheduledBills.reduce((sum, b) => sum + (b.amount || 0), 0);
   const combinedTotal = totalBills + scheduledTotal;
 
-  if (!emailBills.length && !scheduledBills.length) return null;
+  const showLoading = billsLoading && actualConfigured;
+
+  // fade out when loading finishes with no content
+  useEffect(() => {
+    if (!billsLoading && !emailBills.length && !scheduledBills.length && actualConfigured) {
+      const timer = setTimeout(() => setFadingOut(true), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [billsLoading, emailBills.length, scheduledBills.length, actualConfigured]);
+
+  if (!showLoading && !emailBills.length && !scheduledBills.length) return null;
+  if (fadingOut && !emailBills.length && !scheduledBills.length) return null;
 
   return (
     <Section
@@ -99,6 +148,44 @@ export default function BillsPaymentsSection({ bills, loaded, delay, className }
           </div>
         )}
       </div>
+
+      {/* Loading state — Actual Budget bills being fetched */}
+      {showLoading && (
+        <div style={{ padding: "12px 0 4px" }}>
+          <div
+            style={{
+              color: "rgba(205,214,244,0.4)",
+              fontSize: 12,
+              marginBottom: 8,
+              transition: "opacity 200ms ease",
+            }}
+          >
+            {loadingMsg}
+          </div>
+          <div
+            style={{
+              height: 2,
+              borderRadius: 1,
+              background: "rgba(166,227,161,0.1)",
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                height: "100%",
+                width: "40%",
+                borderRadius: 1,
+                background: "linear-gradient(90deg, transparent, rgba(166,227,161,0.5), transparent)",
+                animation: "shimmerSlide 1.5s ease-in-out infinite",
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Needs Attention — email-detected bills */}
       {emailBills.length > 0 && (
