@@ -5,6 +5,7 @@ import EmailBody from "./EmailBody";
 import BillBadge from "../bills/BillBadge";
 import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motion-wrappers";
 import { markEmailAsRead, markAllEmailsAsRead } from "../../api";
+import { timeAgo } from "../../lib/dashboard-helpers";
 import { CheckCheck } from "lucide-react";
 import useIsMobile from "../../hooks/useIsMobile";
 
@@ -14,16 +15,6 @@ const getGmailUrl = (email) => {
   return `https://mail.google.com/mail/u/${idx}/#search/rfc822msgid:${encodeURIComponent(email.message_id)}`;
 };
 
-function formatRelativeTime(dateStr) {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 function getTimestampColor(dateStr) {
   if (!dateStr) return undefined;
@@ -90,7 +81,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
   }
 
   const briefingTime = briefingGeneratedAt
-    ? formatRelativeTime(briefingGeneratedAt + "Z")
+    ? timeAgo(briefingGeneratedAt + "Z", { compact: true })
     : null;
 
   const content = (
@@ -204,7 +195,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                           <span className="text-xs text-orange-400/80 font-semibold">★</span>
                         )}
                         <span className="text-xs text-muted-foreground/30 tabular-nums" style={tsColor ? { color: tsColor } : undefined}>
-                          · {formatRelativeTime(email.date)}
+                          · {timeAgo(email.date, { compact: true })}
                         </span>
                         <button
                           className={cn(
@@ -299,7 +290,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                           className="text-[10px] text-muted-foreground/30 tabular-nums"
                           style={tsColor ? { color: tsColor } : undefined}
                         >
-                          {formatRelativeTime(email.date)}
+                          {timeAgo(email.date, { compact: true })}
                         </span>
                         <button
                           className={cn(

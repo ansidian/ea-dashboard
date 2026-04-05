@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { getBriefingHistory, getBriefingById } from "../../api";
 import { transformBriefing } from "../../transform";
+import { timeAgo } from "../../lib/dashboard-helpers";
 import useIsMobile from "../../hooks/useIsMobile";
 import BottomSheet from "../ui/BottomSheet";
 
@@ -40,15 +41,6 @@ function groupByDate(items) {
   return groups;
 }
 
-function timeAgo(date) {
-  const diff = Date.now() - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
 
 export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, onClose, onDelete }) {
   const isMobile = useIsMobile();

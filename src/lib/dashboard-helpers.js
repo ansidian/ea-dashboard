@@ -75,9 +75,19 @@ export function formatRelativeDate(dateStr) {
   return due.toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: TZ });
 }
 
-export function timeAgo(isoString) {
-  if (!isoString) return null;
-  const diff = Date.now() - new Date(isoString).getTime();
+export function timeAgo(input, { compact = false } = {}) {
+  if (!input) return null;
+  const ts = input instanceof Date ? input.getTime() : new Date(input).getTime();
+  const diff = Date.now() - ts;
+  if (compact) {
+    const secs = Math.floor(diff / 1000);
+    if (secs < 60) return `${secs}s`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    return `${Math.floor(hrs / 24)}d`;
+  }
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
