@@ -250,16 +250,16 @@ graph LR
     Request --> TP[trust proxy]
     TP --> JSON[express.json]
     JSON --> Cookie[cookieParser]
-    Cookie --> CSRF{CSRF Check<br/>x-requested-with header}
+    Cookie --> CSRF{"CSRF Check\n(x-requested-with header)"}
     CSRF -->|non-GET| Validate
     CSRF -->|GET/HEAD/OPTIONS| Route
     Validate --> Route
 
-    Route --> Auth[/api/auth]
-    Route --> Briefing[/api/briefing]
-    Route --> EA[/api/ea]
-    Route --> Search[/api/search]
-    Route --> Live[/api/live]
+    Route --> Auth["/api/auth"]
+    Route --> Briefing["/api/briefing"]
+    Route --> EA["/api/ea"]
+    Route --> Search["/api/search"]
+    Route --> Live["/api/live"]
 
     Briefing --> ReqAuth[requireAuth middleware]
     EA --> ReqAuth
