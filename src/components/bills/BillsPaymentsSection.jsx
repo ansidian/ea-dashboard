@@ -61,7 +61,18 @@ function urgencyColor(days) {
   return { accent: "#a6e3a1", text: "rgba(205,214,244,0.5)", bg: "rgba(205,214,244,0.04)" };
 }
 
-export default function BillsPaymentsSection({ bills, billsLoading, actualConfigured, loaded, delay, className }) {
+export default function BillsPaymentsSection({ bills, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, loaded, delay, className }) {
+  // in mock mode, simulate loading for 8s then stop
+  const isMock = new URLSearchParams(window.location.search).has("mock");
+  const [mockLoading, setMockLoading] = useState(true);
+  useEffect(() => {
+    if (!isMock) return;
+    const timer = setTimeout(() => setMockLoading(false), 8000);
+    return () => clearTimeout(timer);
+  }, [isMock]);
+  const billsLoading = isMock ? mockLoading : billsLoadingProp;
+  const actualConfigured = isMock ? true : actualConfiguredProp;
+
   const [shuffled] = useState(() => shuffleArray(LOADING_MESSAGES));
   const [loadingMsg, setLoadingMsg] = useState(() => shuffled[0]);
   const [fadingOut, setFadingOut] = useState(false);
