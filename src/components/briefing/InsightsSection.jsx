@@ -5,7 +5,7 @@ function formatStaleLabel(aiGeneratedAt) {
   if (!aiGeneratedAt) return null;
   const dt = new Date(aiGeneratedAt.endsWith("Z") ? aiGeneratedAt : aiGeneratedAt + "Z");
   const now = new Date();
-  const diffH = Math.round((now - dt) / 3_600_000);
+  const diffH = Math.floor((now - dt) / 3_600_000);
   if (diffH < 1) return "less than an hour ago";
   if (diffH < 24) return `${diffH}h ago`;
   const day = dt.toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", weekday: "long" });
