@@ -62,10 +62,10 @@ function urgencyColor(days) {
 }
 
 export default function BillsPaymentsSection({ bills, billsLoading, actualConfigured, loaded, delay, className }) {
-  const [loadingMsg, setLoadingMsg] = useState(() => LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
-  const [fadingOut, setFadingOut] = useState(false);
   const shuffledRef = useRef(shuffleArray(LOADING_MESSAGES));
   const indexRef = useRef(0);
+  const [loadingMsg, setLoadingMsg] = useState(() => shuffledRef.current[0]);
+  const [fadingOut, setFadingOut] = useState(false);
 
   useEffect(() => {
     if (!billsLoading || !actualConfigured) return;
@@ -97,6 +97,7 @@ export default function BillsPaymentsSection({ bills, billsLoading, actualConfig
       const timer = setTimeout(() => setFadingOut(true), 300);
       return () => clearTimeout(timer);
     }
+    setFadingOut(false);
   }, [billsLoading, emailBills.length, scheduledBills.length, actualConfigured]);
 
   if (!showLoading && !emailBills.length && !scheduledBills.length) return null;
@@ -165,7 +166,7 @@ export default function BillsPaymentsSection({ bills, billsLoading, actualConfig
           <div
             style={{
               height: 2,
-              borderRadius: 1,
+              borderRadius: 2,
               background: "rgba(166,227,161,0.1)",
               overflow: "hidden",
               position: "relative",
@@ -178,7 +179,7 @@ export default function BillsPaymentsSection({ bills, billsLoading, actualConfig
                 left: 0,
                 height: "100%",
                 width: "40%",
-                borderRadius: 1,
+                borderRadius: 2,
                 background: "linear-gradient(90deg, transparent, rgba(166,227,161,0.5), transparent)",
                 animation: "shimmerSlide 1.5s ease-in-out infinite",
               }}
