@@ -12,6 +12,11 @@ import WeatherTooltip from "../shared/WeatherTooltip";
 
 const btnHeader = "bg-input-bg border border-white/[0.08] rounded-md px-2.5 py-1 text-[11px] text-muted-foreground font-medium transition-all flex items-center gap-1 cursor-pointer font-[inherit] select-none hover:bg-white/[0.06] hover:border-white/15 hover:text-foreground/80 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed max-sm:min-h-[44px] max-sm:text-xs max-sm:shrink-0";
 
+const CONFIRM_INITIAL = { opacity: 0, y: -8, height: 0 };
+const CONFIRM_ANIMATE = { opacity: 1, y: 0, height: "auto" };
+const CONFIRM_EXIT = { opacity: 0, y: -8, height: 0 };
+const CONFIRM_TRANSITION = { duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] };
+
 const btnHeaderActive = "bg-primary/[0.08] border-primary/20 text-primary hover:bg-primary/[0.08] hover:border-primary/20 hover:text-primary";
 
 export default function DashboardHeader({
@@ -56,14 +61,14 @@ export default function DashboardHeader({
   const weatherRef = useRef(null);
   const weatherLeaveTimer = useRef(null);
   const [weatherHover, setWeatherHover] = useState(false);
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 60_000);
     return () => clearInterval(id);
   }, []);
 
   // Compute next upcoming briefing
-  const { nextBriefing, nextSkipped } = (() => {
+  const { nextBriefing, nextSkipped } = useMemo(() => {
     const now = new Date();
     const enabled = schedules
       .map((s, i) => ({ ...s, _idx: i }))
@@ -106,7 +111,8 @@ export default function DashboardHeader({
     const soonest = enabled[0] || null;
     if (soonest?.isSkipped) return { nextBriefing: null, nextSkipped: soonest };
     return { nextBriefing: active, nextSkipped: skipped };
-  })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedules, tick]); // tick triggers re-computation of "now" each minute
 
   const briefingIndicator = nextBriefing || nextSkipped;
 
@@ -134,10 +140,10 @@ export default function DashboardHeader({
       <AnimatePresence>
         {holdConfirm && (
           <motion.div
-            initial={{ opacity: 0, y: -8, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: "auto" }}
-            exit={{ opacity: 0, y: -8, height: 0 }}
-            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+            initial={CONFIRM_INITIAL}
+            animate={CONFIRM_ANIMATE}
+            exit={CONFIRM_EXIT}
+            transition={CONFIRM_TRANSITION}
             style={{ overflow: "hidden" }}
           >
             <div
@@ -178,10 +184,10 @@ export default function DashboardHeader({
       <AnimatePresence>
         {suspendConfirm && (
           <motion.div
-            initial={{ opacity: 0, y: -8, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: "auto" }}
-            exit={{ opacity: 0, y: -8, height: 0 }}
-            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+            initial={CONFIRM_INITIAL}
+            animate={CONFIRM_ANIMATE}
+            exit={CONFIRM_EXIT}
+            transition={CONFIRM_TRANSITION}
             style={{ overflow: "hidden" }}
           >
             <div
@@ -221,10 +227,10 @@ export default function DashboardHeader({
       <AnimatePresence>
         {suspended && (
           <motion.div
-            initial={{ opacity: 0, y: -8, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: "auto" }}
-            exit={{ opacity: 0, y: -8, height: 0 }}
-            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+            initial={CONFIRM_INITIAL}
+            animate={CONFIRM_ANIMATE}
+            exit={CONFIRM_EXIT}
+            transition={CONFIRM_TRANSITION}
             style={{ overflow: "hidden" }}
           >
             <div
