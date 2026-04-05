@@ -78,7 +78,6 @@ function UrgentFlag({ email, size = "desktop" }) {
  * - hideUrgentFlag — suppress built-in UrgentFlag rendering (parent handles it in desktopActions)
  * - borderColor    — open-state border color (default: rgba(99,102,241,0.2))
  * - emailBodyProps — additional props passed to EmailBody (model, onDismiss, onLoaded)
- * - wrapper        — optional wrapper component (e.g. MaybeSwipe)
  * - className      — extra classes on the outer container
  */
 export default function EmailRow({
@@ -100,7 +99,6 @@ export default function EmailRow({
   hideUrgentFlag,
   borderColor = "rgba(99,102,241,0.2)",
   emailBodyProps,
-  wrapper: Wrapper,
   className: cls,
 }) {
   const isMobile = useIsMobile();
@@ -211,6 +209,5 @@ export default function EmailRow({
     </div>
   );
 
-  if (Wrapper) return <Wrapper>{row}</Wrapper>;
   return row;
 }

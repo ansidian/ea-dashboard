@@ -165,6 +165,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
           const isCarriedOver = (email.seenCount || 1) >= 2;
           return (
             <MotionItem key={email.id}>
+              <MaybeSwipe isMobile={isMobile} onAction={() => onDismiss(email.id)}>
               <EmailRow
                 email={email}
                 isOpen={isOpen}
@@ -276,7 +277,6 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                   </>
                 }
                 hideUrgentFlag
-                wrapper={isMobile ? (props) => <MaybeSwipe isMobile={true} onAction={() => onDismiss(email.id)}>{props.children}</MaybeSwipe> : undefined}
                 emailBodyProps={{
                   model,
                   onDismiss,
@@ -291,6 +291,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                   },
                 }}
               />
+              </MaybeSwipe>
             </MotionItem>
           );
         })}
