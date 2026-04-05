@@ -107,7 +107,9 @@ export default function BillsPaymentsSection({ bills, billsLoading: billsLoading
       const eb = e.extractedBill;
       return !scheduledBills.some((sb) => {
         if (!sb.payee || !eb.payee) return false;
-        if (sb.payee.toLowerCase() !== eb.payee.toLowerCase()) return false;
+        const a = sb.payee.toLowerCase();
+        const b = eb.payee.toLowerCase();
+        if (a !== b && !a.includes(b) && !b.includes(a)) return false;
         if (eb.amount > 0 && sb.amount > 0 && Math.abs(sb.amount - eb.amount) / sb.amount > 0.1) return false;
         if (eb.due_date && sb.next_date) {
           const diff = Math.abs(new Date(eb.due_date) - new Date(sb.next_date));
