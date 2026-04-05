@@ -286,6 +286,8 @@ function DashboardMain({
 
         <BillsPaymentsSection
           bills={liveData.liveBills}
+          billsLoading={liveData.billsLoading}
+          actualConfigured={liveData.actualConfigured}
           loaded={loaded}
           delay={400}
           className={halfClass}
