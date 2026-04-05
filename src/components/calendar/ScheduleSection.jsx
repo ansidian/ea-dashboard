@@ -27,31 +27,49 @@ function derivePassedState(events) {
   }));
 }
 
-const NowMarker = forwardRef(function NowMarker({ time, top, textZone, dodgeFlag }, ref) {
-  const lineStyle = {};
-  if (textZone) {
-    // Solid background — mask controls all visibility
-    lineStyle.background = "#cba6da";
-    const s = textZone.startPct;
-    const e = textZone.endPct;
-    const mask = `linear-gradient(90deg, black 0%, black ${s}%, rgba(0,0,0,0.1) ${s + 2}%, rgba(0,0,0,0.1) ${e}%, black ${e + 4}%, black 92%, transparent 100%)`;
-    lineStyle.maskImage = mask;
-    lineStyle.WebkitMaskImage = mask;
-  } else {
-    lineStyle.background = "linear-gradient(90deg, #cba6da 0%, transparent 100%)";
-  }
+const NowMarker = forwardRef(function NowMarker(
+  { time, top, textSpan, flagInset },
+  ref,
+) {
+  const lineRef = useRef(null);
+
+  // Apply mask when line crosses over card text content
+  useEffect(() => {
+    const el = lineRef.current;
+    if (!el) return;
+    if (!textSpan) {
+      el.style.background =
+        "linear-gradient(90deg, #cba6da 0%, transparent 100%)";
+      el.style.maskImage = "";
+      el.style.webkitMaskImage = "";
+      return;
+    }
+    const w = el.offsetWidth;
+    const { start, end } = textSpan;
+    const clampedEnd = Math.min(end, w);
+    const hasRoom = clampedEnd + 24 < w;
+    const mask = hasRoom
+      ? `linear-gradient(90deg, black 0px, black ${start}px, rgba(0,0,0,0.12) ${start + 8}px, rgba(0,0,0,0.12) ${clampedEnd}px, black ${clampedEnd + 16}px, black ${w - 40}px, transparent 100%)`
+      : `linear-gradient(90deg, black 0px, black ${start}px, rgba(0,0,0,0.12) ${start + 8}px, rgba(0,0,0,0.12) ${w - 8}px, transparent 100%)`;
+    el.style.background = "#cba6da";
+    el.style.maskImage = mask;
+    el.style.webkitMaskImage = mask;
+  }, [textSpan]);
 
   return (
     <div
       ref={ref}
-      className="absolute left-0 right-0 flex items-center gap-2 z-10 pointer-events-none"
-      style={{ top, transition: "top 1s ease" }}
+      className="absolute left-5 right-0 flex items-center gap-2 z-10 pointer-events-none"
+      style={{ top, right: flagInset || undefined, transition: "top 1s ease" }}
     >
-      <div className="flex-1 h-px" style={lineStyle} />
-      <span
-        className="text-[10px] max-sm:text-xs font-semibold tabular-nums text-[#cba6da] shrink-0 pointer-events-auto"
-        style={dodgeFlag ? { transform: "translateY(-12px)" } : undefined}
-      >
+      <div
+        ref={lineRef}
+        className="flex-1 h-px"
+        style={{
+          background: "linear-gradient(90deg, #cba6da 0%, transparent 100%)",
+        }}
+      />
+      <span className="text-[10px] max-sm:text-xs font-semibold tabular-nums text-[#cba6da] shrink-0 pointer-events-auto">
         {time}
       </span>
     </div>
@@ -347,14 +365,16 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
   const [markerTop, setMarkerTop] = useState(null);
   const prevMarkerTopRef = useRef(null);
   const [inProgressIdx, setInProgressIdx] = useState(-1);
-  const [textZone, setTextZone] = useState(null);
+  const [textSpan, setTextSpan] = useState(null);
+  const [flagInset, setFlagInset] = useState(0);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useLayoutEffect(() => {
     if (view !== "today" || !liveCalendar?.length) {
       setMarkerTop(null);
       setInProgressIdx(-1);
-      setTextZone(null);
+      setTextSpan(null);
+      setFlagInset(0);
       return;
     }
     const cards = cardRefsRef.current;
@@ -366,29 +386,80 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
 
     if (ipIdx >= 0 && cards[ipIdx]) {
       const card = cards[ipIdx];
-      const progress = (nowMs - liveCalendar[ipIdx].startMs)
-        / (liveCalendar[ipIdx].endMs - liveCalendar[ipIdx].startMs);
+      const progress =
+        (nowMs - liveCalendar[ipIdx].startMs) /
+        (liveCalendar[ipIdx].endMs - liveCalendar[ipIdx].startMs);
       setMarkerTop(card.offsetTop + progress * card.offsetHeight);
       setInProgressIdx(ipIdx);
 
-      // Measure text zone from the inner card div's flex children
+      // Measure text content boundaries relative to the card's left edge.
+      // Card and line share the same left origin within the pl-5 container.
       const innerCard = card.firstElementChild;
       if (innerCard) {
-        const children = Array.from(innerCard.children).filter(
-          el => getComputedStyle(el).position !== "absolute"
+        const cardLeft = innerCard.getBoundingClientRect().left;
+        const cardRight = innerCard.getBoundingClientRect().right;
+        const flowKids = Array.from(innerCard.children).filter(
+          (el) => getComputedStyle(el).position !== "absolute",
         );
-        if (children.length) {
-          const first = children[0];
-          const last = children[children.length - 1];
-          const startPx = first.offsetLeft;
-          const endPx = last.offsetLeft + last.offsetWidth;
-          const cardWidth = innerCard.offsetWidth;
-          setTextZone({ startPct: startPx / cardWidth * 100, endPct: endPx / cardWidth * 100 });
+
+        // Measure flag badge inset — if the last flow child is a shrink-0
+        // flag, the marker should end before it
+        const lastKid = flowKids[flowKids.length - 1];
+        const lastIsFlag =
+          lastKid &&
+          getComputedStyle(lastKid).flexShrink === "0" &&
+          getComputedStyle(lastKid).flexGrow !== "1";
+        if (lastIsFlag) {
+          // card right padding (12px) + flag width + gap (12px)
+          setFlagInset(cardRight - lastKid.getBoundingClientRect().left + 16);
         } else {
-          setTextZone(null);
+          setFlagInset(0);
+        }
+
+        if (flowKids.length >= 2) {
+          const start =
+            flowKids[0].getBoundingClientRect().left - cardLeft - 12;
+          // Find the rightmost visible content edge. The title div is flex-1
+          // so its bounding rect fills the row — measure actual text width
+          // with canvas instead.
+          let end = 0;
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          for (const child of flowKids) {
+            if (getComputedStyle(child).flexGrow === "1") {
+              for (const inner of child.children) {
+                const cs = getComputedStyle(inner);
+                if (cs.display === "block") {
+                  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+                  const textW = ctx.measureText(inner.textContent).width;
+                  const innerLeft =
+                    inner.getBoundingClientRect().left - cardLeft;
+                  end = Math.max(
+                    end,
+                    innerLeft + Math.min(textW, inner.clientWidth),
+                  );
+                } else {
+                  end = Math.max(
+                    end,
+                    inner.getBoundingClientRect().right - cardLeft,
+                  );
+                }
+              }
+            } else if (!lastIsFlag || child !== lastKid) {
+              // Skip the flag from text span measurement
+              end = Math.max(
+                end,
+                child.getBoundingClientRect().right - cardLeft,
+              );
+            }
+          }
+          setTextSpan({ start, end: end + 6 });
+        } else {
+          setTextSpan(null);
         }
       } else {
-        setTextZone(null);
+        setTextSpan(null);
+        setFlagInset(0);
       }
       return;
     }
@@ -399,7 +470,8 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
     if (firstFutureIdx === 0) {
       setMarkerTop(0);
       setInProgressIdx(-1);
-      setTextZone(null);
+      setTextSpan(null);
+      setFlagInset(0);
       return;
     }
 
@@ -407,7 +479,8 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
       const prev = cards[firstFutureIdx - 1];
       setMarkerTop(prev.offsetTop + prev.offsetHeight);
       setInProgressIdx(-1);
-      setTextZone(null);
+      setTextSpan(null);
+      setFlagInset(0);
       return;
     }
 
@@ -416,13 +489,15 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
     if (cards[lastIdx]) {
       setMarkerTop(cards[lastIdx].offsetTop + cards[lastIdx].offsetHeight);
       setInProgressIdx(-1);
-      setTextZone(null);
+      setTextSpan(null);
+      setFlagInset(0);
       return;
     }
 
     setMarkerTop(null);
     setInProgressIdx(-1);
-    setTextZone(null);
+    setTextSpan(null);
+    setFlagInset(0);
   }, [liveCalendar, nowMs, view]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -494,7 +569,9 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
               ref={timelineRef}
               className="max-h-[400px] overflow-y-auto"
               style={{ overscrollBehavior: "contain" }}
-              onScroll={() => { lastUserScrollRef.current = Date.now(); }}
+              onScroll={() => {
+                lastUserScrollRef.current = Date.now();
+              }}
             >
               <div className="relative pl-5">
                 {/* Timeline spine */}
@@ -508,14 +585,19 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                     ref={nowMarkerRef}
                     time={nowTime}
                     top={markerTop}
-                    textZone={textZone}
-                    dodgeFlag={inProgressIdx >= 0 && liveCalendar[inProgressIdx]?.flag}
+                    textSpan={textSpan}
+                    flagInset={flagInset}
                   />
                 )}
 
                 <div ref={listRef} className="flex flex-col gap-1">
                   {liveCalendar.map((event, i) => (
-                    <div key={i} ref={el => { cardRefsRef.current[i] = el; }}>
+                    <div
+                      key={i}
+                      ref={(el) => {
+                        cardRefsRef.current[i] = el;
+                      }}
+                    >
                       {/* Event card */}
                       <div
                         className={cn(
@@ -526,13 +608,15 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                           event.passed ? "opacity-40" : "hover:bg-card/80",
                         )}
                         style={{
-                          border: i === inProgressIdx
-                            ? "1px solid rgba(203,166,218,0.15)"
-                            : event.flag === "Conflict"
-                              ? "1px solid rgba(243,139,168,0.2)"
-                              : "1px solid rgba(255,255,255,0.04)",
+                          border:
+                            i === inProgressIdx
+                              ? "1px solid rgba(203,166,218,0.15)"
+                              : event.flag === "Conflict"
+                                ? "1px solid rgba(243,139,168,0.2)"
+                                : "1px solid rgba(255,255,255,0.04)",
                           ...(i === inProgressIdx && {
-                            boxShadow: "0 0 12px rgba(203,166,218,0.06), inset 0 0 0 1px rgba(203,166,218,0.05)",
+                            boxShadow:
+                              "0 0 12px rgba(203,166,218,0.06), inset 0 0 0 1px rgba(203,166,218,0.05)",
                           }),
                         }}
                       >
@@ -559,16 +643,22 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                           style={{
                             background: event.color,
                             opacity: event.passed ? 0.3 : 0.7,
-                            boxShadow: event.passed ? "none" : `0 0 6px ${event.color}30`,
+                            boxShadow: event.passed
+                              ? "none"
+                              : `0 0 6px ${event.color}30`,
                           }}
                         />
 
                         {/* Time + duration */}
                         <div className="min-w-[72px] ml-1">
-                          <div className={cn(
-                            "text-[13px] font-semibold tabular-nums",
-                            event.passed ? "text-muted-foreground" : "text-foreground",
-                          )}>
+                          <div
+                            className={cn(
+                              "text-[13px] font-semibold tabular-nums",
+                              event.passed
+                                ? "text-muted-foreground"
+                                : "text-foreground",
+                            )}
+                          >
                             {event.time}
                           </div>
                           <div className="text-[10px] max-sm:text-xs text-muted-foreground/50">
@@ -598,7 +688,10 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                             >
                               <span
                                 className="w-1.5 h-1.5 rounded-full shrink-0"
-                                style={{ background: event.color, opacity: 0.7 }}
+                                style={{
+                                  background: event.color,
+                                  opacity: 0.7,
+                                }}
                               />
                               {event.source}
                             </span>
@@ -619,7 +712,6 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                           </div>
                         )}
                       </div>
-
                     </div>
                   ))}
 
@@ -627,18 +719,24 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                   {hasTomorrow && (
                     <>
                       <TomorrowDivider />
-                      <TomorrowEventList events={tomorrowCalendar} showSource={showSource} opacity={todayEmpty ? 0.65 : 0.55} />
+                      <TomorrowEventList
+                        events={tomorrowCalendar}
+                        showSource={showSource}
+                        opacity={todayEmpty ? 0.65 : 0.55}
+                      />
                     </>
                   )}
+                </div>
               </div>
             </div>
-          </div>
           ) : hasTomorrow ? (
             <div
               ref={timelineRef}
               className="max-h-[400px] overflow-y-auto"
               style={{ overscrollBehavior: "contain" }}
-              onScroll={() => { lastUserScrollRef.current = Date.now(); }}
+              onScroll={() => {
+                lastUserScrollRef.current = Date.now();
+              }}
             >
               <div className="relative pl-5">
                 {/* Timeline spine */}
@@ -649,26 +747,46 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                 <div className="flex flex-col gap-1">
                   <NowMarker ref={nowMarkerRef} time={nowTime} />
                   <TomorrowDivider />
-                  <TomorrowEventList events={tomorrowCalendar} showSource={showSource} opacity={0.65} />
+                  <TomorrowEventList
+                    events={tomorrowCalendar}
+                    showSource={showSource}
+                    opacity={0.65}
+                  />
                 </div>
               </div>
             </div>
           ) : (
             <div className="py-8 text-center">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2.5 text-muted-foreground/20">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mx-auto mb-2.5 text-muted-foreground/20"
+              >
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                 <line x1="16" y1="2" x2="16" y2="6" />
                 <line x1="8" y1="2" x2="8" y2="6" />
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
-              <div className="text-[11px] max-sm:text-xs text-muted-foreground/50">No events scheduled today or tomorrow</div>
+              <div className="text-[11px] max-sm:text-xs text-muted-foreground/50">
+                No events scheduled today or tomorrow
+              </div>
             </div>
           )}
         </>
       )}
 
       {view === "next-week" && (
-        <NextWeekView events={nextWeekCalendar} showSource={showSource} scrollRef={nextWeekScrollRef} />
+        <NextWeekView
+          events={nextWeekCalendar}
+          showSource={showSource}
+          scrollRef={nextWeekScrollRef}
+        />
       )}
     </Section>
   );
