@@ -57,7 +57,7 @@ export default function EmailTabSection({
         emailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, duration * 0.6);
     });
-  }, [activeTab]);
+  }, [activeTab, emailSectionRef]);
 
   function onTransitionEnd(e) {
     if (e.target !== containerRef.current) return;

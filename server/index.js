@@ -15,7 +15,7 @@ import searchRoutes from "./routes/search.js";
 import liveRoutes from "./routes/live.js";
 import { initScheduler } from "./briefing/scheduler.js";
 import { migrate } from "./db/migrate.js";
-import { validateSession } from "./middleware/auth.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

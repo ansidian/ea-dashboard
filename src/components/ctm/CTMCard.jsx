@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { motion } from "motion/react";
 import { todayPacific, toPacificDate, formatFullDate } from "../../lib/dashboard-helpers";
 import Tooltip from "../shared/Tooltip";
 import { MotionExpand, MotionChevron } from "../ui/motion-wrappers";

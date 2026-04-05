@@ -78,7 +78,7 @@ export default function useLiveData({ disabled = false } = {}) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchLive, startInterval]);
+  }, [fetchLive, startInterval, disabled]);
 
   return {
     liveEmails,

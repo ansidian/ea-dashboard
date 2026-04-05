@@ -41,6 +41,7 @@ function event(sundayDate, dayOffset, hour, min, durationMin, title, color = "#4
     flag: null,
     allDay: false,
     startMs,
+    endMs,
     passed: false,
     dayLabel: dayLabel(startMs),
   };
