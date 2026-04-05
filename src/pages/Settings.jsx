@@ -384,6 +384,7 @@ export default function Settings() {
             type="number" min="1" max="72" value={lookbackHours}
             onChange={e => setLookbackHours(Math.max(1, Math.min(72, parseInt(e.target.value) || 16)))}
             className="w-[70px] text-center"
+            autoComplete="off" data-1p-ignore data-lpignore="true"
           />
           <span className="text-[13px] text-muted-foreground/70">hours</span>
         </div>
