@@ -71,11 +71,17 @@ export function getMetadata(userId) {
       await actualApi.init({ serverURL, password });
       await actualApi.downloadBudget(syncId);
 
-      const [rawAccounts, rawPayees, groups, schedules] = await Promise.all([
+      const monthAgo = new Date(Date.now() - 30 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+      const [rawAccounts, rawPayees, groups, schedules, recentTxns] = await Promise.all([
         actualApi.getAccounts(),
         actualApi.getPayees(),
         actualApi.getCategoryGroups(),
         getSchedulesWithConditions().catch(() => []),
+        actualApi.runQuery(
+          actualApi.q("transactions")
+            .filter({ date: { $gte: monthAgo } })
+            .select(["id", "date", "amount", "payee"])
+        ).then(r => r.data).catch(() => []),
       ]);
 
       const accounts = rawAccounts
@@ -97,7 +103,16 @@ export function getMetadata(userId) {
           categories: (g.categories || []).map(c => ({ id: c.id, name: c.name })),
         }));
 
-      const result = { accounts, payees, payeeMap, categories, schedules };
+      // Map recent transactions to { payee, amount, date } for client-side bill cross-reference
+      const recentTransactions = recentTxns
+        .filter(t => t.payee && t.amount)
+        .map(t => ({
+          payee: payeeMap[t.payee] || "",
+          amount: Math.abs(t.amount) / 100,
+          date: t.date,
+        }));
+
+      const result = { accounts, payees, payeeMap, categories, schedules, recentTransactions };
       metadataCache = { data: result, ts: Date.now() };
       return result;
     } finally {
@@ -110,6 +125,11 @@ export function getMetadata(userId) {
 export async function getAccounts(userId) {
   const { accounts } = await getMetadata(userId);
   return accounts;
+}
+
+export async function getRecentTransactions(userId) {
+  const { recentTransactions } = await getMetadata(userId);
+  return recentTransactions;
 }
 
 export async function getPayees(userId) {

@@ -286,6 +286,7 @@ function DashboardMain({
 
         <BillsPaymentsSection
           bills={liveData.liveBills}
+          recentTransactions={liveData.recentTransactions}
           billsLoading={liveData.billsLoading}
           actualConfigured={liveData.actualConfigured}
           loaded={loaded}

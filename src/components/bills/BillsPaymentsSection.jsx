@@ -61,7 +61,7 @@ function urgencyColor(days) {
   return { accent: "#a6e3a1", text: "rgba(205,214,244,0.5)", bg: "rgba(205,214,244,0.04)" };
 }
 
-export default function BillsPaymentsSection({ bills, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, loaded, delay, className }) {
+export default function BillsPaymentsSection({ bills, recentTransactions, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, loaded, delay, className }) {
   // in mock mode, simulate loading for 8s then stop
   const isMock = new URLSearchParams(window.location.search).has("mock");
   const [mockLoading, setMockLoading] = useState(true);
@@ -99,26 +99,33 @@ export default function BillsPaymentsSection({ bills, billsLoading: billsLoading
   const allEmailBills = billEmails.filter((e) => e.extractedBill);
   const scheduledBills = useMemo(() => bills || [], [bills]);
 
-  // Client-side cross-reference: suppress email bills that match a scheduled payment
-  // (same payee, amount within 10%, due dates within 7 days)
+  // Combine scheduled bills + recent transactions for cross-reference matching
+  const txns = useMemo(() => recentTransactions || [], [recentTransactions]);
+  const actionedItems = useMemo(() => [
+    ...scheduledBills.map(b => ({ payee: b.payee, amount: b.amount, date: b.next_date })),
+    ...txns.map(t => ({ payee: t.payee, amount: t.amount, date: t.date })),
+  ], [scheduledBills, txns]);
+
+  // Client-side cross-reference: suppress email bills already actioned in Actual Budget
+  // (fuzzy payee, amount within 5%, dates within 30 days)
   const emailBills = useMemo(() => {
-    if (!scheduledBills.length) return allEmailBills;
+    if (!actionedItems.length) return allEmailBills;
     return allEmailBills.filter((e) => {
       const eb = e.extractedBill;
-      return !scheduledBills.some((sb) => {
-        if (!sb.payee || !eb.payee) return false;
-        const a = sb.payee.toLowerCase();
+      return !actionedItems.some((item) => {
+        if (!item.payee || !eb.payee) return false;
+        const a = item.payee.toLowerCase();
         const b = eb.payee.toLowerCase();
         if (a !== b && !a.includes(b) && !b.includes(a)) return false;
-        if (eb.amount > 0 && sb.amount > 0 && Math.abs(sb.amount - eb.amount) / sb.amount > 0.1) return false;
-        if (eb.due_date && sb.next_date) {
-          const diff = Math.abs(new Date(eb.due_date) - new Date(sb.next_date));
-          if (diff > 7 * 86400000) return false;
+        if (eb.amount > 0 && item.amount > 0 && Math.abs(item.amount - eb.amount) / item.amount > 0.05) return false;
+        if (eb.due_date && item.date) {
+          const diff = Math.abs(new Date(eb.due_date) - new Date(item.date));
+          if (diff > 30 * 86400000) return false;
         }
         return true;
       });
     });
-  }, [allEmailBills, scheduledBills]);
+  }, [allEmailBills, actionedItems]);
 
   const scheduledTotal = scheduledBills.reduce((sum, b) => sum + (b.amount || 0), 0);
   const combinedTotal = totalBills + scheduledTotal;

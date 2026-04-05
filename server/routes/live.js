@@ -6,7 +6,7 @@ import { fetchEmails as fetchGmailEmails } from "../briefing/gmail.js";
 import { fetchEmails as fetchIcloudEmails } from "../briefing/icloud.js";
 import { fetchCalendar, getNextWeekRange, getTomorrowRange } from "../briefing/calendar.js";
 import { fetchWeather } from "../briefing/weather.js";
-import { getUpcomingBills } from "../briefing/actual.js";
+import { getUpcomingBills, getRecentTransactions } from "../briefing/actual.js";
 import { decrypt } from "../briefing/encryption.js";
 
 const router = Router();
@@ -146,7 +146,7 @@ router.get("/all", async (req, res) => {
       }),
     ];
 
-    const [emailArrays, calendar, nextWeekCalendar, tomorrowCalendar, weather, bills] = await Promise.all([
+    const [emailArrays, calendar, nextWeekCalendar, tomorrowCalendar, weather, bills, recentTransactions] = await Promise.all([
       Promise.all(emailPromises).then(arrays => arrays.flat()),
       fetchCalendar(calendarAccounts).catch(err => {
         console.error("[Live] Calendar fetch failed:", err.message);
@@ -170,6 +170,12 @@ router.get("/all", async (req, res) => {
       settings.actual_budget_url
         ? getUpcomingBills(userId).catch(err => {
             console.error("[Live] Actual Budget fetch failed:", err.message);
+            return [];
+          })
+        : Promise.resolve([]),
+      settings.actual_budget_url
+        ? getRecentTransactions(userId).catch(err => {
+            console.error("[Live] Actual Budget recent transactions fetch failed:", err.message);
             return [];
           })
         : Promise.resolve([]),
@@ -204,6 +210,7 @@ router.get("/all", async (req, res) => {
       tomorrowCalendar,
       weather: weatherWithLocation,
       bills,
+      recentTransactions,
       actualConfigured: !!settings.actual_budget_url,
       importantSenders: Array.from(importantSendersMap.values()),
       briefingGeneratedAt,

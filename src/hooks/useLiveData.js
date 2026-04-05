@@ -10,6 +10,7 @@ export default function useLiveData({ disabled = false } = {}) {
   const [liveTomorrowCalendar, setLiveTomorrowCalendar] = useState(null);
   const [liveWeather, setLiveWeather] = useState(null);
   const [liveBills, setLiveBills] = useState([]);
+  const [recentTransactions, setRecentTransactions] = useState([]);
   const [importantSenders, setImportantSenders] = useState([]);
   const [briefingGeneratedAt, setBriefingGeneratedAt] = useState(null);
   const [briefingReadStatus, setBriefingReadStatus] = useState({});
@@ -34,6 +35,7 @@ export default function useLiveData({ disabled = false } = {}) {
       setLiveTomorrowCalendar(data.tomorrowCalendar || null);
       setLiveWeather(data.weather || null);
       setLiveBills(data.bills || []);
+      setRecentTransactions(data.recentTransactions || []);
       setImportantSenders(data.importantSenders || []);
       setBriefingGeneratedAt(data.briefingGeneratedAt || null);
       setBriefingReadStatus(data.briefingReadStatus || {});
@@ -92,6 +94,7 @@ export default function useLiveData({ disabled = false } = {}) {
     liveTomorrowCalendar,
     liveWeather,
     liveBills,
+    recentTransactions,
     importantSenders,
     briefingGeneratedAt,
     briefingReadStatus,
