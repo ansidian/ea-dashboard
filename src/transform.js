@@ -22,6 +22,7 @@ export function transformBriefing(raw) {
     dataUpdatedAt: b.dataUpdatedAt || null,
     aiGeneratedAt: b.aiGeneratedAt || null,
     skippedAI: b.skippedAI || false,
+    nonAiGenerationCount: b.nonAiGenerationCount || 0,
     weather: {
       ...b.weather,
       hourly: (b.weather?.hourly || []).map(h => ({

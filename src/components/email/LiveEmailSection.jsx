@@ -149,7 +149,11 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                   const opening = !isOpen;
                   setSelectedId(opening ? email.uid : null);
                   if (opening && !markedRead.has(email.uid)) {
-                    setMarkedRead(prev => new Set(prev).add(email.uid));
+                    setMarkedRead(prev => {
+                      const next = new Set(prev).add(email.uid);
+                      onTrashedCountChange?.(trashedUids.size + next.size);
+                      return next;
+                    });
                     markEmailAsRead(email.uid).catch(() => {});
                   }
                 }}
@@ -202,6 +206,24 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                         <span className="text-xs text-muted-foreground/30 tabular-nums" style={tsColor ? { color: tsColor } : undefined}>
                           · {formatRelativeTime(email.date)}
                         </span>
+                        <button
+                          className={cn(
+                            "transition-all duration-150 bg-transparent border-none cursor-pointer p-0.5 leading-none rounded shrink-0",
+                            isBillPayOpen
+                              ? "text-green-400/80"
+                              : "text-muted-foreground/25",
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBillPayId(isBillPayOpen ? null : email.uid);
+                          }}
+                          title="Send to Actual Budget"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="1" x2="12" y2="23" />
+                            <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                          </svg>
+                        </button>
                       </div>
                       {email.urgentFlag && (
                         <div
@@ -333,7 +355,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                       onDismiss={(uid) => {
                         setTrashedUids(prev => {
                           const next = new Set(prev).add(uid);
-                          onTrashedCountChange?.(next.size);
+                          onTrashedCountChange?.(next.size + markedRead.size);
                           return next;
                         });
                         setSelectedId(null);

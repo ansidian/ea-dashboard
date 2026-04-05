@@ -183,9 +183,9 @@ router.get("/all", async (req, res) => {
       }
     }
 
-    // Filter to only new emails not in the briefing
+    // Filter to only new unread emails not in the briefing
     const newEmails = emailArrays
-      .filter(e => !knownUids.has(e.uid))
+      .filter(e => !knownUids.has(e.uid) && !e.read)
       .map(e => ({
         ...e,
         isImportantSender: importantSenderAddresses.has(extractEmailAddress(e.from)),

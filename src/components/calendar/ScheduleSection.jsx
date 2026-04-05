@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, forwardRef } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
+import useIsMobile from "../../hooks/useIsMobile";
 
 function useNowTick() {
   const fmt = () => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
@@ -339,6 +340,7 @@ function NextWeekView({ events, showSource, scrollRef }) {
 }
 
 export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCalendar, loaded, delay, style, className }) {
+  const isMobile = useIsMobile();
   const { time: nowTime, tick, nowMs } = useNowTick();
   const [view, setView] = useState("today");
   const nextWeekScrollRef = useRef(0);
@@ -349,6 +351,7 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
   const listRef = useRef(null);
 
   // Derive passed state client-side so the now marker moves live
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- tick forces recomputation every minute
   const liveCalendar = useMemo(() => derivePassedState(calendar), [calendar, tick]);
   const hasTomorrow = tomorrowCalendar?.length > 0;
   const todayEmpty = !liveCalendar?.length;
@@ -368,7 +371,6 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
   const [textSpan, setTextSpan] = useState(null);
   const [flagInset, setFlagInset] = useState(0);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useLayoutEffect(() => {
     if (view !== "today" || !liveCalendar?.length) {
       setMarkerTop(null);
@@ -499,20 +501,19 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
     setTextSpan(null);
     setFlagInset(0);
   }, [liveCalendar, nowMs, view]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Smooth scroll to now marker on mount and briefing refresh
+  // Smooth scroll to now marker on mount and briefing refresh (desktop only)
   useEffect(() => {
-    if (view !== "today" || !nowMarkerRef.current) return;
+    if (isMobile || view !== "today" || !nowMarkerRef.current) return;
     const timer = setTimeout(() => {
       nowMarkerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 300);
     return () => clearTimeout(timer);
-  }, [calendar, view]);
+  }, [calendar, view, isMobile]);
 
-  // Auto-scroll when marker jumps significantly (crossed an event boundary)
+  // Auto-scroll when marker jumps significantly (desktop only)
   useEffect(() => {
-    if (view !== "today" || markerTop == null) return;
+    if (isMobile || view !== "today" || markerTop == null) return;
     const prev = prevMarkerTopRef.current;
     prevMarkerTopRef.current = markerTop;
     // Only scroll on large jumps (crossed a card), not smooth per-tick movement
@@ -522,7 +523,7 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
     if (Date.now() - lastUserScrollRef.current < 10_000) return;
 
     nowMarkerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [markerTop, view]);
+  }, [markerTop, view, isMobile]);
 
   const titleContent = (
     <div className="flex items-center gap-3">

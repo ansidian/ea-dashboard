@@ -543,6 +543,8 @@ function DashboardMain({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-6">
         <InsightsSection
           insights={d.aiInsights}
+          staleCount={d.nonAiGenerationCount || 0}
+          aiGeneratedAt={d.aiGeneratedAt}
           loaded={loaded}
           delay={200}
           className={halfClass}

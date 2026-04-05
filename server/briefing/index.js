@@ -517,7 +517,11 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 
     await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${unreadNew.length} unread new, ${readNew.length} read · Analyzing...`);
 
-    if (unreadNew.length === 0 && !calendarChanged && prevBriefing) {
+    // Force AI if last call was >16h ago (prevents perpetual skips for clean-inbox users)
+    const aiStale = !prevBriefing?.aiGeneratedAt ||
+      (Date.now() - new Date(prevBriefing.aiGeneratedAt).getTime()) > 16 * 60 * 60 * 1000;
+
+    if (unreadNew.length === 0 && !calendarChanged && prevBriefing && !aiStale) {
       await updateProgress(briefingId, "No new data — refreshing weather and deadlines...");
       console.log("[EA] No new emails or data changes — cloning previous briefing with fresh weather");
       const cloned = { ...prevBriefing };
@@ -542,6 +546,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       if (scheduleLabel) cloned.scheduleLabel = scheduleLabel;
       // Keep previous aiGeneratedAt to indicate AI didn't re-run
       cloned.skippedAI = true;
+      cloned.nonAiGenerationCount = (prevBriefing.nonAiGenerationCount || 0) + 1;
 
       const elapsed = Date.now() - startTime;
       await db.execute({
@@ -637,6 +642,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     briefingJson.generatedAt = nowPacific();
     briefingJson.dataUpdatedAt = new Date().toISOString();
     briefingJson.aiGeneratedAt = new Date().toISOString();
+    briefingJson.nonAiGenerationCount = 0;
     if (scheduleLabel) briefingJson.scheduleLabel = scheduleLabel;
     if (!isEmbeddingAvailable()) briefingJson.ragUnavailable = true;
 

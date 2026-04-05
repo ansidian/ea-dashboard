@@ -1,14 +1,28 @@
 import Section from "../layout/Section";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 
+function formatStaleLabel(aiGeneratedAt) {
+  if (!aiGeneratedAt) return null;
+  const dt = new Date(aiGeneratedAt.endsWith("Z") ? aiGeneratedAt : aiGeneratedAt + "Z");
+  const now = new Date();
+  const diffH = Math.round((now - dt) / 3_600_000);
+  if (diffH < 1) return "less than an hour ago";
+  if (diffH < 24) return `${diffH}h ago`;
+  const day = dt.toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", weekday: "long" });
+  const time = dt.toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" });
+  return `${day} ${time}`;
+}
+
 export default function InsightsSection({
   insights,
   loaded,
   delay,
   style,
   className,
+  staleCount = 0,
+  aiGeneratedAt,
 }) {
-  if (!insights?.length) return null;
+  if (!insights?.length || staleCount >= 2) return null;
 
   return (
     <Section
@@ -20,6 +34,14 @@ export default function InsightsSection({
       summaryBadge={`${insights.length} item${insights.length !== 1 ? "s" : ""}`}
       defaultExpanded
     >
+      {staleCount === 1 && aiGeneratedAt && (
+        <p
+          className="text-[10px] leading-none mb-2"
+          style={{ color: "rgba(255,255,255,0.25)" }}
+        >
+          From AI briefing {formatStaleLabel(aiGeneratedAt)}
+        </p>
+      )}
       <MotionList
         className="flex flex-col gap-1.5"
         loaded={loaded}
