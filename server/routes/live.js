@@ -204,6 +204,7 @@ router.get("/all", async (req, res) => {
       tomorrowCalendar,
       weather: weatherWithLocation,
       bills,
+      actualConfigured: !!settings.actual_budget_url,
       importantSenders: Array.from(importantSendersMap.values()),
       briefingGeneratedAt,
       briefingReadStatus,
