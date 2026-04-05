@@ -15,6 +15,8 @@ export default function useLiveData({ disabled = false } = {}) {
   const [briefingReadStatus, setBriefingReadStatus] = useState({});
   const [lastFetched, setLastFetched] = useState(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [billsLoading, setBillsLoading] = useState(true);
+  const [actualConfigured, setActualConfigured] = useState(false);
   const intervalRef = useRef(null);
   const mountedRef = useRef(true);
   const fetchingRef = useRef(false);
@@ -36,8 +38,11 @@ export default function useLiveData({ disabled = false } = {}) {
       setBriefingGeneratedAt(data.briefingGeneratedAt || null);
       setBriefingReadStatus(data.briefingReadStatus || {});
       setLastFetched(data.fetchedAt || new Date().toISOString());
+      setActualConfigured(data.actualConfigured || false);
+      setBillsLoading(false);
     } catch (err) {
       console.error("[Live] Fetch failed:", err.message);
+      setBillsLoading(false);
     } finally {
       fetchingRef.current = false;
       if (mountedRef.current) setIsPolling(false);
@@ -92,6 +97,8 @@ export default function useLiveData({ disabled = false } = {}) {
     briefingReadStatus,
     lastFetched,
     isPolling,
+    billsLoading,
+    actualConfigured,
     refreshNow,
   };
 }
