@@ -209,6 +209,21 @@ router.patch("/accounts/:id", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const { id } = req.params;
   const { calendar_enabled, label, color, icon, gmail_index } = req.body;
+
+  // input validation
+  if (label !== undefined && (typeof label !== "string" || label.length > 50)) {
+    return res.status(400).json({ message: "Label must be a string under 50 characters" });
+  }
+  if (color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(color)) {
+    return res.status(400).json({ message: "Color must be a valid hex color (e.g. #ff5500)" });
+  }
+  if (icon !== undefined && icon !== null && (typeof icon !== "string" || icon.length > 50)) {
+    return res.status(400).json({ message: "Icon must be a string under 50 characters or null" });
+  }
+  if (gmail_index !== undefined && (!Number.isInteger(gmail_index) || gmail_index < 0 || gmail_index > 9)) {
+    return res.status(400).json({ message: "Gmail index must be an integer 0-9" });
+  }
+
   try {
     const updates = [];
     const args = [];

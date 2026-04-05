@@ -101,7 +101,8 @@ router.get("/in-progress", async (req, res) => {
     });
     if (!result.rows.length) return res.json({ generating: false });
     res.json({ generating: true, id: result.rows[0].id, progress: result.rows[0].progress });
-  } catch {
+  } catch (err) {
+    console.error("[Briefing] Error checking generation status:", err.message);
     res.json({ generating: false });
   }
 });

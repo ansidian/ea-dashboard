@@ -1,3 +1,6 @@
+import DOMPurify from "dompurify";
+// eslint-disable-next-line no-unused-vars
+import { motion } from "motion/react";
 import { todayPacific, toPacificDate, formatFullDate } from "../../lib/dashboard-helpers";
 import Tooltip from "../shared/Tooltip";
 import { MotionExpand, MotionChevron } from "../ui/motion-wrappers";
@@ -160,7 +163,7 @@ export default function CTMCard({ task, expanded, onToggle, onComplete, onStatus
           <div className="text-[13px] font-medium text-foreground/90 mt-0.5">{task.title}</div>
           <MotionExpand isOpen={expanded}>
             <div className="mt-2 pt-2 border-t border-white/[0.04]">
-              {task.description && <div className="ctm-desc" dangerouslySetInnerHTML={{ __html: task.description }} />}
+              {task.description && <div className="ctm-desc" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.description) }} />}
             </div>
           </MotionExpand>
         </div>

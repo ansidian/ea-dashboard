@@ -17,6 +17,14 @@ import { initScheduler } from "./briefing/scheduler.js";
 import { migrate } from "./db/migrate.js";
 
 
+// fail fast if critical env vars are missing
+const REQUIRED_ENV = ["EA_USER_ID", "EA_PASSWORD_HASH", "EA_ENCRYPTION_KEY"];
+const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missing.length) {
+  console.error(`[EA] Missing required env vars: ${missing.join(", ")}`);
+  process.exit(1);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 

@@ -52,7 +52,7 @@ async function getPooledClient(email, password) {
 }
 
 // Periodically close idle connections
-setInterval(() => {
+const poolCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [email, entry] of pool) {
     if (now - entry.lastUsed > POOL_TTL) {
@@ -61,6 +61,7 @@ setInterval(() => {
     }
   }
 }, 60_000);
+poolCleanupTimer.unref(); // don't keep process alive just for cleanup
 
 export async function fetchEmails(account, password, hoursBack) {
   const client = await getPooledClient(account.email, password);
