@@ -62,10 +62,11 @@ function urgencyColor(days) {
 }
 
 export default function BillsPaymentsSection({ bills, billsLoading, actualConfigured, loaded, delay, className }) {
-  const shuffledRef = useRef(shuffleArray(LOADING_MESSAGES));
-  const indexRef = useRef(0);
-  const [loadingMsg, setLoadingMsg] = useState(() => shuffledRef.current[0]);
+  const [shuffled] = useState(() => shuffleArray(LOADING_MESSAGES));
+  const [loadingMsg, setLoadingMsg] = useState(() => shuffled[0]);
   const [fadingOut, setFadingOut] = useState(false);
+  const indexRef = useRef(0);
+  const shuffledRef = useRef(shuffled);
 
   useEffect(() => {
     if (!billsLoading || !actualConfigured) return;
@@ -97,7 +98,6 @@ export default function BillsPaymentsSection({ bills, billsLoading, actualConfig
       const timer = setTimeout(() => setFadingOut(true), 300);
       return () => clearTimeout(timer);
     }
-    setFadingOut(false);
   }, [billsLoading, emailBills.length, scheduledBills.length, actualConfigured]);
 
   if (!showLoading && !emailBills.length && !scheduledBills.length) return null;
