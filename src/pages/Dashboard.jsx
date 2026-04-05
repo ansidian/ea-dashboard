@@ -89,17 +89,18 @@ export default function Dashboard() {
     bd.setBriefing(prev => {
       if (!prev?.emails?.accounts) return prev;
       let changed = false;
-      const updated = JSON.parse(JSON.stringify(prev));
-      for (const acct of updated.emails.accounts) {
-        for (const e of acct.important) {
+      const accounts = prev.emails.accounts.map(acct => {
+        const important = acct.important.map(e => {
           if (!e.read && (status[e.uid] || status[e.id])) {
-            e.read = true;
             changed = true;
+            return { ...e, read: true };
           }
-        }
-        if (changed) acct.unread = acct.important.filter(e => !e.read).length;
-      }
-      return changed ? updated : prev;
+          return e;
+        });
+        if (important === acct.important) return acct;
+        return { ...acct, important, unread: important.filter(e => !e.read).length };
+      });
+      return changed ? { ...prev, emails: { ...prev.emails, accounts } } : prev;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- bd.setBriefing is a stable setState
   }, [liveData.briefingReadStatus]);
