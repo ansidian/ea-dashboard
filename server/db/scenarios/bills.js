@@ -66,3 +66,4 @@ export default function bills(briefing) {
 }
 
 bills.description = "Adds bill/payment emails with extractedBill data for bill detection testing";
+bills.category = "Email";

@@ -39,3 +39,4 @@ export default function tomorrowEvents(briefing) {
 }
 
 tomorrowEvents.description = "Adds tomorrow calendar events for testing the continuous timeline";
+tomorrowEvents.category = "Calendar";

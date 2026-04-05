@@ -107,3 +107,4 @@ export default function nextWeek(briefing) {
 }
 
 nextWeek.description = "Adds next-week calendar events and blended AI insights referencing them";
+nextWeek.category = "Calendar";

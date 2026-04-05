@@ -116,6 +116,29 @@ export default function useBriefingData({ liveData, isMock }) {
       });
   }, [isMock]);
 
+  // --- Dev scenario live apply ---
+
+  useEffect(() => {
+    const handler = async (e) => {
+      const scenarios = e.detail?.scenarios;
+      try {
+        setLoading(true);
+        const res = await getLatestBriefing(scenarios);
+        const transformed = transformBriefing(res.briefing);
+        setBriefing(transformed);
+        setLatestBriefing(transformed);
+        setLatestId(res.id);
+        setViewingPast(null);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    window.addEventListener("devpanel:apply", handler);
+    return () => window.removeEventListener("devpanel:apply", handler);
+  }, []);
+
   // --- Actions ---
 
   async function handleQuickRefresh() {

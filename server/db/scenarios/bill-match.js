@@ -80,3 +80,4 @@ export default function billMatch(briefing) {
 }
 
 billMatch.description = "Self-contained bill cross-reference demo — discrepancy flagged, match suppressed, new bill detected";
+billMatch.category = "Email";

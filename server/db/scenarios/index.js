@@ -28,6 +28,7 @@ export function listScenarios() {
     key,
     name: fn.name || key,
     description: fn.description || "",
+    category: fn.category || "Other",
   }));
 }
 

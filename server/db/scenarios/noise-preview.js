@@ -16,3 +16,4 @@ export default function noisePreview(briefing) {
 }
 
 noisePreview.description = "Adds noise emails with IDs for inline body preview testing";
+noisePreview.category = "Email";

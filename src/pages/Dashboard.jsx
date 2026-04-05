@@ -20,7 +20,14 @@ const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevP
 import useNotifications from "../hooks/useNotifications";
 
 export default function Dashboard() {
-  const isMock = new URLSearchParams(window.location.search).has("mock");
+  const [isMock, setIsMock] = useState(() => new URLSearchParams(window.location.search).has("mock"));
+
+  useEffect(() => {
+    const handler = (e) => setIsMock(e.detail.scenarios != null);
+    window.addEventListener("devpanel:apply", handler);
+    return () => window.removeEventListener("devpanel:apply", handler);
+  }, []);
+
   const liveData = useLiveData({ disabled: isMock });
   useNotifications(liveData);
 
@@ -158,6 +165,7 @@ export default function Dashboard() {
         generating={bd.generating}
         genProgress={bd.genProgress}
         liveData={liveData}
+        isMock={isMock}
         onNavigateToEmail={bd.navigateToEmail}
         headerProps={{
           refreshing: bd.refreshing,
@@ -195,6 +203,7 @@ function DashboardMain({
   generating,
   genProgress,
   liveData,
+  isMock,
   onNavigateToEmail,
   headerProps,
 }) {
@@ -289,6 +298,7 @@ function DashboardMain({
           recentTransactions={liveData.recentTransactions}
           billsLoading={liveData.billsLoading}
           actualConfigured={liveData.actualConfigured}
+          isMock={isMock}
           loaded={loaded}
           delay={400}
           className={halfClass}

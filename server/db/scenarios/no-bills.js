@@ -17,3 +17,4 @@ export default function noBills(briefing) {
 }
 
 noBills.description = "Removes all bill emails — tests loading shimmer and empty bills fade-out";
+noBills.category = "States";

@@ -40,3 +40,4 @@ export default function urgentFlags(briefing) {
 }
 
 urgentFlags.description = "Adds urgentFlag badges to emails with time-sensitive deadlines";
+urgentFlags.category = "Email";
