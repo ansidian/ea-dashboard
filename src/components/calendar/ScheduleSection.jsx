@@ -504,16 +504,24 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
 
   // Smooth scroll to now marker on mount and briefing refresh (desktop only)
   useEffect(() => {
-    if (isMobile || view !== "today" || !nowMarkerRef.current) return;
+    if (isMobile || view !== "today") return;
+    const el = timelineRef.current;
+    if (!el || el.scrollHeight <= el.clientHeight) return;
+    const target = inProgressIdx >= 0
+      ? cardRefsRef.current[inProgressIdx]
+      : nowMarkerRef.current;
+    if (!target) return;
     const timer = setTimeout(() => {
-      nowMarkerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      el.scrollTo({ top: Math.max(0, target.offsetTop - 16), behavior: "smooth" });
     }, 300);
     return () => clearTimeout(timer);
-  }, [calendar, view, isMobile]);
+  }, [calendar, view, isMobile, inProgressIdx]);
 
   // Auto-scroll when marker jumps significantly (desktop only)
   useEffect(() => {
     if (isMobile || view !== "today" || markerTop == null) return;
+    const el = timelineRef.current;
+    if (!el || el.scrollHeight <= el.clientHeight) return;
     const prev = prevMarkerTopRef.current;
     prevMarkerTopRef.current = markerTop;
     // Only scroll on large jumps (crossed a card), not smooth per-tick movement
@@ -522,8 +530,12 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
     // Skip if user scrolled within last 10 seconds
     if (Date.now() - lastUserScrollRef.current < 10_000) return;
 
-    nowMarkerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [markerTop, view, isMobile]);
+    const target = inProgressIdx >= 0
+      ? cardRefsRef.current[inProgressIdx]
+      : nowMarkerRef.current;
+    if (!target) return;
+    el.scrollTo({ top: Math.max(0, target.offsetTop - 16), behavior: "smooth" });
+  }, [markerTop, view, isMobile, inProgressIdx]);
 
   const titleContent = (
     <div className="flex items-center gap-3">
