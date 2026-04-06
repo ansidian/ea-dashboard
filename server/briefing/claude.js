@@ -66,6 +66,7 @@ RULES:
 - "unread" MUST equal the length of "important" array. Do NOT fabricate emails.
 - "read" MUST be passed through from the input email's "read" field as-is.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.
+- When urgentFlag is set, the action field must NOT repeat the deadline — use a verb-only action instead (e.g., "Claim credit", "RSVP", "Register"). The urgentFlag already displays the date.
 - If an email is in a non-English language (Chinese, Spanish, etc.), write the preview and action fields in English. Summarize the content — do not translate literally.`;
 
 export async function callClaude({ emails, calendar, ctmDeadlines, todoistTasks, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar }) {
