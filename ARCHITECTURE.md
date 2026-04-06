@@ -56,7 +56,7 @@ graph TB
 | Backend | Express 4 | HTTP API server |
 | Database | Turso (LibSQL) | SQLite-compatible cloud DB |
 | AI | Claude API (Anthropic) | Email triage, bill detection, insights |
-| Search | OpenAI text-embedding-3-small | RAG vector embeddings for briefing search |
+| Search | OpenAI text-embedding-3-small, SQLite FTS5 | RAG vector embeddings + full-text email search |
 | Email | Gmail API, ImapFlow (iCloud) | Multi-account email fetching |
 | Calendar | Google Calendar API | Event sync (reuses Gmail OAuth) |
 | Weather | Pirate Weather | Forecast data |
@@ -82,6 +82,7 @@ ea-dashboard/
 │   │   ├── ctm.js                  # Canvas deadlines: fetch + status update
 │   │   ├── todoist.js              # Todoist tasks: fetch + complete
 │   │   ├── actual.js               # Actual Budget: metadata, bills, send transactions
+│   │   ├── email-index.js           # FTS5 email indexing for cross-account search
 │   │   ├── encryption.js           # AES-256-GCM encrypt/decrypt (legacy CBC migration)
 │   │   └── scheduler.js            # Cron job management with hot reload
 │   ├── embeddings/                 # Vector search: chunk, embed, query (RAG)
@@ -97,7 +98,7 @@ ea-dashboard/
 │       ├── connection.js           # Turso client (remote prod, local dev file)
 │       ├── ctm-connection.js       # Read-only CTM database client
 │       ├── migrate.js              # Sequential SQL migration runner
-│       ├── migrations/             # 001–015 numbered .sql files
+│       ├── migrations/             # 001–016 numbered .sql files
 │       ├── dev-fixture.js          # Mock briefing generator for dev mode
 │       └── scenarios/              # Composable test fixtures (urgent-flags, bills, etc.)
 ├── src/
@@ -239,6 +240,7 @@ API fetch (apiFetch wrapper)
 | Hold Suspend 1.5s | Suspend Render service |
 | Click email | Expand EmailBody panel (iframe with sanitized HTML) |
 | Click task status dot | Cycle task status (incomplete → in_progress → complete) |
+| Cmd/Ctrl+K, type @query | Email keyword search (FTS5, cross-account) |
 | Ctrl+Shift+D | Dev panel (dev mode only) |
 
 ## Backend Architecture
@@ -273,9 +275,9 @@ graph LR
 | Group | Mount | Endpoints | Key Responsibilities |
 |-------|-------|-----------|---------------------|
 | Auth | `/api/auth` | 3 | Login (rate-limited 5/15min), session check, logout |
-| Briefing | `/api/briefing` | 22 | Generate, poll, refresh, email ops, task ops, Actual Budget |
+| Briefing | `/api/briefing` | 23 | Generate, poll, refresh, email search, email ops, task ops, Actual Budget |
 | Accounts | `/api/ea` | 16 | Account CRUD, Gmail OAuth, settings, schedules, geocode, suspend |
-| Search | `/api/search` | 3 | Vector search, Claude analysis, dev seed |
+| Search | `/api/search`, `/api/briefing/email-search` | 4 | Vector search, Claude analysis, FTS5 email search, dev seed |
 | Live | `/api/live` | 1 | Combined real-time data (emails, calendar, weather, bills) |
 
 ### Authentication
@@ -333,10 +335,13 @@ flowchart TD
 
     PostProcess["Post-Processing<br/>1. fixEmailAccounts() — regroup by account<br/>2. deduplicateBills() — suppress processor dupes<br/>3. Overwrite calendar/weather/CTM with server data<br/>4. Sync email read status from source"]
 
+    Index["indexEmails()<br/>(async, fire-and-forget)<br/>FTS5 full-text index"]
+
     Store["Store in ea_briefings<br/>status: ready"]
     Embed["embedAndStore()<br/>(async, fire-and-forget)"]
 
     Trigger --> Config --> Parallel
+    Parallel --> Index
     Parallel --> Filter
     Filter --> Skip
     Skip -->|Yes| Clone --> Store
@@ -364,6 +369,8 @@ Model selection: user-configurable, defaults to `claude-sonnet-4-6`. Retries 3x 
 **Delta Generation** — When new unread emails are a subset of total, only send new emails to Claude. Merge results with previous triage. Carried-forward emails increment `seenCount` and expire after 3 appearances.
 
 **Skip AI** — If inbox is clean (no new unread), calendar hasn't changed, and last AI call was <16 hours ago, clone the previous briefing and only update weather/calendar/CTM/Todoist. No Claude API call.
+
+**Email Indexing** — All fetched emails (read + unread) are persisted to `ea_email_index` with an FTS5 virtual table for cross-account keyword search. Runs fire-and-forget alongside the briefing pipeline. On first run (empty index), a 30-day backfill fetch populates historical emails.
 
 **Post-Processing** — Server always overwrites AI-generated calendar, weather, CTM, and Todoist data with fresh server-fetched values. This prevents hallucinations. Email accounts are regrouped by `account_label` to fix potential Claude misclassification. Duplicate bills from payment processors (PayPal, Venmo, etc.) are detected and suppressed.
 
@@ -468,6 +475,31 @@ erDiagram
         datetime completed_at
     }
 
+    ea_email_index {
+        text uid PK "gmail-acct-id or icloud-id"
+        text user_id
+        text account_id
+        text account_label
+        text account_email
+        text account_color
+        text account_icon
+        text from_name
+        text from_address
+        text subject
+        text body_snippet
+        text email_date
+        int read
+        datetime indexed_at
+    }
+
+    ea_email_fts {
+        text uid "UNINDEXED join key"
+        text from_name "FTS5 indexed"
+        text from_address "FTS5 indexed"
+        text subject "FTS5 indexed"
+        text body_snippet "FTS5 indexed"
+    }
+
     ea_briefings ||--o{ ea_embeddings : "briefing_id"
 ```
 
@@ -492,6 +524,7 @@ Sequential SQL files in `server/db/migrations/`, auto-run on server start:
 | 13 | `013_todoist_settings.sql` | `todoist_api_token_encrypted` on settings |
 | 14 | `014_completed_tasks.sql` | `ea_completed_tasks` table |
 | 15 | `015_account_user_index.sql` | Index `ea_accounts(user_id)` |
+| 16 | `016_email_search_index.sql` | `ea_email_index` + `ea_email_fts` (FTS5) |
 
 ## Key Patterns
 
@@ -551,6 +584,12 @@ Database-driven cron jobs via `node-cron`. Schedules stored as JSON array in `ea
 | DELETE | `/api/briefing/:id` | Soft-delete briefing |
 | POST | `/api/briefing/refresh` | Quick refresh (no email re-triage) |
 | GET | `/api/briefing/scenarios` | List dev scenarios |
+
+### Email Search
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/briefing/email-search?q=` | FTS5 keyword search across all indexed emails |
 
 ### Email Operations
 

@@ -21,7 +21,7 @@ The dashboard fetches data from multiple sources, sends it through Claude for an
 - **Skip AI** — When inbox is clean and calendar unchanged, clones the previous briefing without an API call
 - **Live data** — 5-minute background polling for new emails, calendar changes, and weather updates between briefings
 - **Scheduled generation** — Cron-based briefing generation at user-defined times and timezones
-- **Briefing search** — Vector similarity search across briefing history with Claude-powered result analysis
+- **Briefing search** — Vector similarity search across briefing history with Claude-powered result analysis, plus `@` prefix keyword search across all indexed emails (FTS5) to quickly find which account an email came from
 - **Briefing history** — Browse and compare past briefings
 - **Important senders** — Configure priority senders for real-time browser notifications
 - **Multi-account support** — Multiple Gmail (OAuth) and iCloud (app passwords) accounts with custom labels, colors, and icons
