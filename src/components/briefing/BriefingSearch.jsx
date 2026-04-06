@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { searchBriefings, analyzeSearchResults, getBriefingById } from "../../api";
+import { searchBriefings, analyzeSearchResults, getBriefingById, searchEmails } from "../../api";
+import DOMPurify from "dompurify";
 import { transformBriefing } from "../../transform";
 import { cn } from "@/lib/utils";
 import useIsMobile from "../../hooks/useIsMobile";
@@ -121,6 +122,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   const [error, setError] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [emailResults, setEmailResults] = useState(null);
   const [open, setOpen] = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [pos, setPos] = useState(null);
@@ -190,22 +192,44 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     return () => el.removeEventListener("wheel", handleWheel);
   }, [open, results, expandedId]);
 
+  const isEmailQuery = query.startsWith("@");
+
   const doSearch = useCallback(async (q) => {
-    if (!q.trim()) { setResults(null); setAnalysis(null); return; }
+    if (!q.trim()) { setResults(null); setEmailResults(null); setAnalysis(null); return; }
     setSearching(true);
     setError(null);
     setAnalysis(null);
     setExpandedId(null);
     setExpandedCtx(null);
-    try {
-      const data = await searchBriefings(q);
-      setResults(data.results || []);
-      setFocusedIdx(-1);
-    } catch (err) {
-      setError(err.message);
+
+    const isEmail = q.startsWith("@");
+    const searchTerm = isEmail ? q.slice(1).trim() : q;
+
+    if (isEmail) {
       setResults(null);
-    } finally {
-      setSearching(false);
+      if (searchTerm.length < 2) { setEmailResults(null); setSearching(false); return; }
+      try {
+        const data = await searchEmails(searchTerm);
+        setEmailResults(data);
+        setFocusedIdx(-1);
+      } catch (err) {
+        setError(err.message);
+        setEmailResults(null);
+      } finally {
+        setSearching(false);
+      }
+    } else {
+      setEmailResults(null);
+      try {
+        const data = await searchBriefings(q);
+        setResults(data.results || []);
+        setFocusedIdx(-1);
+      } catch (err) {
+        setError(err.message);
+        setResults(null);
+      } finally {
+        setSearching(false);
+      }
     }
   }, []);
 
@@ -300,8 +324,9 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
   }
 
-  const showDropdown = open && (results !== null || searching || error);
-  const hasResults = relevant.length > 0;
+  const emailHasResults = emailResults?.accounts?.length > 0;
+  const showDropdown = open && (results !== null || emailResults !== null || searching || error);
+  const hasResults = relevant.length > 0 || emailHasResults;
 
   return (
     <>
@@ -342,7 +367,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             onChange={handleInputChange}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search briefings..."
+            placeholder="Search briefings or @emails..."
             className="flex-1 bg-transparent border-none outline-none text-foreground text-[13px] max-sm:text-[16px] font-[inherit] placeholder:text-muted-foreground/40"
           />
           {!query && (
@@ -360,6 +385,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               onClick={() => {
                 setQuery("");
                 setResults(null);
+                setEmailResults(null);
                 setAnalysis(null);
                 setOpen(false);
                 setExpandedId(null);
@@ -400,17 +426,17 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               )}
 
               {/* Searching state */}
-              {searching && !results && (
+              {searching && !results && !emailResults && (
                 <div className="py-10 px-5 text-center">
                   <div className="w-4 h-4 border-2 border-white/[0.06] border-t-primary rounded-full animate-spin mx-auto mb-3" />
                   <div className="text-[11px] text-muted-foreground">
-                    Searching briefings...
+                    {isEmailQuery ? "Searching emails..." : "Searching briefings..."}
                   </div>
                 </div>
               )}
 
-              {/* Empty state */}
-              {!hasResults && results !== null && !searching && (
+              {/* Empty state — briefing search */}
+              {!isEmailQuery && !hasResults && results !== null && !searching && (
                 <div className="py-10 px-5 text-center">
                   <svg
                     width="20"
@@ -432,6 +458,34 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                   </div>
                 </div>
               )}
+
+              {/* Empty state — email search */}
+              {isEmailQuery && !emailHasResults && emailResults !== null && !searching && (
+                <div className="py-10 px-5 text-center">
+                  <span className="text-[20px] block mb-2.5 opacity-30">📧</span>
+                  <div className="text-[11px] text-muted-foreground/60">
+                    No emails matching &ldquo;{query.slice(1)}&rdquo;
+                  </div>
+                </div>
+              )}
+
+              {/* Email search results */}
+              {isEmailQuery && emailHasResults && emailResults.accounts.map((acct) => (
+                <div key={acct.account_id}>
+                  <div className="flex items-center gap-2.5 px-5 pt-3.5 pb-1.5">
+                    <span className="text-sm shrink-0">{acct.account_icon}</span>
+                    <span className="text-[11px] font-semibold text-foreground/80">{acct.account_label}</span>
+                    <span className="text-[10px] text-muted-foreground/40">{acct.account_email}</span>
+                    <div className="flex-1 h-px bg-white/[0.04]" />
+                    <span className="text-[10px] text-muted-foreground/40 tabular-nums">
+                      {acct.results.length}
+                    </span>
+                  </div>
+                  {acct.results.map((r) => (
+                    <EmailResultCard key={r.uid} r={r} acctColor={acct.account_color} />
+                  ))}
+                </div>
+              ))}
 
               {/* Results grouped by date */}
               {sortedDates.map((date, di) => (
@@ -616,43 +670,52 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                   borderRadius: "0 0 12px 12px",
                 }}
               >
-                <button
-                  onClick={handleAnalyze}
-                  disabled={analyzing}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium font-[inherit] transition-all duration-200",
-                    analyzing
-                      ? "bg-primary/[0.06] text-muted-foreground cursor-not-allowed border border-white/[0.04]"
-                      : "bg-primary/[0.08] text-[#cba6da] cursor-pointer border border-primary/15 hover:bg-primary/[0.14] hover:border-primary/25",
-                  )}
-                >
-                  {analyzing ? (
-                    <div className="w-3 h-3 border-[1.5px] border-primary/20 border-t-primary rounded-full animate-spin" />
-                  ) : (
-                    <svg
-                      width="11"
-                      height="11"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                      <path d="M2 17l10 5 10-5" />
-                      <path d="M2 12l10 5 10-5" />
-                    </svg>
-                  )}
-                  {analyzing ? "Analyzing..." : "Analyze"}
-                  {!analyzing && (
-                    <span className="text-[9px] text-muted-foreground/40 font-normal ml-0.5">
-                      Haiku
-                    </span>
-                  )}
-                </button>
+                {isEmailQuery ? (
+                  <span className="text-[10px] text-muted-foreground/40">
+                    📧 Email index
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleAnalyze}
+                    disabled={analyzing}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium font-[inherit] transition-all duration-200",
+                      analyzing
+                        ? "bg-primary/[0.06] text-muted-foreground cursor-not-allowed border border-white/[0.04]"
+                        : "bg-primary/[0.08] text-[#cba6da] cursor-pointer border border-primary/15 hover:bg-primary/[0.14] hover:border-primary/25",
+                    )}
+                  >
+                    {analyzing ? (
+                      <div className="w-3 h-3 border-[1.5px] border-primary/20 border-t-primary rounded-full animate-spin" />
+                    ) : (
+                      <svg
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                        <path d="M2 17l10 5 10-5" />
+                        <path d="M2 12l10 5 10-5" />
+                      </svg>
+                    )}
+                    {analyzing ? "Analyzing..." : "Analyze"}
+                    {!analyzing && (
+                      <span className="text-[9px] text-muted-foreground/40 font-normal ml-0.5">
+                        Haiku
+                      </span>
+                    )}
+                  </button>
+                )}
                 <span className="text-[10px] text-muted-foreground/50 tabular-nums">
-                  {relevant.length} result{relevant.length !== 1 ? "s" : ""}
+                  {isEmailQuery
+                    ? `${emailResults?.total || 0} result${emailResults?.total !== 1 ? "s" : ""}`
+                    : `${relevant.length} result${relevant.length !== 1 ? "s" : ""}`
+                  }
                 </span>
               </div>
             )}
@@ -696,6 +759,70 @@ export default function BriefingSearch({ onNavigateToEmail }) {
         );
       })()}
     </>
+  );
+}
+
+// --- Email search helpers ---
+
+function formatEmailDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return "";
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays === 0) {
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  }
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return d.toLocaleDateString("en-US", { weekday: "short" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function EmailResultCard({ r, acctColor }) {
+  return (
+    <div
+      className="group relative mx-2 rounded-lg transition-colors duration-150 hover:bg-white/[0.03]"
+      style={{ padding: "8px 14px" }}
+    >
+      <div
+        className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
+        style={{ background: acctColor }}
+      />
+      <div className="flex items-baseline gap-2 mb-0.5">
+        <span className="text-[12px] text-foreground/90 font-medium truncate">
+          {r.from_name || r.from_address}
+        </span>
+        {r.from_name && r.from_address && (
+          <span className="text-[10px] text-muted-foreground/40 truncate shrink-0">
+            {r.from_address}
+          </span>
+        )}
+        <span className="ml-auto text-[10px] text-muted-foreground/40 shrink-0 tabular-nums">
+          {formatEmailDate(r.email_date)}
+        </span>
+      </div>
+      <div
+        className="text-[12px] text-foreground/70 leading-relaxed truncate [&_mark]:bg-primary/25 [&_mark]:text-foreground [&_mark]:rounded-sm [&_mark]:px-px"
+        dangerouslySetInnerHTML={{
+          __html: DOMPurify.sanitize(
+            r.subject_highlight || r.subject,
+            { ALLOWED_TAGS: ["mark"] },
+          ),
+        }}
+      />
+      {r.body_highlight && (
+        <div
+          className="text-[11px] text-muted-foreground/50 leading-relaxed truncate mt-0.5 [&_mark]:bg-primary/20 [&_mark]:text-muted-foreground [&_mark]:rounded-sm [&_mark]:px-px"
+          dangerouslySetInnerHTML={{
+            __html: DOMPurify.sanitize(
+              r.body_highlight,
+              { ALLOWED_TAGS: ["mark"] },
+            ),
+          }}
+        />
+      )}
+    </div>
   );
 }
 

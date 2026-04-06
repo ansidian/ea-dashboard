@@ -91,6 +91,11 @@ export const searchBriefings = (query, options = {}) => {
   return apiFetch(`/api/search?${params}`);
 };
 export const analyzeSearchResults = (query, results) => apiFetch("/api/search/analyze", { method: "POST", body: JSON.stringify({ query, results }) });
+export const searchEmails = (query, limit) => {
+  const params = new URLSearchParams({ q: query });
+  if (limit) params.set("limit", limit);
+  return apiFetch(`/api/briefing/email-search?${params}`);
+};
 
 // Live Data
 export const getLiveData = () => apiFetch("/api/live/all");

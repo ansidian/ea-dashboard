@@ -545,6 +545,84 @@ router.post("/email/mark-all-read", async (req, res) => {
   }
 });
 
+// --- Email search (FTS5) ---
+
+function sanitizeFtsQuery(raw) {
+  const terms = raw
+    .replace(/[\u201C\u201D]/g, '"')
+    .split(/\s+/)
+    .filter(t => t.length > 0)
+    .map(t => `"${t.replace(/"/g, '""')}"`)
+  // prefix-match on last term for type-ahead
+  if (terms.length > 0) {
+    const last = terms[terms.length - 1];
+    terms[terms.length - 1] = last.slice(0, -1) + '"*';
+  }
+  return terms.join(" ") || `"${raw}"`;
+}
+
+router.get("/email-search", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { q, limit } = req.query;
+  if (!q || !q.trim()) {
+    return res.status(400).json({ message: "Query parameter 'q' is required" });
+  }
+  const maxResults = Math.min(parseInt(limit) || 30, 100);
+  try {
+    const result = await db.execute({
+      sql: `SELECT
+              idx.uid, idx.account_id, idx.account_label, idx.account_email,
+              idx.account_color, idx.account_icon,
+              idx.from_name, idx.from_address, idx.subject, idx.body_snippet,
+              idx.email_date, idx.read,
+              snippet(fts, 3, '<mark>', '</mark>', '...', 32) AS subject_highlight,
+              snippet(fts, 4, '<mark>', '</mark>', '...', 48) AS body_highlight,
+              rank
+            FROM ea_email_fts fts
+            JOIN ea_email_index idx ON idx.uid = fts.uid
+            WHERE ea_email_fts MATCH ? AND idx.user_id = ?
+            ORDER BY rank
+            LIMIT ?`,
+      args: [sanitizeFtsQuery(q.trim()), userId, maxResults],
+    });
+
+    const byAccount = {};
+    for (const row of result.rows) {
+      const key = row.account_id;
+      if (!byAccount[key]) {
+        byAccount[key] = {
+          account_id: row.account_id,
+          account_label: row.account_label,
+          account_email: row.account_email,
+          account_color: row.account_color,
+          account_icon: row.account_icon,
+          results: [],
+        };
+      }
+      byAccount[key].results.push({
+        uid: row.uid,
+        from_name: row.from_name,
+        from_address: row.from_address,
+        subject: row.subject,
+        body_snippet: row.body_snippet,
+        subject_highlight: row.subject_highlight,
+        body_highlight: row.body_highlight,
+        email_date: row.email_date,
+        read: !!row.read,
+      });
+    }
+
+    res.json({
+      accounts: Object.values(byAccount),
+      total: result.rows.length,
+      query: q,
+    });
+  } catch (err) {
+    console.error("[EA] Email search error:", err.message);
+    res.status(500).json({ message: "Email search failed" });
+  }
+});
+
 router.delete("/:id", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const { id } = req.params;

@@ -9,6 +9,7 @@ import { fetchTodoistTasks } from "./todoist.js";
 import { callClaude } from "./claude.js";
 import { getCategories, getUpcomingBills } from "./actual.js";
 import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../embeddings/index.js";
+import { indexEmails, isIndexEmpty } from "./email-index.js";
 
 // Shared: load accounts + settings, return them
 export async function loadUserConfig(userId) {
@@ -497,6 +498,20 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
     ]);
+
+    // index all fetched emails (read + unread) for keyword search
+    const indexEmpty = await isIndexEmpty(userId);
+    indexEmails(userId, emails).catch(err =>
+      console.error("[EA] Email indexing failed:", err.message)
+    );
+    if (indexEmpty) {
+      // one-time backfill: fetch 30 days of email metadata
+      console.log("[EA] Email index empty — starting 30-day backfill...");
+      fetchAllEmails(accounts, settings, 720)
+        .then(allEmails => indexEmails(userId, allEmails))
+        .then(() => console.log("[EA] Backfill complete"))
+        .catch(err => console.error("[EA] Backfill indexing failed:", err.message));
+    }
 
     // Reconcile after Todoist tasks are available (un-completed tasks get removed from table)
     const completedTaskIds = await loadCompletedTaskIds(userId, todoistTasks);
