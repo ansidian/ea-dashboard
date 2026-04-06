@@ -82,7 +82,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
         style={{
           maxHeight: "70vh",
           background: "#16161e",
-          borderRadius: "16px 16px 0 0",
+          borderRadius: "12px 12px 0 0",
           border: "1px solid rgba(255,255,255,0.08)",
           borderBottom: "none",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",

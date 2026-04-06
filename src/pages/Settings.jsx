@@ -54,7 +54,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="bg-surface rounded-lg border border-border overflow-hidden">
-      <div className="flex flex-col gap-2.5 px-3.5 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center sm:gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-base cursor-pointer shrink-0" onClick={() => setEditing(!editing)} title="Edit">{icon}</span>
           <div className="flex-1 min-w-0">
@@ -65,7 +65,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
             <div className="text-[11px] max-sm:text-xs text-muted-foreground truncate">{acc.email} · {acc.type}</div>
           </div>
         </div>
-        <div className="flex items-center gap-2 max-sm:border-t max-sm:border-white/[0.04] max-sm:pt-2 max-sm:-mx-3.5 max-sm:px-3.5">
+        <div className="flex items-center gap-2 max-sm:border-t max-sm:border-white/[0.04] max-sm:pt-2 max-sm:-mx-4 max-sm:px-4">
           <Button variant="ghost" size="xs" onClick={() => setEditing(!editing)}>
             {editing ? "Cancel" : "Edit"}
           </Button>
@@ -339,7 +339,7 @@ export default function Settings() {
     <div className="min-h-screen text-foreground font-sans p-4 sm:p-6 max-w-[900px] mx-auto">
 
       <div className="flex items-center gap-3 mb-8">
-        <Link to="/" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px] font-medium text-muted-foreground/70 hover:bg-white/[0.04] hover:text-foreground transition-colors no-underline">
+        <Link to="/" className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[13px] font-medium text-muted-foreground/70 hover:bg-white/[0.04] hover:text-foreground transition-colors no-underline">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
           Dashboard
         </Link>
@@ -622,7 +622,7 @@ export default function Settings() {
                 }
               }
               schedRectsRef.current[oi] = el.getBoundingClientRect().top;
-            }} className="flex flex-col gap-2 px-3.5 py-2.5 bg-surface rounded-lg border border-border sm:flex-row sm:items-center sm:gap-3">
+            }} className="flex flex-col gap-2 px-4 py-2 bg-surface rounded-lg border border-border sm:flex-row sm:items-center sm:gap-3">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <input
                   type="text" value={sched.label || ""} placeholder="Label"
@@ -668,7 +668,7 @@ export default function Settings() {
                   )} />
                 </button>
               </div>
-              <div className="flex items-center gap-2 max-sm:border-t max-sm:border-white/[0.04] max-sm:pt-2 max-sm:-mx-3.5 max-sm:px-3.5">
+              <div className="flex items-center gap-2 max-sm:border-t max-sm:border-white/[0.04] max-sm:pt-2 max-sm:-mx-4 max-sm:px-4">
                 {sched.enabled && (
                   <button onClick={async () => {
                     const result = await skipSchedule(oi, !isSkipped);

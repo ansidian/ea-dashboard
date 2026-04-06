@@ -56,7 +56,7 @@ export default function WeatherTooltip({ weather, triggerRef, onMouseEnter, onMo
       {/* Header — location + summary */}
       <div
         style={{
-          padding: "14px 20px 12px",
+          padding: "12px 20px 12px",
           borderBottom: "1px solid rgba(255,255,255,0.05)",
         }}
       >
@@ -71,7 +71,7 @@ export default function WeatherTooltip({ weather, triggerRef, onMouseEnter, onMo
       </div>
 
       {/* Hourly forecast — bar chart */}
-      <div style={{ padding: "16px 20px 14px" }}>
+      <div style={{ padding: "16px 20px 12px" }}>
         <div className="flex items-end justify-between gap-1">
           {hourly.map((h, i) => {
             const normalized = (h.temp - minTemp) / tempRange;

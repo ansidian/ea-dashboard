@@ -95,7 +95,7 @@ function TomorrowEventList({ events, showSource, opacity }) {
         }}
       >
         <div
-          className="absolute -left-5 top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full shrink-0"
+          className="absolute -left-5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full shrink-0"
           style={{ background: event.color, opacity: 0.4 }}
         />
         <div

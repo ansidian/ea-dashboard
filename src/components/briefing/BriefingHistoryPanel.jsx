@@ -220,7 +220,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
                         : "cursor-pointer active:scale-[0.98]",
                   )}
                   style={{
-                    padding: "10px 16px",
+                    padding: "12px 16px",
                     background: isActive
                       ? "rgba(203,166,218,0.08)"
                       : undefined,

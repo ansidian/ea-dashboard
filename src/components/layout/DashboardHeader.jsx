@@ -197,7 +197,7 @@ export default function DashboardHeader({
                 </div>
               </div>
               <button
-                className="bg-[#f97316] text-[#1e1e2e] border-none rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer transition-all hover:bg-[#fb923c] hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed font-[inherit]"
+                className="bg-[#f97316] text-[#1e1e2e] border-none rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer transition-all hover:bg-[#fab387] hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed font-[inherit]"
                 onClick={onSuspend}
               >
                 Suspend

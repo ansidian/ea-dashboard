@@ -128,7 +128,7 @@ export default function DevPanel() {
               background: "rgba(203,166,218,0.12)",
               color: "#cba6da",
               fontSize: 9,
-              padding: "3px 7px",
+              padding: "4px 8px",
               borderRadius: 8,
               border: "1px solid rgba(203,166,218,0.25)",
               whiteSpace: "nowrap",

@@ -524,7 +524,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                             "group relative flex gap-3 items-start mx-2 rounded-lg cursor-pointer transition-all duration-150",
                             isExpanded && "bg-white/[0.04]",
                           )}
-                          style={{ padding: "10px 14px" }}
+                          style={{ padding: "12px 16px" }}
                         >
                           {/* Hover/focus bg */}
                           {!isExpanded && (
@@ -783,7 +783,7 @@ function EmailResultCard({ r, acctColor }) {
   return (
     <div
       className="group relative mx-2 rounded-lg transition-colors duration-150 hover:bg-white/[0.03]"
-      style={{ padding: "8px 14px" }}
+      style={{ padding: "8px 12px" }}
     >
       <div
         className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"

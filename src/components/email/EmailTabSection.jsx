@@ -82,7 +82,7 @@ export default function EmailTabSection({
       >
         {/* Tab bar */}
         <div
-          className="flex gap-0.5 mb-4 rounded-lg p-[3px]"
+          className="flex gap-0.5 mb-4 rounded-lg p-1"
           style={{ background: "rgba(255,255,255,0.02)" }}
         >
           <button
@@ -132,7 +132,7 @@ export default function EmailTabSection({
               <span
                 className="text-[10px] font-bold tabular-nums rounded-full min-w-[16px] text-center"
                 style={{
-                  padding: "1px 5px",
+                  padding: "2px 6px",
                   background: "rgba(99,102,241,0.15)",
                   color: "rgba(99,102,241,0.9)",
                 }}

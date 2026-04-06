@@ -18,7 +18,7 @@ const tierStyles = {
       background: "rgba(36,36,58,0.3)",
       border: "1px solid rgba(255,255,255,0.04)",
     },
-    padding: { desktop: "12px 16px", mobile: "10px 12px" },
+    padding: { desktop: "12px 16px", mobile: "8px 12px" },
     titleClass: "text-[11px] max-sm:text-xs tracking-[2.5px] uppercase font-semibold",
     titleStyle: { color: "rgba(255,255,255,0.20)" },
   },
