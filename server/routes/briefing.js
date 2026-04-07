@@ -575,11 +575,11 @@ router.get("/email-search", async (req, res) => {
               idx.account_color, idx.account_icon,
               idx.from_name, idx.from_address, idx.subject, idx.body_snippet,
               idx.email_date, idx.read,
-              snippet(fts, 3, '<mark>', '</mark>', '...', 32) AS subject_highlight,
-              snippet(fts, 4, '<mark>', '</mark>', '...', 48) AS body_highlight,
+              snippet(ea_email_fts, 3, '<mark>', '</mark>', '...', 32) AS subject_highlight,
+              snippet(ea_email_fts, 4, '<mark>', '</mark>', '...', 48) AS body_highlight,
               rank
-            FROM ea_email_fts fts
-            JOIN ea_email_index idx ON idx.uid = fts.uid
+            FROM ea_email_fts
+            JOIN ea_email_index idx ON idx.uid = ea_email_fts.uid
             WHERE ea_email_fts MATCH ? AND idx.user_id = ?
             ORDER BY rank
             LIMIT ?`,
