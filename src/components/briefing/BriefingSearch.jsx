@@ -124,6 +124,8 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   const [analysis, setAnalysis] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [emailResults, setEmailResults] = useState(null);
+  const [emailFilter, setEmailFilter] = useState("all"); // 'all' | 'unread'
+  const [searchMode, setSearchMode] = useState("emails"); // 'emails' | 'briefings'
   const [open, setOpen] = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [pos, setPos] = useState(null);
@@ -137,8 +139,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
   const debounceRef = useRef(null);
-  const emailModalRef = useRef(null);
-  const justClosedEmailRef = useRef(false);
 
   const updatePos = useCallback(() => {
     if (!inputWrapRef.current) return;
@@ -149,13 +149,26 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   useEffect(() => {
     if (!open) return;
     updatePos();
-    window.addEventListener("scroll", updatePos, true);
     window.addEventListener("resize", updatePos);
-    return () => {
-      window.removeEventListener("scroll", updatePos, true);
-      window.removeEventListener("resize", updatePos);
-    };
+    return () => window.removeEventListener("resize", updatePos);
   }, [open, updatePos]);
+
+  // Lock body scroll while panel is open so the panel can't chase the input.
+  // Skip on mobile — BottomSheet handles its own scroll containment.
+  useEffect(() => {
+    if (!open || isMobile) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.paddingRight = prevPaddingRight;
+    };
+  }, [open, isMobile]);
 
   useEffect(() => {
     function handleKey(e) {
@@ -176,23 +189,13 @@ export default function BriefingSearch({ onNavigateToEmail }) {
 
   useEffect(() => {
     function handleClick(e) {
-      // Desktop only: clicks inside the email modal stay inside; clicks elsewhere
-      // close the modal (search panel stays open). Mobile uses the BottomSheet's
-      // own back button — don't intercept clicks there.
-      if (!isMobile && openEmail) {
-        if (emailModalRef.current?.contains(e.target)) return;
-        setOpenEmail(null);
-        justClosedEmailRef.current = true;
-        setTimeout(() => { justClosedEmailRef.current = false; }, 0);
-        return;
-      }
-      // Normal panel dismiss
       if (inputWrapRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return;
       setOpen(false);
+      setOpenEmail(null);
     }
     if (open) document.addEventListener("pointerdown", handleClick);
     return () => document.removeEventListener("pointerdown", handleClick);
-  }, [open, openEmail, isMobile]);
+  }, [open]);
 
   // Scroll trapping on the SCROLL CONTAINER (not the outer panel)
   useEffect(() => {
@@ -208,24 +211,22 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     return () => el.removeEventListener("wheel", handleWheel);
   }, [open, results, expandedId]);
 
-  const isEmailQuery = query.startsWith("@");
+  const isEmailQuery = searchMode === "emails";
 
-  const doSearch = useCallback(async (q) => {
-    if (!q.trim()) { setResults(null); setEmailResults(null); setAnalysis(null); return; }
+  const doSearch = useCallback(async (q, mode) => {
+    const term = q.trim();
+    if (!term) { setResults(null); setEmailResults(null); setAnalysis(null); return; }
     setSearching(true);
     setError(null);
     setAnalysis(null);
     setExpandedId(null);
     setExpandedCtx(null);
 
-    const isEmail = q.startsWith("@");
-    const searchTerm = isEmail ? q.slice(1).trim() : q;
-
-    if (isEmail) {
+    if (mode === "emails") {
       setResults(null);
-      if (searchTerm.length < 2) { setEmailResults(null); setSearching(false); return; }
+      if (term.length < 2) { setEmailResults(null); setSearching(false); return; }
       try {
-        const data = await searchEmails(searchTerm);
+        const data = await searchEmails(term);
         setEmailResults(data);
         setFocusedIdx(-1);
       } catch (err) {
@@ -237,7 +238,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     } else {
       setEmailResults(null);
       try {
-        const data = await searchBriefings(q);
+        const data = await searchBriefings(term);
         setResults(data.results || []);
         setFocusedIdx(-1);
       } catch (err) {
@@ -254,12 +255,34 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     setQuery(val);
     setOpen(true);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(val), DEBOUNCE_MS);
+    debounceRef.current = setTimeout(() => doSearch(val, searchMode), DEBOUNCE_MS);
+  }
+
+  function handleModeChange(next) {
+    if (next === searchMode) return;
+    setSearchMode(next);
+    setFocusedIdx(-1);
+    setEmailFilter("all");
+    setOpenEmail(null);
+    // Re-run the current query in the new mode immediately (no debounce —
+    // the user explicitly switched, so a snappy response feels right).
+    clearTimeout(debounceRef.current);
+    if (query.trim()) {
+      doSearch(query, next);
+    } else {
+      // Clear stale results from the other mode so the dropdown isn't lying.
+      setResults(null);
+      setEmailResults(null);
+    }
+  }
+
+  function handleEmailFilterChange(next) {
+    if (next === emailFilter) return;
+    setEmailFilter(next);
+    setFocusedIdx(-1);
   }
 
   function handleOpenEmail(email, acct) {
-    // If a click just closed the modal, swallow this click and require another
-    if (justClosedEmailRef.current) return;
     setOpenEmail({
       ...email,
       account_id: acct.account_id,
@@ -283,16 +306,47 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     });
   }
 
+  function handleEmailMarkedUnread(uid) {
+    setEmailResults((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        accounts: prev.accounts.map((a) => ({
+          ...a,
+          results: a.results.map((r) => (r.uid === uid ? { ...r, read: false } : r)),
+        })),
+      };
+    });
+  }
+
   function handleKeyDown(e) {
-    if (!open || !relevant.length) return;
+    if (!open) return;
+    const inEmailMode = isEmailQuery;
+    const list = inEmailMode ? flatEmails : relevant;
+    if (!list.length) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setFocusedIdx(i => Math.min(i + 1, relevant.length - 1));
+      const next = Math.min(focusedIdx + 1, list.length - 1);
+      setFocusedIdx(next);
+      if (inEmailMode && openEmail && next >= 0) {
+        const r = list[next];
+        handleOpenEmail(r, r._acct);
+      }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setFocusedIdx(i => Math.max(i - 1, -1));
+      const next = Math.max(focusedIdx - 1, -1);
+      setFocusedIdx(next);
+      if (inEmailMode && openEmail && next >= 0) {
+        const r = list[next];
+        handleOpenEmail(r, r._acct);
+      }
     } else if (e.key === "Enter" && focusedIdx >= 0) {
-      handleExpand(relevant[focusedIdx]);
+      if (inEmailMode) {
+        const r = list[focusedIdx];
+        handleOpenEmail(r, r._acct);
+      } else {
+        handleExpand(list[focusedIdx]);
+      }
     }
   }
 
@@ -366,9 +420,34 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
   }
 
-  const emailHasResults = emailResults?.accounts?.length > 0;
+  const rawEmailHasResults = emailResults?.accounts?.length > 0;
+  const totalUnread = rawEmailHasResults
+    ? emailResults.accounts.reduce(
+        (n, a) => n + a.results.filter((r) => !r.read).length,
+        0,
+      )
+    : 0;
+  // Apply the active filter to email results, dropping accounts that end up
+  // with zero matching messages so the renderer doesn't show empty headers.
+  const filteredEmailResults =
+    rawEmailHasResults && emailFilter === "unread"
+      ? {
+          ...emailResults,
+          accounts: emailResults.accounts
+            .map((a) => ({ ...a, results: a.results.filter((r) => !r.read) }))
+            .filter((a) => a.results.length > 0),
+        }
+      : emailResults;
+  const emailHasResults = filteredEmailResults?.accounts?.length > 0;
   const showDropdown = open && (results !== null || emailResults !== null || searching || error);
   const hasResults = relevant.length > 0 || emailHasResults;
+  // Flat list of email results in render order, with their owning account
+  // attached, so keyboard nav and active-state lookups work uniformly.
+  const flatEmails = emailHasResults
+    ? filteredEmailResults.accounts.flatMap((a) =>
+        a.results.map((r) => ({ ...r, _acct: a })),
+      )
+    : [];
 
   return (
     <>
@@ -402,6 +481,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
+          <SearchModeToggle mode={searchMode} onChange={handleModeChange} />
           <input
             ref={inputRef}
             type="text"
@@ -409,7 +489,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             onChange={handleInputChange}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search briefings or @emails..."
+            placeholder={searchMode === "emails" ? "Search emails..." : "Search briefings..."}
             className="flex-1 bg-transparent border-none outline-none text-foreground text-[13px] max-sm:text-[16px] font-[inherit] placeholder:text-muted-foreground/40"
           />
           {!query && (
@@ -432,6 +512,8 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                 setOpen(false);
                 setExpandedId(null);
                 setOpenEmail(null);
+                setEmailFilter("all");
+                setFocusedIdx(-1);
               }}
               className="bg-transparent border-none text-muted-foreground/40 cursor-pointer p-0.5 rounded transition-colors hover:text-muted-foreground hover:bg-white/[0.06]"
               aria-label="Clear search"
@@ -457,6 +539,25 @@ export default function BriefingSearch({ onNavigateToEmail }) {
       {showDropdown && (() => {
         const dropdownContent = (
           <>
+          {/* Email filter chip row — only in email mode with raw results */}
+          {isEmailQuery && rawEmailHasResults && (
+            <div
+              className="shrink-0 flex items-center gap-1 px-3 py-2"
+              style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+            >
+              <FilterChip
+                label="All"
+                active={emailFilter === "all"}
+                onClick={() => handleEmailFilterChange("all")}
+              />
+              <FilterChip
+                label="Unread"
+                count={totalUnread}
+                active={emailFilter === "unread"}
+                onClick={() => handleEmailFilterChange("unread")}
+              />
+            </div>
+          )}
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto overscroll-contain min-h-0"
@@ -505,35 +606,74 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               {/* Empty state — email search */}
               {isEmailQuery && !emailHasResults && emailResults !== null && !searching && (
                 <div className="py-10 px-5 text-center">
-                  <span className="text-[20px] block mb-2.5 opacity-30">📧</span>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="mx-auto mb-2.5 text-muted-foreground/30"
+                  >
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                    <polyline points="22,6 12,13 2,6" />
+                  </svg>
                   <div className="text-[11px] text-muted-foreground/60">
-                    No emails matching &ldquo;{query.slice(1)}&rdquo;
+                    {emailFilter === "unread" && rawEmailHasResults
+                      ? `No unread emails matching "${query}"`
+                      : `No emails matching "${query}"`}
                   </div>
                 </div>
               )}
 
               {/* Email search results */}
-              {isEmailQuery && emailHasResults && emailResults.accounts.map((acct) => (
+              {isEmailQuery && emailHasResults && filteredEmailResults.accounts.map((acct) => {
+                const acctUnread = acct.results.filter((r) => !r.read).length;
+                return (
                 <div key={acct.account_id}>
-                  <div className="flex items-center gap-2.5 px-5 pt-3.5 pb-1.5">
-                    <span className="text-sm shrink-0">{acct.account_icon}</span>
-                    <span className="text-[11px] font-semibold text-foreground/80">{acct.account_label}</span>
-                    <span className="text-[10px] text-muted-foreground/40">{acct.account_email}</span>
-                    <div className="flex-1 h-px bg-white/[0.04]" />
-                    <span className="text-[10px] text-muted-foreground/40 tabular-nums">
-                      {acct.results.length}
+                  <div
+                    className="sticky top-0 z-[5] flex items-center gap-2 px-5 py-1.5"
+                    style={{
+                      background: "rgba(28,28,42, 0.92)",
+                      backdropFilter: "blur(8px)",
+                      WebkitBackdropFilter: "blur(8px)",
+                      borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    }}
+                  >
+                    <span className="text-[12px] shrink-0">{acct.account_icon}</span>
+                    <span className="text-[10px] font-semibold tracking-[1.5px] uppercase text-foreground/75 truncate">
+                      {acct.account_label}
                     </span>
+                    <div className="ml-auto flex items-center gap-2.5 shrink-0">
+                      {acctUnread > 0 && (
+                        <span className="text-[10px] font-semibold tabular-nums" style={{ color: "#cba6da" }}>
+                          {acctUnread} unread
+                        </span>
+                      )}
+                      <span className="text-[10px] tabular-nums text-muted-foreground/45">
+                        {acct.results.length}
+                      </span>
+                    </div>
                   </div>
-                  {acct.results.map((r) => (
-                    <EmailResultCard
-                      key={r.uid}
-                      r={r}
-                      acctColor={acct.account_color}
-                      onOpen={() => handleOpenEmail(r, acct)}
-                    />
-                  ))}
+                  {acct.results.map((r) => {
+                    const flatIdx = flatEmails.findIndex((f) => f.uid === r.uid);
+                    return (
+                      <EmailResultCard
+                        key={r.uid}
+                        r={r}
+                        acctColor={acct.account_color}
+                        isActive={openEmail?.uid === r.uid}
+                        isFocused={flatIdx === focusedIdx}
+                        onMouseEnter={() => setFocusedIdx(flatIdx)}
+                        onOpen={() => handleOpenEmail(r, acct)}
+                      />
+                    );
+                  })}
                 </div>
-              ))}
+                );
+              })}
 
               {/* Results grouped by date */}
               {sortedDates.map((date, di) => (
@@ -719,8 +859,8 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                 }}
               >
                 {isEmailQuery ? (
-                  <span className="text-[10px] text-muted-foreground/40">
-                    📧 Email index
+                  <span className="text-[10px] text-muted-foreground/40 italic">
+                    Sorted by relevance + recency
                   </span>
                 ) : (
                   <button
@@ -761,7 +901,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                 )}
                 <span className="text-[10px] text-muted-foreground/50 tabular-nums">
                   {isEmailQuery
-                    ? `${emailResults?.total || 0} result${emailResults?.total !== 1 ? "s" : ""}`
+                    ? `${flatEmails.length} result${flatEmails.length !== 1 ? "s" : ""}`
                     : `${relevant.length} result${relevant.length !== 1 ? "s" : ""}`
                   }
                 </span>
@@ -794,7 +934,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                     </svg>
                     Back to search
                   </button>
-                  <EmailSearchBody email={openEmail} onMarkedRead={handleEmailMarkedRead} />
+                  <EmailSearchBody email={openEmail} onMarkedRead={handleEmailMarkedRead} onMarkedUnread={handleEmailMarkedUnread} />
                 </div>
               ) : dropdownContent}
             </BottomSheet>
@@ -803,70 +943,158 @@ export default function BriefingSearch({ onNavigateToEmail }) {
 
         if (!pos) return null;
 
-        return (
-          <>
-            {createPortal(
+        // Master-detail expansion: when an email is open, the results column
+        // shrinks to a compact fixed width and the email reader gets the rest.
+        // The panel recenters horizontally if it would clip the viewport edge.
+        const RESULTS_COLLAPSED_WIDTH = 380; // compact list width when expanded
+        const EMAIL_PANE_WIDTH = 720; // reader pane width contribution
+        const VIEWPORT_MARGIN = 16;
+        const baseWidth = pos.width;
+        const resultsWidth = openEmail
+          ? Math.min(baseWidth, RESULTS_COLLAPSED_WIDTH)
+          : baseWidth;
+        // Panel must always be at least as wide as the search input so the
+        // dropdown stays visually anchored. If the desired expansion is
+        // narrower (wide-screen edge case), snap to baseWidth and let the
+        // flex-1 email pane absorb the extra room.
+        const expandedWidth = openEmail
+          ? Math.min(
+              Math.max(baseWidth, resultsWidth + EMAIL_PANE_WIDTH),
+              window.innerWidth - VIEWPORT_MARGIN * 2,
+            )
+          : baseWidth;
+        const maxLeft = window.innerWidth - expandedWidth - VIEWPORT_MARGIN;
+        const finalLeft = Math.max(VIEWPORT_MARGIN, Math.min(pos.left, maxLeft));
+        const expandedMaxHeight = openEmail
+          ? `calc(100vh - ${pos.top + VIEWPORT_MARGIN}px)`
+          : `min(480px, calc(100vh - ${pos.top + VIEWPORT_MARGIN}px))`;
+
+        return createPortal(
+          <div
+            ref={panelRef}
+            className="z-[9999] isolate flex flex-row animate-in fade-in slide-in-from-top-1 duration-200"
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: finalLeft,
+              width: expandedWidth,
+              maxHeight: expandedMaxHeight,
+              background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow:
+                "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
+              transition: "width 200ms ease, left 200ms ease, max-height 200ms ease",
+              overflow: "hidden",
+            }}
+          >
+            {/* Results column */}
+            <div
+              className="flex flex-col min-h-0 shrink-0"
+              style={{
+                width: resultsWidth,
+                transition: "width 200ms ease",
+              }}
+            >
+              {dropdownContent}
+            </div>
+
+            {/* Email reader pane */}
+            {openEmail && (
               <div
-                ref={panelRef}
-                className="z-[9999] isolate flex flex-col animate-in fade-in slide-in-from-top-1 duration-200"
-                style={{
-                  position: "fixed",
-                  top: pos.top,
-                  left: pos.left,
-                  width: pos.width,
-                  maxHeight: `min(480px, calc(100vh - ${pos.top + 16}px))`,
-                  background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  boxShadow:
-                    "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-                }}
+                className="relative flex flex-col min-h-0 flex-1 animate-in fade-in duration-150"
+                style={{ borderLeft: "1px solid rgba(255,255,255,0.06)" }}
               >
-                {dropdownContent}
-              </div>,
-              document.body,
+                <EmailSearchBody
+                  email={openEmail}
+                  onMarkedRead={handleEmailMarkedRead}
+                  onMarkedUnread={handleEmailMarkedUnread}
+                  onClose={() => setOpenEmail(null)}
+                />
+              </div>
             )}
-            {openEmail && createPortal(
-              <div
-                ref={emailModalRef}
-                className="z-[10000] isolate flex flex-col animate-in fade-in zoom-in-95 duration-200"
-                style={{
-                  position: "fixed",
-                  left: "50%",
-                  top: "50%",
-                  transform: "translate(-50%, -50%)",
-                  width: "min(720px, calc(100vw - 32px))",
-                  maxHeight: "calc(100vh - 64px)",
-                  background: "#16161e",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
-                  overflow: "hidden",
-                }}
-              >
-                <button
-                  onClick={() => setOpenEmail(null)}
-                  className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-default text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.06] transition-colors"
-                  style={{ borderRadius: 8 }}
-                  aria-label="Close"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-                <EmailSearchBody email={openEmail} onMarkedRead={handleEmailMarkedRead} />
-              </div>,
-              document.body,
-            )}
-          </>
+          </div>,
+          document.body,
         );
       })()}
     </>
   );
 }
 
+// --- Search mode toggle ---
+
+function SearchModeToggle({ mode, onChange }) {
+  return (
+    <div
+      className="flex items-center gap-0.5 rounded-md p-0.5 shrink-0"
+      style={{
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.05)",
+      }}
+      role="tablist"
+      aria-label="Search scope"
+    >
+      <ModePill
+        label="Emails"
+        active={mode === "emails"}
+        onClick={() => onChange("emails")}
+      />
+      <ModePill
+        label="Briefings"
+        active={mode === "briefings"}
+        onClick={() => onChange("briefings")}
+      />
+    </div>
+  );
+}
+
+function ModePill({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "text-[10px] font-semibold tracking-wide rounded px-2 py-1 transition-all duration-150 cursor-pointer",
+        active
+          ? "bg-primary/[0.14] text-[#cba6da]"
+          : "bg-transparent text-muted-foreground/55 hover:text-foreground/85",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
 // --- Email search helpers ---
+
+function FilterChip({ label, count, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-all duration-150 cursor-pointer",
+        active
+          ? "bg-primary/[0.12] text-[#cba6da] border border-primary/25"
+          : "bg-transparent text-muted-foreground/60 border border-transparent hover:text-foreground/80 hover:bg-white/[0.04]",
+      )}
+    >
+      <span>{label}</span>
+      {typeof count === "number" && count > 0 && (
+        <span
+          className={cn(
+            "text-[10px] tabular-nums",
+            active ? "text-[#cba6da]/80" : "text-muted-foreground/40",
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
 
 function formatEmailDate(dateStr) {
   if (!dateStr) return "";
@@ -883,45 +1111,68 @@ function formatEmailDate(dateStr) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function EmailResultCard({ r, acctColor, onOpen }) {
+function EmailResultCard({ r, acctColor, isActive, isFocused, onMouseEnter, onOpen }) {
+  const unread = !r.read;
+  const bgClass = isActive
+    ? "bg-primary/[0.06]"
+    : isFocused
+      ? "bg-white/[0.04]"
+      : unread
+        ? "bg-primary/[0.025] hover:bg-white/[0.03]"
+        : "hover:bg-white/[0.03]";
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={onOpen}
+      onMouseEnter={onMouseEnter}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen?.(); } }}
-      className="group relative mx-2 rounded-lg transition-colors duration-150 hover:bg-white/[0.03] cursor-pointer"
-      style={{ padding: "8px 12px", opacity: r.read ? 0.65 : 1 }}
+      className={cn(
+        "group relative mx-2 rounded-lg transition-colors duration-150 cursor-pointer",
+        bgClass,
+      )}
+      style={{ padding: "10px 12px 10px 16px", opacity: r.read && !isActive ? 0.75 : 1 }}
     >
       <div
-        className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
-        style={{ background: acctColor }}
+        className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full transition-all duration-150"
+        style={{
+          background: acctColor,
+          opacity: isActive ? 1 : unread ? 0.9 : 0.45,
+          boxShadow: isActive ? `0 0 6px ${acctColor}80` : "none",
+        }}
       />
-      <div className="flex items-baseline gap-2 mb-0.5">
-        <span className="text-[12px] text-foreground/90 font-medium truncate">
-          {r.from_name || r.from_address}
-        </span>
-        {r.from_name && r.from_address && (
-          <span className="text-[10px] text-muted-foreground/40 truncate shrink-0">
-            {r.from_address}
-          </span>
-        )}
-        <span className="ml-auto text-[10px] text-muted-foreground/40 shrink-0 tabular-nums">
+      {/* Row 1: subject (title) + date */}
+      <div className="flex items-baseline gap-2">
+        <div
+          className={cn(
+            "flex-1 min-w-0 text-[13px] leading-snug truncate [&_mark]:bg-[#fab387]/35 [&_mark]:text-foreground [&_mark]:rounded-sm [&_mark]:px-px [&_mark]:font-semibold",
+            unread ? "text-foreground font-semibold" : "text-foreground/85 font-medium",
+          )}
+          dangerouslySetInnerHTML={{
+            __html: DOMPurify.sanitize(
+              r.subject_highlight || r.subject,
+              { ALLOWED_TAGS: ["mark"] },
+            ),
+          }}
+        />
+        <span className="text-[10px] text-muted-foreground/50 shrink-0 tabular-nums">
           {formatEmailDate(r.email_date)}
         </span>
       </div>
-      <div
-        className="text-[12px] text-foreground/70 leading-relaxed truncate [&_mark]:bg-primary/25 [&_mark]:text-foreground [&_mark]:rounded-sm [&_mark]:px-px"
-        dangerouslySetInnerHTML={{
-          __html: DOMPurify.sanitize(
-            r.subject_highlight || r.subject,
-            { ALLOWED_TAGS: ["mark"] },
-          ),
-        }}
-      />
+      {/* Row 2: from name · address (metadata) */}
+      <div className="flex items-baseline gap-1.5 mt-0.5 text-[11px] text-muted-foreground/60 truncate">
+        <span className="truncate">{r.from_name || r.from_address}</span>
+        {r.from_name && r.from_address && (
+          <>
+            <span className="text-muted-foreground/30 shrink-0">·</span>
+            <span className="truncate text-muted-foreground/45">{r.from_address}</span>
+          </>
+        )}
+      </div>
+      {/* Row 3: body snippet with highlight */}
       {r.body_highlight && (
         <div
-          className="text-[11px] text-muted-foreground/50 leading-relaxed truncate mt-0.5 [&_mark]:bg-primary/20 [&_mark]:text-muted-foreground [&_mark]:rounded-sm [&_mark]:px-px"
+          className="text-[12px] text-foreground/70 leading-relaxed truncate mt-1 [&_mark]:bg-primary/40 [&_mark]:text-foreground [&_mark]:rounded-sm [&_mark]:px-px"
           dangerouslySetInnerHTML={{
             __html: DOMPurify.sanitize(
               r.body_highlight,
