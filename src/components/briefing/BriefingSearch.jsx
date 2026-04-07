@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { analyzeSearchResults, getBriefingById } from "../../api";
-import { transformBriefing } from "../../transform";
 import { cn } from "@/lib/utils";
 import useIsMobile from "../../hooks/useIsMobile";
 import useSearch from "../../hooks/briefing/useSearch";
 import useEmailNavigation from "../../hooks/briefing/useEmailNavigation";
+import useSearchAnalysis from "../../hooks/briefing/useSearchAnalysis";
 import BottomSheet from "../ui/BottomSheet";
 import EmailSearchBody from "../email/EmailSearchBody";
-import extractRelatedContext from "./search/extractRelatedContext";
 import SearchModeToggle from "./search/SearchModeToggle";
 import SearchFilterBar from "./search/SearchFilterBar";
 import EmptyState from "./search/EmptyState";
@@ -49,14 +47,28 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     filteredEmailResults,
     emailHasResults,
   } = search;
-  const [analysis, setAnalysis] = useState(null);
-  const [analyzing, setAnalyzing] = useState(false);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
-  const [expandedId, setExpandedId] = useState(null);
-  const [expandedCtx, setExpandedCtx] = useState(null);
-  const [loadingCtx, setLoadingCtx] = useState(null);
-  const briefingCache = useRef({});
+  const closeSearch = useCallback(() => setOpen(false), []);
+  const analysisState = useSearchAnalysis({
+    query,
+    results,
+    onNavigateToEmail,
+    onCloseSearch: closeSearch,
+  });
+  const {
+    analysis,
+    analyzing,
+    expandedId,
+    expandedCtx,
+    loadingCtx,
+    setExpandedId,
+    setExpandedCtx,
+    handleExpand,
+    handleEmailClick,
+    handleAnalyze,
+    clearAnalysis,
+  } = analysisState;
   const inputRef = useRef(null);
   const inputWrapRef = useRef(null);
   const panelRef = useRef(null);
@@ -107,7 +119,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, expandedId, openEmail, setOpenEmail]);
+  }, [open, expandedId, openEmail, setOpenEmail, setExpandedId, setExpandedCtx]);
 
   useEffect(() => {
     // On mobile the panel renders inside BottomSheet, which handles its own
@@ -171,58 +183,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     }
   }
 
-  async function fetchBriefing(briefingId) {
-    if (briefingCache.current[briefingId]) return briefingCache.current[briefingId];
-    const res = await getBriefingById(briefingId);
-    const briefing = transformBriefing(res.briefing);
-    briefingCache.current[briefingId] = { briefing, generated_at: res.generated_at };
-    return briefingCache.current[briefingId];
-  }
-
-  async function handleExpand(r) {
-    const key = `${r.briefing_id}-${r.id}`;
-    if (expandedId === key) {
-      setExpandedId(null);
-      setExpandedCtx(null);
-      return;
-    }
-    setExpandedId(key);
-    setExpandedCtx(null);
-    setLoadingCtx(key);
-    try {
-      const { briefing } = await fetchBriefing(r.briefing_id);
-      setExpandedCtx(extractRelatedContext(briefing, r.section_type, r.chunk_text));
-    } catch {
-      setExpandedCtx({ primary: [], related: [{ type: "error", icon: "⚠️", text: "Failed to load briefing context" }] });
-    } finally {
-      setLoadingCtx(null);
-    }
-  }
-
-  async function handleEmailClick(emailData, briefingId) {
-    if (!onNavigateToEmail || !emailData) return;
-    try {
-      const { briefing, generated_at } = await fetchBriefing(briefingId);
-      onNavigateToEmail({ briefing, briefingId, generated_at, emailId: emailData.id, accountName: emailData.accountName });
-      setOpen(false);
-    } catch (err) {
-      console.error("[EA] Navigate to email failed:", err.message);
-    }
-  }
-
-  async function handleAnalyze() {
-    if (!results?.length || analyzing) return;
-    setAnalyzing(true);
-    try {
-      const data = await analyzeSearchResults(query, results);
-      setAnalysis(data.analysis);
-    } catch (err) {
-      setAnalysis(`Analysis failed: ${err.message}`);
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
   const showDropdown = open && (results !== null || emailResults !== null || searching || error);
   const hasResults = relevant.length > 0 || emailHasResults;
   // Flat list of email results in render order, with their owning account
@@ -258,9 +218,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
           <SearchModeToggle
             mode={searchMode}
             onChange={(next) => {
-              setAnalysis(null);
-              setExpandedId(null);
-              setExpandedCtx(null);
+              clearAnalysis();
               emailNav.setOpenEmail(null);
               search.handleModeChange(next);
             }}
@@ -271,9 +229,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             value={query}
             onChange={(e) => {
               setOpen(true);
-              setAnalysis(null);
-              setExpandedId(null);
-              setExpandedCtx(null);
+              clearAnalysis();
               search.handleInputChange(e.target.value);
             }}
             onFocus={() => setOpen(true)}
@@ -295,10 +251,8 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             <button
               onClick={() => {
                 search.resetQuery();
-                setAnalysis(null);
+                clearAnalysis();
                 setOpen(false);
-                setExpandedId(null);
-                setExpandedCtx(null);
                 emailNav.setOpenEmail(null);
               }}
               className="bg-transparent border-none text-muted-foreground/40 cursor-pointer p-0.5 rounded transition-colors hover:text-muted-foreground hover:bg-white/[0.06]"
