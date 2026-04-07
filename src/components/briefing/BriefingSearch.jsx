@@ -13,6 +13,15 @@ import SearchModeToggle from "./search/SearchModeToggle";
 import FilterChip from "./search/FilterChip";
 import EmailResultCard from "./search/EmailResultCard";
 import ContextCard from "./search/ContextCard";
+import {
+  SearchIcon,
+  SearchEmptyIcon,
+  CloseIcon,
+  MailIcon,
+  ChevronRightIcon,
+  SparkleIcon,
+  BackArrowIcon,
+} from "./search/Icons";
 
 // --- Component ---
 
@@ -356,15 +365,8 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               : "bg-input-bg border border-white/[0.06] hover:border-white/[0.1]",
           )}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+          <SearchIcon
+            size={14}
             className={cn(
               "shrink-0 transition-colors duration-200",
               searching
@@ -373,10 +375,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                   ? "text-muted-foreground"
                   : "text-muted-foreground/50",
             )}
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
+          />
           <SearchModeToggle mode={searchMode} onChange={handleModeChange} />
           <input
             ref={inputRef}
@@ -414,19 +413,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               className="bg-transparent border-none text-muted-foreground/40 cursor-pointer p-0.5 rounded transition-colors hover:text-muted-foreground hover:bg-white/[0.06]"
               aria-label="Clear search"
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <CloseIcon size={12} />
             </button>
           )}
         </div>
@@ -478,21 +465,11 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               {/* Empty state — briefing search */}
               {!isEmailQuery && !hasResults && results !== null && !searching && (
                 <div className="py-10 px-5 text-center">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                  <SearchEmptyIcon
+                    size={20}
+                    strokeWidth={1.5}
                     className="mx-auto mb-2.5 text-muted-foreground/30"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    <line x1="8" y1="11" x2="14" y2="11" />
-                  </svg>
+                  />
                   <div className="text-[11px] text-muted-foreground/60">
                     No results for &ldquo;{query}&rdquo;
                   </div>
@@ -502,20 +479,11 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               {/* Empty state — email search */}
               {isEmailQuery && !emailHasResults && emailResults !== null && !searching && (
                 <div className="py-10 px-5 text-center">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                  <MailIcon
+                    size={20}
+                    strokeWidth={1.5}
                     className="mx-auto mb-2.5 text-muted-foreground/30"
-                  >
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                    <polyline points="22,6 12,13 2,6" />
-                  </svg>
+                  />
                   <div className="text-[11px] text-muted-foreground/60">
                     {emailFilter === "unread" && rawEmailHasResults
                       ? `No unread emails matching "${query}"`
@@ -670,25 +638,16 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                             </div>
                           </div>
 
-                          {/* Expand chevron — SVG */}
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
+                          {/* Expand chevron */}
+                          <ChevronRightIcon
+                            size={12}
                             className={cn(
                               "relative shrink-0 mt-1 transition-all duration-200",
                               isExpanded
                                 ? "text-primary rotate-90"
                                 : "text-muted-foreground/30 group-hover:text-muted-foreground/50",
                             )}
-                          >
-                            <polyline points="9 18 15 12 9 6" />
-                          </svg>
+                          />
                         </div>
 
                         {/* Expanded context */}
@@ -717,21 +676,8 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                     border: "1px solid rgba(203,166,218,0.1)",
                   }}
                 >
-                  <div className="px-4 pt-3 pb-0.5 flex items-center gap-2">
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#cba6da"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                      <path d="M2 17l10 5 10-5" />
-                      <path d="M2 12l10 5 10-5" />
-                    </svg>
+                  <div className="px-4 pt-3 pb-0.5 flex items-center gap-2" style={{ color: "#cba6da" }}>
+                    <SparkleIcon size={12} />
                     <span className="text-[10px] tracking-wider uppercase text-[#cba6da] font-semibold">
                       Analysis
                     </span>
@@ -772,20 +718,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                     {analyzing ? (
                       <div className="w-3 h-3 border-[1.5px] border-primary/20 border-t-primary rounded-full animate-spin" />
                     ) : (
-                      <svg
-                        width="11"
-                        height="11"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                        <path d="M2 17l10 5 10-5" />
-                        <path d="M2 12l10 5 10-5" />
-                      </svg>
+                      <SparkleIcon size={11} />
                     )}
                     {analyzing ? "Analyzing..." : "Analyze"}
                     {!analyzing && (
@@ -824,10 +757,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                     className="flex items-center gap-2 px-4 py-3 text-[12px] text-foreground/70 hover:text-foreground shrink-0 min-h-[44px]"
                     style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="19" y1="12" x2="5" y2="12" />
-                      <polyline points="12 19 5 12 12 5" />
-                    </svg>
+                    <BackArrowIcon size={14} />
                     Back to search
                   </button>
                   <EmailSearchBody email={openEmail} onMarkedRead={handleEmailMarkedRead} onMarkedUnread={handleEmailMarkedUnread} />
