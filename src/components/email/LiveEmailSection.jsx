@@ -4,7 +4,6 @@ import Section from "../layout/Section";
 import EmailRow from "./EmailRow";
 import BillBadge from "../bills/BillBadge";
 import { MotionExpand, MotionList, MotionItem } from "../ui/motion-wrappers";
-import { markAllEmailsAsRead } from "../../api";
 import { timeAgo } from "../../lib/dashboard-helpers";
 import { CheckCheck } from "lucide-react";
 
@@ -30,38 +29,30 @@ function getSectionTitle(briefingGeneratedAt) {
   return "Since This Morning";
 }
 
-export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, delay, className, embedded, onRefreshLive, onTrashedCountChange }) {
+export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, className, embedded, onRefreshLive, liveState }) {
+  const {
+    visibleEmails,
+    unreadCount,
+    hasUnread,
+    isRead,
+    markRead,
+    dismiss,
+    markAllRead,
+    markingAllRead,
+  } = liveState;
+
   const [selectedId, setSelectedId] = useState(null);
-  const [markedRead, setMarkedRead] = useState(() => new Set());
   const [billPayId, setBillPayId] = useState(null);
-  const [markingAllRead, setMarkingAllRead] = useState(false);
-  const [trashedUids, setTrashedUids] = useState(() => new Set());
   const emailRowRefs = useRef({});
 
-  const visibleEmails = emails?.filter(e => !trashedUids.has(e.uid));
-  const hasUnread = visibleEmails?.some(e => !e.read && !markedRead.has(e.uid));
-
   const handleMarkAllRead = async () => {
-    const uids = emails.map(e => e.uid);
-    if (!uids.length) return;
-    setMarkingAllRead(true);
-    try {
-      await markAllEmailsAsRead(uids);
-      setMarkedRead(prev => {
-        const next = new Set(prev);
-        uids.forEach(id => next.add(id));
-        return next;
-      });
-      onRefreshLive?.();
-    } catch {
-      // silently fail
-    }
-    setMarkingAllRead(false);
+    await markAllRead();
+    onRefreshLive?.();
   };
 
   const sectionTitle = getSectionTitle(briefingGeneratedAt);
 
-  if (!visibleEmails?.length) {
+  if (!visibleEmails.length) {
     if (!briefingGeneratedAt) return null;
     const emptyMsg = <p className="text-[12px] text-muted-foreground/40 m-0">No new emails since the last fetch.</p>;
     if (embedded) return emptyMsg;
@@ -86,7 +77,8 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
           {visibleEmails.length}
         </span>
         <span className="text-[12px] text-muted-foreground/50">
-          new email{visibleEmails.length !== 1 ? "s" : ""}
+          email{visibleEmails.length !== 1 ? "s" : ""}
+          {unreadCount > 0 && unreadCount < visibleEmails.length && ` · ${unreadCount} unread`}
           {briefingTime && ` · briefing ${briefingTime}`}
         </span>
         <span
@@ -119,22 +111,16 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
         {[...visibleEmails].sort((a, b) => (b.isImportantSender ? 1 : 0) - (a.isImportantSender ? 1 : 0) || new Date(b.date) - new Date(a.date)).map((email) => {
           const isOpen = selectedId === email.uid;
           const isBillPayOpen = billPayId === email.uid;
-          const isRead = email.read || markedRead.has(email.uid);
+          const rowIsRead = isRead(email);
           const tsColor = getTimestampColor(email.date);
           return (
             <MotionItem key={email.uid}>
               <EmailRow
                 email={email}
                 isOpen={isOpen}
-                dimmed={isRead}
+                dimmed={rowIsRead}
                 onToggle={(opening) => setSelectedId(opening ? email.uid : null)}
-                onMarkRead={!markedRead.has(email.uid) ? () => {
-                  setMarkedRead(prev => {
-                    const next = new Set(prev).add(email.uid);
-                    onTrashedCountChange?.(trashedUids.size + next.size);
-                    return next;
-                  });
-                } : undefined}
+                onMarkRead={rowIsRead ? undefined : () => markRead(email.uid)}
                 rowRef={(el) => { emailRowRefs.current[email.uid] = el; }}
                 preview={email.body_preview}
                 accentBar={email.isImportantSender ? (
@@ -233,11 +219,7 @@ export default function LiveEmailSection({ emails, briefingGeneratedAt, loaded, 
                 emailBodyProps={{
                   model: null,
                   onDismiss: (uid) => {
-                    setTrashedUids(prev => {
-                      const next = new Set(prev).add(uid);
-                      onTrashedCountChange?.(next.size + markedRead.size);
-                      return next;
-                    });
+                    dismiss(uid);
                     setSelectedId(null);
                   },
                   onLoaded: () => {

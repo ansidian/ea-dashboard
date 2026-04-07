@@ -4,6 +4,7 @@ import Section from "../layout/Section";
 import EmailSection from "./EmailSection";
 import LiveEmailSection from "./LiveEmailSection";
 import { useDashboard } from "../../context/DashboardContext";
+import useLiveEmailState from "../../hooks/useLiveEmailState";
 
 export default function EmailTabSection({
   summary, model, emails, briefingGeneratedAt, loaded, delay, className, onRefreshLive,
@@ -14,8 +15,8 @@ export default function EmailTabSection({
   const prevHeight = useRef(null);
   const scrollTimer = useRef(null);
 
-  const [trashedCount, setTrashedCount] = useState(0);
-  const liveCount = Math.max(0, (emails?.length || 0) - trashedCount);
+  const liveState = useLiveEmailState(emails);
+  const liveCount = liveState.unreadCount;
 
   function switchTab(tab) {
     if (tab === activeTab) return;
@@ -162,13 +163,12 @@ export default function EmailTabSection({
           </div>
           <div style={{ display: activeTab === "live" ? "block" : "none" }}>
             <LiveEmailSection
-              emails={emails}
               briefingGeneratedAt={briefingGeneratedAt}
               loaded={loaded}
               delay={delay}
               embedded
               onRefreshLive={onRefreshLive}
-              onTrashedCountChange={setTrashedCount}
+              liveState={liveState}
             />
           </div>
         </div>

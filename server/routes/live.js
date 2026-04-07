@@ -189,9 +189,10 @@ router.get("/all", async (req, res) => {
       }
     }
 
-    // Filter to only new unread emails not in the briefing
+    // Filter to emails not in the briefing (read state preserved on the email object;
+    // dashboard dims read rows but keeps them visible until next briefing generation)
     const newEmails = emailArrays
-      .filter(e => !knownUids.has(e.uid) && !e.read)
+      .filter(e => !knownUids.has(e.uid))
       .map(e => ({
         ...e,
         isImportantSender: importantSenderAddresses.has(extractEmailAddress(e.from)),
