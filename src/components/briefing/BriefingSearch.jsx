@@ -11,6 +11,7 @@ import extractRelatedContext from "./search/extractRelatedContext";
 import { formatBriefingDate } from "./search/formatDate";
 import SearchModeToggle from "./search/SearchModeToggle";
 import SearchFilterBar from "./search/SearchFilterBar";
+import EmptyState from "./search/EmptyState";
 import EmailResultCard from "./search/EmailResultCard";
 import ContextCard from "./search/ContextCard";
 import {
@@ -453,32 +454,22 @@ export default function BriefingSearch({ onNavigateToEmail }) {
 
               {/* Empty state — briefing search */}
               {!isEmailQuery && !hasResults && results !== null && !searching && (
-                <div className="py-10 px-5 text-center">
-                  <SearchEmptyIcon
-                    size={20}
-                    strokeWidth={1.5}
-                    className="mx-auto mb-2.5 text-muted-foreground/30"
-                  />
-                  <div className="text-[11px] text-muted-foreground/60">
-                    No results for &ldquo;{query}&rdquo;
-                  </div>
-                </div>
+                <EmptyState
+                  icon={<SearchEmptyIcon size={20} strokeWidth={1.5} />}
+                  message={<>No results for &ldquo;{query}&rdquo;</>}
+                />
               )}
 
               {/* Empty state — email search */}
               {isEmailQuery && !emailHasResults && emailResults !== null && !searching && (
-                <div className="py-10 px-5 text-center">
-                  <MailIcon
-                    size={20}
-                    strokeWidth={1.5}
-                    className="mx-auto mb-2.5 text-muted-foreground/30"
-                  />
-                  <div className="text-[11px] text-muted-foreground/60">
-                    {emailFilter === "unread" && rawEmailHasResults
+                <EmptyState
+                  icon={<MailIcon size={20} strokeWidth={1.5} />}
+                  message={
+                    emailFilter === "unread" && rawEmailHasResults
                       ? `No unread emails matching "${query}"`
-                      : `No emails matching "${query}"`}
-                  </div>
-                </div>
+                      : `No emails matching "${query}"`
+                  }
+                />
               )}
 
               {/* Email search results */}
