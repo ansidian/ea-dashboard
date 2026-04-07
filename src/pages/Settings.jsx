@@ -30,7 +30,6 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
   const [label, setLabel] = useState(acc.label || acc.email);
   const [color, setColor] = useState(acc.color || "#cba6da");
   const [icon, setIcon] = useState(acc.icon || (acc.type === "icloud" ? "🍎" : "📧"));
-  const [gmailIndex, setGmailIndex] = useState(acc.gmail_index ?? 0);
   const [saving, setSaving] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: acc.id, disabled: editing });
 
@@ -45,7 +44,6 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
   async function handleSave() {
     setSaving(true);
     const updates = { label, color, icon };
-    if (acc.type === "gmail") updates.gmail_index = gmailIndex;
     await updateAccount(acc.id, updates);
     setAccounts(accounts.map(a => a.id === acc.id ? { ...a, ...updates } : a));
     setSaving(false);
@@ -128,26 +126,6 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
               />
             </div>
           </div>
-          {acc.type === "gmail" && (
-            <div>
-              <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">
-                Gmail Account Index
-              </label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min="0"
-                  max="9"
-                  value={gmailIndex}
-                  onChange={e => setGmailIndex(parseInt(e.target.value, 10) || 0)}
-                  className="w-20"
-                />
-                <span className="text-[11px] max-sm:text-xs text-muted-foreground/50">
-                  The /u/N index in Gmail URLs (check your browser address bar)
-                </span>
-              </div>
-            </div>
-          )}
           <Button onClick={handleSave} disabled={saving} size="sm" className="self-start">
             {saving ? "Saving..." : "Save"}
           </Button>

@@ -617,16 +617,20 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       injectReadEmails(briefingJson, readNew);
     }
 
-    // Reattach uid from original emails — Claude only sees/returns `id`, but the
-    // frontend needs the prefixed `uid` (e.g. "gmail-1-abc123") to fetch email bodies.
-    const uidById = new Map(emails.map(e => [e.id || e.uid, e.uid]));
+    // Reattach fields from original emails — Claude only sees/returns `id`, but the
+    // frontend needs uid (for body fetching) and account_id/account_email (for the
+    // direct Gmail web link).
+    const origById = new Map(emails.map(e => [e.id || e.uid, e]));
+    function reattach(e) {
+      const orig = origById.get(e.id);
+      if (!orig) return;
+      if (!e.uid) e.uid = orig.uid;
+      if (!e.account_id) e.account_id = orig.account_id;
+      if (!e.account_email) e.account_email = orig.account_email;
+    }
     for (const acct of briefingJson.emails?.accounts || []) {
-      for (const e of acct.important) {
-        if (!e.uid && uidById.has(e.id)) e.uid = uidById.get(e.id);
-      }
-      for (const e of acct.noise || []) {
-        if (!e.uid && uidById.has(e.id)) e.uid = uidById.get(e.id);
-      }
+      for (const e of acct.important) reattach(e);
+      for (const e of acct.noise || []) reattach(e);
     }
 
     await updateProgress(briefingId, "Finalizing briefing...");

@@ -102,7 +102,7 @@ router.get("/accounts", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const result = await db.execute({
-      sql: "SELECT id, type, email, label, color, icon, calendar_enabled, sort_order, gmail_index, created_at FROM ea_accounts WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC",
+      sql: "SELECT id, type, email, label, color, icon, calendar_enabled, sort_order, created_at FROM ea_accounts WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC",
       args: [userId],
     });
     res.json(result.rows);
@@ -208,7 +208,7 @@ router.patch("/accounts/reorder", async (req, res) => {
 router.patch("/accounts/:id", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const { id } = req.params;
-  const { calendar_enabled, label, color, icon, gmail_index } = req.body;
+  const { calendar_enabled, label, color, icon } = req.body;
 
   // input validation
   if (label !== undefined && (typeof label !== "string" || label.length > 50)) {
@@ -219,9 +219,6 @@ router.patch("/accounts/:id", async (req, res) => {
   }
   if (icon !== undefined && icon !== null && (typeof icon !== "string" || icon.length > 50)) {
     return res.status(400).json({ message: "Icon must be a string under 50 characters or null" });
-  }
-  if (gmail_index !== undefined && (!Number.isInteger(gmail_index) || gmail_index < 0 || gmail_index > 9)) {
-    return res.status(400).json({ message: "Gmail index must be an integer 0-9" });
   }
 
   try {
@@ -242,10 +239,6 @@ router.patch("/accounts/:id", async (req, res) => {
     if (icon !== undefined) {
       updates.push("icon = ?");
       args.push(icon || null);
-    }
-    if (gmail_index !== undefined) {
-      updates.push("gmail_index = ?");
-      args.push(gmail_index);
     }
     if (updates.length) {
       updates.push("updated_at = datetime('now')");
