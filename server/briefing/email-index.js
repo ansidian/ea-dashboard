@@ -53,8 +53,14 @@ export async function indexEmails(userId, emails) {
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args,
       },
+      // FTS5 has no UNIQUE constraint on uid, so OR IGNORE is a no-op.
+      // Delete any prior row for this uid before inserting to prevent duplicates.
       {
-        sql: `INSERT OR IGNORE INTO ea_email_fts
+        sql: `DELETE FROM ea_email_fts WHERE uid = ?`,
+        args: [uid],
+      },
+      {
+        sql: `INSERT INTO ea_email_fts
               (uid, from_name, from_address, subject, body_snippet)
               VALUES (?, ?, ?, ?, ?)`,
         args: [uid, fromName, fromAddress, email.subject || "", email.body_preview || ""],
@@ -63,5 +69,5 @@ export async function indexEmails(userId, emails) {
   });
 
   await db.batch(stmts);
-  console.log(`[EA] Indexed ${emails.length} emails (${stmts.length / 2} unique candidates)`);
+  console.log(`[EA] Indexed ${emails.length} emails`);
 }
