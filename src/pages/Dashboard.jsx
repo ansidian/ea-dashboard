@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import useLiveData from "../hooks/useLiveData";
 import useHoldGesture from "../hooks/useHoldGesture";
 import useBriefingData from "../hooks/useBriefingData";
+import useAutoRefresh from "../hooks/useAutoRefresh";
 const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevPanel.jsx")) : null;
 import useNotifications from "../hooks/useNotifications";
 
@@ -34,6 +35,13 @@ export default function Dashboard() {
   const bd = useBriefingData({ liveData, isMock });
   const refreshHold = useHoldGesture({ onShortPress: bd.handleQuickRefresh });
   const suspendHold = useHoldGesture();
+
+  useAutoRefresh({
+    disabled: isMock,
+    lastQuickRefreshAt: bd.lastQuickRefreshAt,
+    onQuickRefresh: bd.handleQuickRefresh,
+    onSilentRefresh: liveData.refreshNow,
+  });
 
   // Suspend handler (not briefing-related)
   const [suspending, setSuspending] = useState(false);

@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getLiveData } from "../api";
 
-const POLL_INTERVAL_MS = 5 * 60 * 1000;
-
 export default function useLiveData({ disabled = false } = {}) {
   const [liveEmails, setLiveEmails] = useState([]);
   const [liveCalendar, setLiveCalendar] = useState(null);
@@ -18,7 +16,6 @@ export default function useLiveData({ disabled = false } = {}) {
   const [isPolling, setIsPolling] = useState(false);
   const [billsLoading, setBillsLoading] = useState(true);
   const [actualConfigured, setActualConfigured] = useState(true);
-  const intervalRef = useRef(null);
   const mountedRef = useRef(true);
   const fetchingRef = useRef(false);
 
@@ -51,20 +48,7 @@ export default function useLiveData({ disabled = false } = {}) {
     }
   }, []);
 
-  const startInterval = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      if (document.visibilityState !== "hidden") {
-        fetchLive();
-      }
-    }, POLL_INTERVAL_MS);
-  }, [fetchLive]);
-
-  // Manual refresh — also resets the auto-poll timer
-  const refreshNow = useCallback(async () => {
-    await fetchLive();
-    startInterval();
-  }, [fetchLive, startInterval]);
+  const refreshNow = fetchLive;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -76,22 +60,11 @@ export default function useLiveData({ disabled = false } = {}) {
       return;
     }
     fetchLive();
-    startInterval();
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        fetchLive();
-        startInterval();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       mountedRef.current = false;
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchLive, startInterval, disabled]);
+  }, [fetchLive, disabled]);
 
   return {
     liveEmails,

@@ -23,6 +23,7 @@ export default function useBriefingData({ liveData, isMock }) {
   const [latestId, setLatestId] = useState(null);
   const [schedules, setSchedules] = useState([]);
   const [renderConfigured, setRenderConfigured] = useState(false);
+  const [lastQuickRefreshAt, setLastQuickRefreshAt] = useState(null);
 
   // --- Polling ---
 
@@ -105,6 +106,7 @@ export default function useBriefingData({ liveData, isMock }) {
             setBriefing(updated);
             setLatestBriefing(updated);
             setLatestId(result.id);
+            setLastQuickRefreshAt(Date.now());
           })
           .catch(() => {})
           .finally(() => setRefreshing(false));
@@ -154,6 +156,7 @@ export default function useBriefingData({ liveData, isMock }) {
       setLatestBriefing(transformed);
       setLatestId(result.id);
       setViewingPast(null);
+      setLastQuickRefreshAt(Date.now());
     } catch (err) {
       setError(err.message);
     } finally {
@@ -208,6 +211,7 @@ export default function useBriefingData({ liveData, isMock }) {
     schedules,
     setSchedules,
     renderConfigured,
+    lastQuickRefreshAt,
     handleQuickRefresh,
     handleFullGeneration,
     selectHistory,
