@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { searchBriefings, analyzeSearchResults, getBriefingById, searchEmails } from "../../api";
+import { analyzeSearchResults, getBriefingById } from "../../api";
 import { transformBriefing } from "../../transform";
 import { cn } from "@/lib/utils";
 import useIsMobile from "../../hooks/useIsMobile";
+import useSearch from "../../hooks/briefing/useSearch";
 import BottomSheet from "../ui/BottomSheet";
 import EmailSearchBody from "../email/EmailSearchBody";
-import { DEBOUNCE_MS, MIN_RELEVANCE } from "./search/constants";
 import extractRelatedContext from "./search/extractRelatedContext";
 import SearchModeToggle from "./search/SearchModeToggle";
 import SearchFilterBar from "./search/SearchFilterBar";
@@ -26,17 +26,29 @@ import {
 
 export default function BriefingSearch({ onNavigateToEmail }) {
   const isMobile = useIsMobile();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState(null);
-  const [searching, setSearching] = useState(false);
-  const [error, setError] = useState(null);
+  const search = useSearch();
+  const {
+    query,
+    results,
+    emailResults,
+    searching,
+    error,
+    searchMode,
+    emailFilter,
+    focusedIdx,
+    setFocusedIdx,
+    setEmailResults,
+    relevant,
+    grouped,
+    sortedDates,
+    rawEmailHasResults,
+    totalUnread,
+    filteredEmailResults,
+    emailHasResults,
+  } = search;
   const [analysis, setAnalysis] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [emailResults, setEmailResults] = useState(null);
-  const [emailFilter, setEmailFilter] = useState("all"); // 'all' | 'unread'
-  const [searchMode, setSearchMode] = useState("emails"); // 'emails' | 'briefings'
   const [open, setOpen] = useState(false);
-  const [focusedIdx, setFocusedIdx] = useState(-1);
   const [pos, setPos] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [expandedCtx, setExpandedCtx] = useState(null);
@@ -47,7 +59,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   const inputWrapRef = useRef(null);
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
-  const debounceRef = useRef(null);
 
   const updatePos = useCallback(() => {
     if (!inputWrapRef.current) return;
@@ -126,75 +137,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   }, [open, results, expandedId]);
 
   const isEmailQuery = searchMode === "emails";
-
-  const doSearch = useCallback(async (q, mode) => {
-    const term = q.trim();
-    if (!term) { setResults(null); setEmailResults(null); setAnalysis(null); return; }
-    setSearching(true);
-    setError(null);
-    setAnalysis(null);
-    setExpandedId(null);
-    setExpandedCtx(null);
-
-    if (mode === "emails") {
-      setResults(null);
-      if (term.length < 2) { setEmailResults(null); setSearching(false); return; }
-      try {
-        const data = await searchEmails(term);
-        setEmailResults(data);
-        setFocusedIdx(-1);
-      } catch (err) {
-        setError(err.message);
-        setEmailResults(null);
-      } finally {
-        setSearching(false);
-      }
-    } else {
-      setEmailResults(null);
-      try {
-        const data = await searchBriefings(term);
-        setResults(data.results || []);
-        setFocusedIdx(-1);
-      } catch (err) {
-        setError(err.message);
-        setResults(null);
-      } finally {
-        setSearching(false);
-      }
-    }
-  }, []);
-
-  function handleInputChange(e) {
-    const val = e.target.value;
-    setQuery(val);
-    setOpen(true);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => doSearch(val, searchMode), DEBOUNCE_MS);
-  }
-
-  function handleModeChange(next) {
-    if (next === searchMode) return;
-    setSearchMode(next);
-    setFocusedIdx(-1);
-    setEmailFilter("all");
-    setOpenEmail(null);
-    // Re-run the current query in the new mode immediately (no debounce —
-    // the user explicitly switched, so a snappy response feels right).
-    clearTimeout(debounceRef.current);
-    if (query.trim()) {
-      doSearch(query, next);
-    } else {
-      // Clear stale results from the other mode so the dropdown isn't lying.
-      setResults(null);
-      setEmailResults(null);
-    }
-  }
-
-  function handleEmailFilterChange(next) {
-    if (next === emailFilter) return;
-    setEmailFilter(next);
-    setFocusedIdx(-1);
-  }
 
   function handleOpenEmail(email, acct) {
     setOpenEmail({
@@ -316,33 +258,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     }
   }
 
-  const relevant = (results || []).filter(r => r.score == null || r.score >= MIN_RELEVANCE);
-  const grouped = {};
-  for (const r of relevant) {
-    if (!grouped[r.source_date]) grouped[r.source_date] = [];
-    grouped[r.source_date].push(r);
-  }
-  const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-
-  const rawEmailHasResults = emailResults?.accounts?.length > 0;
-  const totalUnread = rawEmailHasResults
-    ? emailResults.accounts.reduce(
-        (n, a) => n + a.results.filter((r) => !r.read).length,
-        0,
-      )
-    : 0;
-  // Apply the active filter to email results, dropping accounts that end up
-  // with zero matching messages so the renderer doesn't show empty headers.
-  const filteredEmailResults =
-    rawEmailHasResults && emailFilter === "unread"
-      ? {
-          ...emailResults,
-          accounts: emailResults.accounts
-            .map((a) => ({ ...a, results: a.results.filter((r) => !r.read) }))
-            .filter((a) => a.results.length > 0),
-        }
-      : emailResults;
-  const emailHasResults = filteredEmailResults?.accounts?.length > 0;
   const showDropdown = open && (results !== null || emailResults !== null || searching || error);
   const hasResults = relevant.length > 0 || emailHasResults;
   // Flat list of email results in render order, with their owning account
@@ -375,12 +290,27 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                   : "text-muted-foreground/50",
             )}
           />
-          <SearchModeToggle mode={searchMode} onChange={handleModeChange} />
+          <SearchModeToggle
+            mode={searchMode}
+            onChange={(next) => {
+              setAnalysis(null);
+              setExpandedId(null);
+              setExpandedCtx(null);
+              setOpenEmail(null);
+              search.handleModeChange(next);
+            }}
+          />
           <input
             ref={inputRef}
             type="text"
             value={query}
-            onChange={handleInputChange}
+            onChange={(e) => {
+              setOpen(true);
+              setAnalysis(null);
+              setExpandedId(null);
+              setExpandedCtx(null);
+              search.handleInputChange(e.target.value);
+            }}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder={searchMode === "emails" ? "Search emails..." : "Search briefings..."}
@@ -399,15 +329,12 @@ export default function BriefingSearch({ onNavigateToEmail }) {
           {query && (
             <button
               onClick={() => {
-                setQuery("");
-                setResults(null);
-                setEmailResults(null);
+                search.resetQuery();
                 setAnalysis(null);
                 setOpen(false);
                 setExpandedId(null);
+                setExpandedCtx(null);
                 setOpenEmail(null);
-                setEmailFilter("all");
-                setFocusedIdx(-1);
               }}
               className="bg-transparent border-none text-muted-foreground/40 cursor-pointer p-0.5 rounded transition-colors hover:text-muted-foreground hover:bg-white/[0.06]"
               aria-label="Clear search"
@@ -426,7 +353,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             <SearchFilterBar
               emailFilter={emailFilter}
               totalUnread={totalUnread}
-              onFilterChange={handleEmailFilterChange}
+              onFilterChange={search.handleEmailFilterChange}
             />
           )}
           <div
