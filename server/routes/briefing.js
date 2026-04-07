@@ -1,7 +1,8 @@
 import { Router } from "express";
 import db from "../db/connection.js";
 import { requireAuth } from "../middleware/auth.js";
-import { generateBriefing, quickRefresh } from "../briefing/index.js";
+import { generateBriefing, quickRefresh, loadUserConfig, fetchAllEmails } from "../briefing/index.js";
+import { indexEmails } from "../briefing/email-index.js";
 import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, trashMessage as gmailTrash, batchMarkAsRead as gmailBatchMarkAsRead } from "../briefing/gmail.js";
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
@@ -19,6 +20,22 @@ router.use(requireAuth);
 router.get("/scenarios", (req, res) => {
   if (process.env.NODE_ENV === "production") return res.status(404).json({ message: "Not found" });
   res.json(listScenarios());
+});
+
+// Reindex emails without generating a briefing (dev only — no Claude call)
+router.post("/dev-reindex-emails", async (req, res) => {
+  if (process.env.NODE_ENV === "production") return res.status(404).json({ message: "Not found" });
+  const userId = process.env.EA_USER_ID;
+  const hoursBack = Math.min(parseInt(req.query.hours) || 720, 2160);
+  try {
+    const { accounts, settings } = await loadUserConfig(userId);
+    const emails = await fetchAllEmails(accounts, settings, hoursBack);
+    await indexEmails(userId, emails);
+    res.json({ indexed: emails.length, hoursBack });
+  } catch (err) {
+    console.error("[EA] Dev reindex failed:", err);
+    res.status(500).json({ message: err.message });
+  }
 });
 
 // Merge current account display preferences (label, color, icon) into a briefing object.

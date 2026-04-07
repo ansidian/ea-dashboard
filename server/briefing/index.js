@@ -92,7 +92,7 @@ async function fetchLiveData(userId, accounts, settings) {
 }
 
 // Fetch emails from all accounts
-async function fetchAllEmails(accounts, settings, hoursBack) {
+export async function fetchAllEmails(accounts, settings, hoursBack) {
   const gmailAccounts = accounts.filter((a) => a.type === "gmail");
   const icloudAccounts = accounts.filter((a) => a.type === "icloud");
 
