@@ -6,6 +6,7 @@ import { transformBriefing } from "../../transform";
 import { cn } from "@/lib/utils";
 import useIsMobile from "../../hooks/useIsMobile";
 import BottomSheet from "../ui/BottomSheet";
+import EmailSearchBody from "../email/EmailSearchBody";
 
 const SECTION_META = {
   bills: { icon: "💰", color: "#a6e3a1", label: "Bills" },
@@ -129,12 +130,15 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   const [expandedId, setExpandedId] = useState(null);
   const [expandedCtx, setExpandedCtx] = useState(null);
   const [loadingCtx, setLoadingCtx] = useState(null);
+  const [openEmail, setOpenEmail] = useState(null);
   const briefingCache = useRef({});
   const inputRef = useRef(null);
   const inputWrapRef = useRef(null);
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
   const debounceRef = useRef(null);
+  const emailModalRef = useRef(null);
+  const justClosedEmailRef = useRef(false);
 
   const updatePos = useCallback(() => {
     if (!inputWrapRef.current) return;
@@ -161,22 +165,34 @@ export default function BriefingSearch({ onNavigateToEmail }) {
         setOpen(true);
       }
       if (e.key === "Escape" && open) {
-        if (expandedId) { setExpandedId(null); setExpandedCtx(null); }
+        if (openEmail) { setOpenEmail(null); }
+        else if (expandedId) { setExpandedId(null); setExpandedCtx(null); }
         else { setOpen(false); inputRef.current?.blur(); }
       }
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, expandedId]);
+  }, [open, expandedId, openEmail]);
 
   useEffect(() => {
     function handleClick(e) {
+      // Desktop only: clicks inside the email modal stay inside; clicks elsewhere
+      // close the modal (search panel stays open). Mobile uses the BottomSheet's
+      // own back button — don't intercept clicks there.
+      if (!isMobile && openEmail) {
+        if (emailModalRef.current?.contains(e.target)) return;
+        setOpenEmail(null);
+        justClosedEmailRef.current = true;
+        setTimeout(() => { justClosedEmailRef.current = false; }, 0);
+        return;
+      }
+      // Normal panel dismiss
       if (inputWrapRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return;
       setOpen(false);
     }
     if (open) document.addEventListener("pointerdown", handleClick);
     return () => document.removeEventListener("pointerdown", handleClick);
-  }, [open]);
+  }, [open, openEmail, isMobile]);
 
   // Scroll trapping on the SCROLL CONTAINER (not the outer panel)
   useEffect(() => {
@@ -239,6 +255,32 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     setOpen(true);
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doSearch(val), DEBOUNCE_MS);
+  }
+
+  function handleOpenEmail(email, acct) {
+    // If a click just closed the modal, swallow this click and require another
+    if (justClosedEmailRef.current) return;
+    setOpenEmail({
+      ...email,
+      account_id: acct.account_id,
+      account_label: acct.account_label,
+      account_email: acct.account_email,
+      account_color: acct.account_color,
+      account_icon: acct.account_icon,
+    });
+  }
+
+  function handleEmailMarkedRead(uid) {
+    setEmailResults((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        accounts: prev.accounts.map((a) => ({
+          ...a,
+          results: a.results.map((r) => (r.uid === uid ? { ...r, read: true } : r)),
+        })),
+      };
+    });
   }
 
   function handleKeyDown(e) {
@@ -389,6 +431,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                 setAnalysis(null);
                 setOpen(false);
                 setExpandedId(null);
+                setOpenEmail(null);
               }}
               className="bg-transparent border-none text-muted-foreground/40 cursor-pointer p-0.5 rounded transition-colors hover:text-muted-foreground hover:bg-white/[0.06]"
               aria-label="Clear search"
@@ -482,7 +525,12 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                     </span>
                   </div>
                   {acct.results.map((r) => (
-                    <EmailResultCard key={r.uid} r={r} acctColor={acct.account_color} />
+                    <EmailResultCard
+                      key={r.uid}
+                      r={r}
+                      acctColor={acct.account_color}
+                      onOpen={() => handleOpenEmail(r, acct)}
+                    />
                   ))}
                 </div>
               ))}
@@ -726,36 +774,92 @@ export default function BriefingSearch({ onNavigateToEmail }) {
           return (
             <BottomSheet
               open
-              onClose={() => { setOpen(false); inputRef.current?.blur(); }}
-              title="Search Results"
+              onClose={() => {
+                if (openEmail) { setOpenEmail(null); return; }
+                setOpen(false);
+                inputRef.current?.blur();
+              }}
+              title={openEmail ? undefined : "Search Results"}
             >
-              {dropdownContent}
+              {openEmail ? (
+                <div className="flex flex-col h-full min-h-0">
+                  <button
+                    onClick={() => setOpenEmail(null)}
+                    className="flex items-center gap-2 px-4 py-3 text-[12px] text-foreground/70 hover:text-foreground shrink-0 min-h-[44px]"
+                    style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="19" y1="12" x2="5" y2="12" />
+                      <polyline points="12 19 5 12 12 5" />
+                    </svg>
+                    Back to search
+                  </button>
+                  <EmailSearchBody email={openEmail} onMarkedRead={handleEmailMarkedRead} />
+                </div>
+              ) : dropdownContent}
             </BottomSheet>
           );
         }
 
         if (!pos) return null;
 
-        return createPortal(
-          <div
-            ref={panelRef}
-            className="z-[9999] isolate flex flex-col animate-in fade-in slide-in-from-top-1 duration-200"
-            style={{
-              position: "fixed",
-              top: pos.top,
-              left: pos.left,
-              width: pos.width,
-              maxHeight: `min(480px, calc(100vh - ${pos.top + 16}px))`,
-              background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.08)",
-              boxShadow:
-                "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-            }}
-          >
-            {dropdownContent}
-          </div>,
-          document.body,
+        return (
+          <>
+            {createPortal(
+              <div
+                ref={panelRef}
+                className="z-[9999] isolate flex flex-col animate-in fade-in slide-in-from-top-1 duration-200"
+                style={{
+                  position: "fixed",
+                  top: pos.top,
+                  left: pos.left,
+                  width: pos.width,
+                  maxHeight: `min(480px, calc(100vh - ${pos.top + 16}px))`,
+                  background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow:
+                    "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
+                }}
+              >
+                {dropdownContent}
+              </div>,
+              document.body,
+            )}
+            {openEmail && createPortal(
+              <div
+                ref={emailModalRef}
+                className="z-[10000] isolate flex flex-col animate-in fade-in zoom-in-95 duration-200"
+                style={{
+                  position: "fixed",
+                  left: "50%",
+                  top: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: "min(720px, calc(100vw - 32px))",
+                  maxHeight: "calc(100vh - 64px)",
+                  background: "#16161e",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+                  overflow: "hidden",
+                }}
+              >
+                <button
+                  onClick={() => setOpenEmail(null)}
+                  className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-default text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.06] transition-colors"
+                  style={{ borderRadius: 8 }}
+                  aria-label="Close"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+                <EmailSearchBody email={openEmail} onMarkedRead={handleEmailMarkedRead} />
+              </div>,
+              document.body,
+            )}
+          </>
         );
       })()}
     </>
@@ -779,11 +883,15 @@ function formatEmailDate(dateStr) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function EmailResultCard({ r, acctColor }) {
+function EmailResultCard({ r, acctColor, onOpen }) {
   return (
     <div
-      className="group relative mx-2 rounded-lg transition-colors duration-150 hover:bg-white/[0.03]"
-      style={{ padding: "8px 12px" }}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen?.(); } }}
+      className="group relative mx-2 rounded-lg transition-colors duration-150 hover:bg-white/[0.03] cursor-pointer"
+      style={{ padding: "8px 12px", opacity: r.read ? 0.65 : 1 }}
     >
       <div
         className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"

@@ -60,6 +60,16 @@ async function mergeAccountPrefs(briefing, userId) {
 }
 
 // Persist read status into the stored briefing so reloads reflect it
+async function markEmailsReadInIndex(userId, uids) {
+  const list = Array.isArray(uids) ? uids : [uids];
+  if (!list.length) return;
+  const placeholders = list.map(() => "?").join(",");
+  await db.execute({
+    sql: `UPDATE ea_email_index SET read = 1 WHERE user_id = ? AND uid IN (${placeholders})`,
+    args: [userId, ...list],
+  });
+}
+
 async function markEmailsReadInBriefing(userId, uids) {
   const uidSet = new Set(Array.isArray(uids) ? uids : [uids]);
   const latest = await db.execute({
@@ -486,6 +496,7 @@ router.post("/email/:uid/mark-read", async (req, res) => {
       await gmailMarkAsRead(found.account, uid);
     }
     await markEmailsReadInBriefing(userId, uid);
+    await markEmailsReadInIndex(userId, uid);
     res.json({ ok: true });
   } catch (err) {
     console.error("Error marking email as read:", err);
@@ -555,6 +566,7 @@ router.post("/email/mark-all-read", async (req, res) => {
 
     await Promise.all(ops);
     await markEmailsReadInBriefing(userId, uids);
+    await markEmailsReadInIndex(userId, uids);
     res.json({ ok: true });
   } catch (err) {
     console.error("Error marking all emails as read:", err);
@@ -563,6 +575,17 @@ router.post("/email/mark-all-read", async (req, res) => {
 });
 
 // --- Email search (FTS5) ---
+
+// Build a Gmail web URL from our uid format `gmail-{accountId}-{messageId}`
+// where accountId is `gmail-{email}`. Returns null for non-Gmail.
+function buildEmailWebUrl(uid, accountId, accountEmail) {
+  if (!uid?.startsWith("gmail-")) return null;
+  const prefix = `gmail-${accountId}-`;
+  if (!uid.startsWith(prefix)) return null;
+  const messageId = uid.slice(prefix.length);
+  if (!messageId) return null;
+  return `https://mail.google.com/mail/?authuser=${encodeURIComponent(accountEmail)}#all/${messageId}`;
+}
 
 function sanitizeFtsQuery(raw) {
   const terms = raw
@@ -626,6 +649,7 @@ router.get("/email-search", async (req, res) => {
         body_highlight: row.body_highlight,
         email_date: row.email_date,
         read: !!row.read,
+        web_url: buildEmailWebUrl(row.uid, row.account_id, row.account_email),
       });
     }
 

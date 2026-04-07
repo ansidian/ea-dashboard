@@ -1,12 +1,26 @@
 import { useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 
+// walk up from el to find the nearest scrollable ancestor inside boundary
+function findScrollableParent(el, boundary) {
+  let node = el;
+  while (node && node !== boundary) {
+    const style = getComputedStyle(node);
+    if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return boundary;
+}
+
 export default function BottomSheet({ open, onClose, title, children }) {
   const sheetRef = useRef(null);
   const contentRef = useRef(null);
   const dragStartY = useRef(null);
   const dragCurrentY = useRef(null);
   const isDragging = useRef(false);
+  const activeScrollEl = useRef(null);
 
   // close on escape
   useEffect(() => {
@@ -25,9 +39,12 @@ export default function BottomSheet({ open, onClose, title, children }) {
   }, [open]);
 
   const onTouchStart = useCallback((e) => {
-    // only allow drag-to-dismiss when content is scrolled to top
-    const content = contentRef.current;
-    if (content && content.scrollTop > 0) {
+    // Find the actual scroll container at the touch target — the sheet may contain
+    // nested overflow-y:auto wrappers (e.g. BriefingSearch's own scrollRef).
+    // Drag-to-dismiss should only engage when that container is at scrollTop 0.
+    const scrollEl = findScrollableParent(e.target, contentRef.current);
+    activeScrollEl.current = scrollEl;
+    if (scrollEl && scrollEl.scrollTop > 0) {
       isDragging.current = false;
       return;
     }
