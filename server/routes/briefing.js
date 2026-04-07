@@ -3,8 +3,8 @@ import db from "../db/connection.js";
 import { requireAuth } from "../middleware/auth.js";
 import { generateBriefing, quickRefresh, loadUserConfig, fetchAllEmails } from "../briefing/index.js";
 import { indexEmails } from "../briefing/email-index.js";
-import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, trashMessage as gmailTrash, batchMarkAsRead as gmailBatchMarkAsRead } from "../briefing/gmail.js";
-import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
+import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, markAsUnread as gmailMarkAsUnread, trashMessage as gmailTrash, batchMarkAsRead as gmailBatchMarkAsRead } from "../briefing/gmail.js";
+import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, markAsUnread as icloudMarkAsUnread, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
 import { completeTodoistTask } from "../briefing/todoist.js";
@@ -85,6 +85,43 @@ async function markEmailsReadInBriefing(userId, uids) {
     for (const email of acct.important) {
       if ((uidSet.has(email.id) || uidSet.has(email.uid)) && !email.read) {
         email.read = true;
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    await db.execute({
+      sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+      args: [JSON.stringify(briefing), latest.rows[0].id],
+    });
+  }
+}
+
+async function markEmailsUnreadInIndex(userId, uids) {
+  const list = Array.isArray(uids) ? uids : [uids];
+  if (!list.length) return;
+  const placeholders = list.map(() => "?").join(",");
+  await db.execute({
+    sql: `UPDATE ea_email_index SET read = 0 WHERE user_id = ? AND uid IN (${placeholders})`,
+    args: [userId, ...list],
+  });
+}
+
+async function markEmailsUnreadInBriefing(userId, uids) {
+  const uidSet = new Set(Array.isArray(uids) ? uids : [uids]);
+  const latest = await db.execute({
+    sql: `SELECT id, briefing_json FROM ea_briefings
+          WHERE user_id = ? AND status = 'ready'
+          ORDER BY generated_at DESC LIMIT 1`,
+    args: [userId],
+  });
+  if (!latest.rows.length) return;
+  const briefing = JSON.parse(latest.rows[0].briefing_json);
+  let changed = false;
+  for (const acct of briefing.emails?.accounts || []) {
+    for (const email of acct.important) {
+      if ((uidSet.has(email.id) || uidSet.has(email.uid)) && email.read) {
+        email.read = false;
         changed = true;
       }
     }
@@ -504,6 +541,28 @@ router.post("/email/:uid/mark-read", async (req, res) => {
   }
 });
 
+router.post("/email/:uid/mark-unread", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { uid } = req.params;
+  try {
+    const found = await findAccountByUid(userId, uid);
+    if (!found) return res.status(404).json({ message: "Account not found" });
+
+    if (found.type === "icloud") {
+      const password = decrypt(found.account.credentials_encrypted);
+      await icloudMarkAsUnread(found.account.email, password, uid);
+    } else {
+      await gmailMarkAsUnread(found.account, uid);
+    }
+    await markEmailsUnreadInBriefing(userId, uid);
+    await markEmailsUnreadInIndex(userId, uid);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error marking email as unread:", err);
+    res.status(500).json({ message: "Failed to mark email as unread" });
+  }
+});
+
 router.post("/email/:uid/trash", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const { uid } = req.params;
@@ -609,6 +668,11 @@ router.get("/email-search", async (req, res) => {
   }
   const maxResults = Math.min(parseInt(limit) || 30, 100);
   try {
+    // Pull a wider window than maxResults so we can re-rank in JS using a
+    // hybrid score that combines BM25 rank with a recency penalty. We can't
+    // do this purely in SQL because email_date is stored as an RFC 2822
+    // string, which SQLite's julianday() can't parse.
+    const fetchLimit = Math.max(maxResults * 3, 90);
     const result = await db.execute({
       sql: `SELECT
               idx.uid, idx.account_id, idx.account_label, idx.account_email,
@@ -623,8 +687,24 @@ router.get("/email-search", async (req, res) => {
             WHERE ea_email_fts MATCH ? AND idx.user_id = ?
             ORDER BY rank
             LIMIT ?`,
-      args: [sanitizeFtsQuery(q.trim()), userId, maxResults],
+      args: [sanitizeFtsQuery(q.trim()), userId, fetchLimit],
     });
+
+    // Hybrid re-rank: rank / (1 + age_days / 30). Rank is negative, so
+    // dividing by a value > 1 makes it less negative (worse). Recent matches
+    // keep their raw strength; old matches sink. If the date is unparseable,
+    // we treat the email as "now" so it isn't penalized.
+    const nowMs = Date.now();
+    const RECENCY_HALF_LIFE_DAYS = 30;
+    const scored = result.rows.map((row) => {
+      const t = row.email_date ? Date.parse(row.email_date) : NaN;
+      const ageDays = Number.isFinite(t) ? Math.max(0, (nowMs - t) / 86400000) : 0;
+      const hybrid = row.rank / (1 + ageDays / RECENCY_HALF_LIFE_DAYS);
+      return { row, hybrid };
+    });
+    scored.sort((a, b) => a.hybrid - b.hybrid); // ascending: more negative first
+    const ranked = scored.slice(0, maxResults).map((s) => s.row);
+    result.rows = ranked;
 
     const byAccount = {};
     for (const row of result.rows) {

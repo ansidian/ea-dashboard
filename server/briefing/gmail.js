@@ -338,6 +338,20 @@ export async function markAsRead(account, uid) {
   if (!res.ok) throw new Error(`Gmail mark-as-read failed: ${res.status}`);
 }
 
+export async function markAsUnread(account, uid) {
+  const messageId = extractMessageId(account, uid);
+  const token = await getValidToken(account);
+  const res = await fetch(
+    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ addLabelIds: ["UNREAD"] }),
+    },
+  );
+  if (!res.ok) throw new Error(`Gmail mark-as-unread failed: ${res.status}`);
+}
+
 export async function trashMessage(account, uid) {
   const messageId = extractMessageId(account, uid);
   const token = await getValidToken(account);

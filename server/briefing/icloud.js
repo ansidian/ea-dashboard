@@ -172,6 +172,17 @@ export async function markAsRead(email, password, uid) {
   }
 }
 
+export async function markAsUnread(email, password, uid) {
+  const imapUid = parseInt(uid.replace("icloud-", ""), 10);
+  const client = await getPooledClient(email, password);
+  const lock = await client.getMailboxLock("INBOX");
+  try {
+    await client.messageFlagsRemove({ uid: imapUid }, ["\\Seen"], { uid: true });
+  } finally {
+    lock.release();
+  }
+}
+
 export async function trashMessage(email, password, uid) {
   const imapUid = parseInt(uid.replace("icloud-", ""), 10);
   const client = await getPooledClient(email, password);
