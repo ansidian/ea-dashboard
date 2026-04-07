@@ -12,7 +12,7 @@ import { formatBriefingDate } from "./search/formatDate";
 import SearchModeToggle from "./search/SearchModeToggle";
 import SearchFilterBar from "./search/SearchFilterBar";
 import EmptyState from "./search/EmptyState";
-import EmailResultCard from "./search/EmailResultCard";
+import EmailResultsList from "./search/EmailResultsList";
 import ContextCard from "./search/ContextCard";
 import {
   SearchIcon,
@@ -473,51 +473,16 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               )}
 
               {/* Email search results */}
-              {isEmailQuery && emailHasResults && filteredEmailResults.accounts.map((acct) => {
-                const acctUnread = acct.results.filter((r) => !r.read).length;
-                return (
-                <div key={acct.account_id}>
-                  <div
-                    className="sticky top-0 z-[5] flex items-center gap-2 px-5 py-1.5"
-                    style={{
-                      background: "rgba(28,28,42, 0.92)",
-                      backdropFilter: "blur(8px)",
-                      WebkitBackdropFilter: "blur(8px)",
-                      borderBottom: "1px solid rgba(255,255,255,0.04)",
-                    }}
-                  >
-                    <span className="text-[12px] shrink-0">{acct.account_icon}</span>
-                    <span className="text-[10px] font-semibold tracking-[1.5px] uppercase text-foreground/75 truncate">
-                      {acct.account_label}
-                    </span>
-                    <div className="ml-auto flex items-center gap-2.5 shrink-0">
-                      {acctUnread > 0 && (
-                        <span className="text-[10px] font-semibold tabular-nums" style={{ color: "#cba6da" }}>
-                          {acctUnread} unread
-                        </span>
-                      )}
-                      <span className="text-[10px] tabular-nums text-muted-foreground/45">
-                        {acct.results.length}
-                      </span>
-                    </div>
-                  </div>
-                  {acct.results.map((r) => {
-                    const flatIdx = flatEmails.findIndex((f) => f.uid === r.uid);
-                    return (
-                      <EmailResultCard
-                        key={r.uid}
-                        r={r}
-                        acctColor={acct.account_color}
-                        isActive={openEmail?.uid === r.uid}
-                        isFocused={flatIdx === focusedIdx}
-                        onMouseEnter={() => setFocusedIdx(flatIdx)}
-                        onOpen={() => handleOpenEmail(r, acct)}
-                      />
-                    );
-                  })}
-                </div>
-                );
-              })}
+              {isEmailQuery && emailHasResults && (
+                <EmailResultsList
+                  accounts={filteredEmailResults.accounts}
+                  flatEmails={flatEmails}
+                  focusedIdx={focusedIdx}
+                  openEmailUid={openEmail?.uid}
+                  onFocusChange={setFocusedIdx}
+                  onOpenEmail={handleOpenEmail}
+                />
+              )}
 
               {/* Results grouped by date */}
               {sortedDates.map((date, di) => (
