@@ -5,6 +5,7 @@ import { transformBriefing } from "../../transform";
 import { cn } from "@/lib/utils";
 import useIsMobile from "../../hooks/useIsMobile";
 import useSearch from "../../hooks/briefing/useSearch";
+import useEmailNavigation from "../../hooks/briefing/useEmailNavigation";
 import BottomSheet from "../ui/BottomSheet";
 import EmailSearchBody from "../email/EmailSearchBody";
 import extractRelatedContext from "./search/extractRelatedContext";
@@ -27,6 +28,9 @@ import {
 export default function BriefingSearch({ onNavigateToEmail }) {
   const isMobile = useIsMobile();
   const search = useSearch();
+  const emailNav = useEmailNavigation({ setEmailResults: search.setEmailResults });
+  // Destructure stable refs so effect deps can track them individually.
+  const { openEmail, setOpenEmail } = emailNav;
   const {
     query,
     results,
@@ -37,7 +41,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     emailFilter,
     focusedIdx,
     setFocusedIdx,
-    setEmailResults,
     relevant,
     grouped,
     sortedDates,
@@ -53,7 +56,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   const [expandedId, setExpandedId] = useState(null);
   const [expandedCtx, setExpandedCtx] = useState(null);
   const [loadingCtx, setLoadingCtx] = useState(null);
-  const [openEmail, setOpenEmail] = useState(null);
   const briefingCache = useRef({});
   const inputRef = useRef(null);
   const inputWrapRef = useRef(null);
@@ -105,7 +107,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, expandedId, openEmail]);
+  }, [open, expandedId, openEmail, setOpenEmail]);
 
   useEffect(() => {
     // On mobile the panel renders inside BottomSheet, which handles its own
@@ -120,7 +122,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     }
     if (open) document.addEventListener("pointerdown", handleClick);
     return () => document.removeEventListener("pointerdown", handleClick);
-  }, [open, isMobile]);
+  }, [open, isMobile, setOpenEmail]);
 
   // Scroll trapping on the SCROLL CONTAINER (not the outer panel)
   useEffect(() => {
@@ -138,43 +140,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
 
   const isEmailQuery = searchMode === "emails";
 
-  function handleOpenEmail(email, acct) {
-    setOpenEmail({
-      ...email,
-      account_id: acct.account_id,
-      account_label: acct.account_label,
-      account_email: acct.account_email,
-      account_color: acct.account_color,
-      account_icon: acct.account_icon,
-    });
-  }
-
-  function handleEmailMarkedRead(uid) {
-    setEmailResults((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        accounts: prev.accounts.map((a) => ({
-          ...a,
-          results: a.results.map((r) => (r.uid === uid ? { ...r, read: true } : r)),
-        })),
-      };
-    });
-  }
-
-  function handleEmailMarkedUnread(uid) {
-    setEmailResults((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        accounts: prev.accounts.map((a) => ({
-          ...a,
-          results: a.results.map((r) => (r.uid === uid ? { ...r, read: false } : r)),
-        })),
-      };
-    });
-  }
-
   function handleKeyDown(e) {
     if (!open) return;
     const inEmailMode = isEmailQuery;
@@ -184,22 +149,22 @@ export default function BriefingSearch({ onNavigateToEmail }) {
       e.preventDefault();
       const next = Math.min(focusedIdx + 1, list.length - 1);
       setFocusedIdx(next);
-      if (inEmailMode && openEmail && next >= 0) {
+      if (inEmailMode && emailNav.openEmail && next >= 0) {
         const r = list[next];
-        handleOpenEmail(r, r._acct);
+        emailNav.handleOpenEmail(r, r._acct);
       }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       const next = Math.max(focusedIdx - 1, -1);
       setFocusedIdx(next);
-      if (inEmailMode && openEmail && next >= 0) {
+      if (inEmailMode && emailNav.openEmail && next >= 0) {
         const r = list[next];
-        handleOpenEmail(r, r._acct);
+        emailNav.handleOpenEmail(r, r._acct);
       }
     } else if (e.key === "Enter" && focusedIdx >= 0) {
       if (inEmailMode) {
         const r = list[focusedIdx];
-        handleOpenEmail(r, r._acct);
+        emailNav.handleOpenEmail(r, r._acct);
       } else {
         handleExpand(list[focusedIdx]);
       }
@@ -296,7 +261,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               setAnalysis(null);
               setExpandedId(null);
               setExpandedCtx(null);
-              setOpenEmail(null);
+              emailNav.setOpenEmail(null);
               search.handleModeChange(next);
             }}
           />
@@ -334,7 +299,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                 setOpen(false);
                 setExpandedId(null);
                 setExpandedCtx(null);
-                setOpenEmail(null);
+                emailNav.setOpenEmail(null);
               }}
               className="bg-transparent border-none text-muted-foreground/40 cursor-pointer p-0.5 rounded transition-colors hover:text-muted-foreground hover:bg-white/[0.06]"
               aria-label="Clear search"
@@ -403,9 +368,9 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                   accounts={filteredEmailResults.accounts}
                   flatEmails={flatEmails}
                   focusedIdx={focusedIdx}
-                  openEmailUid={openEmail?.uid}
+                  openEmailUid={emailNav.openEmail?.uid}
                   onFocusChange={setFocusedIdx}
-                  onOpenEmail={handleOpenEmail}
+                  onOpenEmail={emailNav.handleOpenEmail}
                 />
               )}
 
@@ -461,23 +426,23 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             <BottomSheet
               open
               onClose={() => {
-                if (openEmail) { setOpenEmail(null); return; }
+                if (emailNav.openEmail) { emailNav.setOpenEmail(null); return; }
                 setOpen(false);
                 inputRef.current?.blur();
               }}
-              title={openEmail ? undefined : "Search Results"}
+              title={emailNav.openEmail ? undefined : "Search Results"}
             >
-              {openEmail ? (
+              {emailNav.openEmail ? (
                 <div className="flex flex-col h-full min-h-0">
                   <button
-                    onClick={() => setOpenEmail(null)}
+                    onClick={() => emailNav.setOpenEmail(null)}
                     className="flex items-center gap-2 px-4 py-3 text-[12px] text-foreground/70 hover:text-foreground shrink-0 min-h-[44px]"
                     style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
                   >
                     <BackArrowIcon size={14} />
                     Back to search
                   </button>
-                  <EmailSearchBody email={openEmail} onMarkedRead={handleEmailMarkedRead} onMarkedUnread={handleEmailMarkedUnread} />
+                  <EmailSearchBody email={emailNav.openEmail} onMarkedRead={emailNav.handleMarkedRead} onMarkedUnread={emailNav.handleMarkedUnread} />
                 </div>
               ) : dropdownContent}
             </BottomSheet>
@@ -493,14 +458,14 @@ export default function BriefingSearch({ onNavigateToEmail }) {
         const EMAIL_PANE_WIDTH = 720; // reader pane width contribution
         const VIEWPORT_MARGIN = 16;
         const baseWidth = pos.width;
-        const resultsWidth = openEmail
+        const resultsWidth = emailNav.openEmail
           ? Math.min(baseWidth, RESULTS_COLLAPSED_WIDTH)
           : baseWidth;
         // Panel must always be at least as wide as the search input so the
         // dropdown stays visually anchored. If the desired expansion is
         // narrower (wide-screen edge case), snap to baseWidth and let the
         // flex-1 email pane absorb the extra room.
-        const expandedWidth = openEmail
+        const expandedWidth = emailNav.openEmail
           ? Math.min(
               Math.max(baseWidth, resultsWidth + EMAIL_PANE_WIDTH),
               window.innerWidth - VIEWPORT_MARGIN * 2,
@@ -508,7 +473,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
           : baseWidth;
         const maxLeft = window.innerWidth - expandedWidth - VIEWPORT_MARGIN;
         const finalLeft = Math.max(VIEWPORT_MARGIN, Math.min(pos.left, maxLeft));
-        const expandedMaxHeight = openEmail
+        const expandedMaxHeight = emailNav.openEmail
           ? `calc(100vh - ${pos.top + VIEWPORT_MARGIN}px)`
           : `min(480px, calc(100vh - ${pos.top + VIEWPORT_MARGIN}px))`;
 
@@ -543,16 +508,16 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             </div>
 
             {/* Email reader pane */}
-            {openEmail && (
+            {emailNav.openEmail && (
               <div
                 className="relative flex flex-col min-h-0 flex-1 animate-in fade-in duration-150"
                 style={{ borderLeft: "1px solid rgba(255,255,255,0.06)" }}
               >
                 <EmailSearchBody
-                  email={openEmail}
-                  onMarkedRead={handleEmailMarkedRead}
-                  onMarkedUnread={handleEmailMarkedUnread}
-                  onClose={() => setOpenEmail(null)}
+                  email={emailNav.openEmail}
+                  onMarkedRead={emailNav.handleMarkedRead}
+                  onMarkedUnread={emailNav.handleMarkedUnread}
+                  onClose={() => emailNav.setOpenEmail(null)}
                 />
               </div>
             )}
