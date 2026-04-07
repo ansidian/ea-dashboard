@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { getEmailBody, markEmailAsRead } from "../../api";
+import { getEmailBody, markEmailAsRead, markEmailAsUnread } from "../../api";
 import EmailIframe from "./EmailIframe";
+
+const AUTO_MARK_DELAY_MS = 1500;
 
 function formatFullDate(dateStr) {
   if (!dateStr) return "";
@@ -17,13 +19,23 @@ function formatFullDate(dateStr) {
 }
 
 // Slim email body viewer used by the search modal/sheet.
-// Loads the body lazily, fires mark-as-read once on successful load.
+// Loads the body lazily, schedules a delayed auto-mark-as-read so quick
+// peeks don't burn the unread state. Provides a manual unread toggle.
 // Wrapper is responsible for close/back chrome.
-export default function EmailSearchBody({ email, onMarkedRead }) {
+export default function EmailSearchBody({ email, onMarkedRead, onMarkedUnread, onClose }) {
   // result.key tracks which uid the loaded body belongs to.
   // If result.key !== email.uid, we're still loading the new uid.
   const [result, setResult] = useState({ key: null, body: null, error: null });
+  // Local read state — mirrors email.read but tracks the manual toggle.
+  // Reset to email.read whenever the uid changes.
+  const [localRead, setLocalRead] = useState(!!email.read);
+  const [toggling, setToggling] = useState(false);
   const markedRef = useRef(null);
+  const autoMarkTimerRef = useRef(null);
+
+  useEffect(() => {
+    setLocalRead(!!email.read);
+  }, [email.uid, email.read]);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,14 +55,53 @@ export default function EmailSearchBody({ email, onMarkedRead }) {
   const body = loading ? null : result.body;
   const error = loading ? null : result.error;
 
-  // Auto mark-as-read once after successful body load (per uid)
+  // Delayed auto mark-as-read. We wait AUTO_MARK_DELAY_MS after the body
+  // loads so a quick peek-and-swap doesn't burn the unread state. The timer
+  // is cancelled if the user closes/swaps the email or manually toggles.
   useEffect(() => {
-    if (loading || error || markedRef.current === email.uid || email.read) return;
-    markedRef.current = email.uid;
-    markEmailAsRead(email.uid)
-      .then(() => onMarkedRead?.(email.uid))
-      .catch((err) => console.error("Failed to mark email read:", err.message));
+    if (loading || error || email.read || markedRef.current === email.uid) return;
+    autoMarkTimerRef.current = setTimeout(() => {
+      markedRef.current = email.uid;
+      setLocalRead(true);
+      markEmailAsRead(email.uid)
+        .then(() => onMarkedRead?.(email.uid))
+        .catch((err) => console.error("Failed to mark email read:", err.message));
+    }, AUTO_MARK_DELAY_MS);
+    return () => {
+      if (autoMarkTimerRef.current) {
+        clearTimeout(autoMarkTimerRef.current);
+        autoMarkTimerRef.current = null;
+      }
+    };
   }, [loading, error, email.uid, email.read, onMarkedRead]);
+
+  async function handleToggleRead() {
+    if (toggling) return;
+    // Cancel any pending auto-mark — user is taking explicit control
+    if (autoMarkTimerRef.current) {
+      clearTimeout(autoMarkTimerRef.current);
+      autoMarkTimerRef.current = null;
+    }
+    setToggling(true);
+    const next = !localRead;
+    setLocalRead(next);
+    try {
+      if (next) {
+        markedRef.current = email.uid;
+        await markEmailAsRead(email.uid);
+        onMarkedRead?.(email.uid);
+      } else {
+        markedRef.current = null;
+        await markEmailAsUnread(email.uid);
+        onMarkedUnread?.(email.uid);
+      }
+    } catch (err) {
+      console.error("Failed to toggle read state:", err.message);
+      setLocalRead(!next); // revert
+    } finally {
+      setToggling(false);
+    }
+  }
 
   const isHtml = body && /<[a-z!/]/i.test(body);
 
@@ -69,21 +120,72 @@ export default function EmailSearchBody({ email, onMarkedRead }) {
           <span className="text-[10px] text-muted-foreground/40 truncate">
             {email.account_email}
           </span>
-          {email.web_url && (
-            <a
-              href={email.web_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-auto flex items-center gap-1 text-[10px] text-primary/80 hover:text-primary transition-colors px-2 py-1 rounded-default hover:bg-white/[0.04]"
+          <div className="ml-auto flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={handleToggleRead}
+              disabled={toggling}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors px-2 py-1 hover:bg-white/[0.04] disabled:opacity-50"
               style={{ borderRadius: 8 }}
+              title={localRead ? "Mark as unread" : "Mark as read"}
             >
-              Open in Gmail
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M7 17L17 7" />
-                <path d="M7 7h10v10" />
-              </svg>
-            </a>
-          )}
+              {localRead ? (
+                <>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                    <polyline points="22,6 12,13 2,6" />
+                  </svg>
+                  Mark unread
+                </>
+              ) : (
+                <>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                  </svg>
+                  Mark read
+                </>
+              )}
+            </button>
+            {email.web_url ? (
+              <a
+                href={email.web_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[10px] text-primary/80 hover:text-primary transition-colors px-2 py-1 hover:bg-white/[0.04]"
+                style={{ borderRadius: 8 }}
+              >
+                Open in Gmail
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 17L17 7" />
+                  <path d="M7 7h10v10" />
+                </svg>
+              </a>
+            ) : (
+              // iCloud: no deep link available — Message-ID isn't indexed,
+              // so we can't build a `message:` URL for Mail.app. Show a
+              // disabled affordance so the absence is intentional, not silent.
+              <span
+                className="flex items-center gap-1 text-[10px] text-muted-foreground/30 px-2 py-1 cursor-not-allowed"
+                title="Direct links unavailable for iCloud"
+              >
+                No web link
+              </span>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close email"
+                className="w-6 h-6 flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-white/[0.06] transition-colors"
+                style={{ borderRadius: 6 }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
         <div className="text-[13px] font-medium text-foreground truncate">
           {email.from_name || email.from_address}
