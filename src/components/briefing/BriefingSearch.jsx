@@ -7,17 +7,7 @@ import { cn } from "@/lib/utils";
 import useIsMobile from "../../hooks/useIsMobile";
 import BottomSheet from "../ui/BottomSheet";
 import EmailSearchBody from "../email/EmailSearchBody";
-
-const SECTION_META = {
-  bills: { icon: "💰", color: "#a6e3a1", label: "Bills" },
-  emails: { icon: "📧", color: "#89b4fa", label: "Emails" },
-  insights: { icon: "💡", color: "#cba6da", label: "Insights" },
-  calendar: { icon: "📅", color: "#f9e2af", label: "Calendar" },
-  deadlines: { icon: "⏰", color: "#fab387", label: "Deadlines" },
-};
-
-const DEBOUNCE_MS = 300;
-const MIN_RELEVANCE = 0.15;
+import { SECTION_META, DEBOUNCE_MS, MIN_RELEVANCE } from "./search/constants";
 
 // --- Context extraction ---
 
