@@ -141,8 +141,6 @@ export default function useSearch() {
     focusedIdx,
     setFocusedIdx,
     setEmailResults,
-    setResults,
-    setError,
     handleInputChange,
     handleModeChange,
     handleEmailFilterChange,
