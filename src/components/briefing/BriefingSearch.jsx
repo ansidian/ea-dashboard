@@ -9,6 +9,7 @@ import BottomSheet from "../ui/BottomSheet";
 import EmailSearchBody from "../email/EmailSearchBody";
 import { SECTION_META, DEBOUNCE_MS, MIN_RELEVANCE } from "./search/constants";
 import extractRelatedContext from "./search/extractRelatedContext";
+import { formatBriefingDate, formatEmailDate } from "./search/formatDate";
 
 // --- Component ---
 
@@ -312,16 +313,6 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   }
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
-  function formatDate(dateStr) {
-    const d = new Date(dateStr + "T12:00:00");
-    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
-    const diff = Math.round((new Date(todayStr + "T12:00:00") - d) / 86400000);
-    if (diff === 0) return "Today";
-    if (diff === 1) return "Yesterday";
-    if (diff < 7) return d.toLocaleDateString("en-US", { weekday: "long", timeZone: "America/Los_Angeles" });
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
-  }
-
   const rawEmailHasResults = emailResults?.accounts?.length > 0;
   const totalUnread = rawEmailHasResults
     ? emailResults.accounts.reduce(
@@ -583,7 +574,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                   {/* Date group header */}
                   <div className="flex items-center gap-3 px-5 pt-3.5 pb-1.5">
                     <span className="text-[10px] tracking-[1.5px] uppercase text-muted-foreground/60 font-semibold whitespace-nowrap">
-                      {formatDate(date)}
+                      {formatBriefingDate(date)}
                     </span>
                     {di > 0 && <div className="flex-1 h-px bg-white/[0.04]" />}
                   </div>
@@ -996,21 +987,6 @@ function FilterChip({ label, count, active, onClick }) {
       )}
     </button>
   );
-}
-
-function formatEmailDate(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d)) return "";
-  const now = new Date();
-  const diffMs = now - d;
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffDays === 0) {
-    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  }
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return d.toLocaleDateString("en-US", { weekday: "short" });
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function EmailResultCard({ r, acctColor, isActive, isFocused, onMouseEnter, onOpen }) {
