@@ -10,7 +10,7 @@ import { SECTION_META, DEBOUNCE_MS, MIN_RELEVANCE } from "./search/constants";
 import extractRelatedContext from "./search/extractRelatedContext";
 import { formatBriefingDate } from "./search/formatDate";
 import SearchModeToggle from "./search/SearchModeToggle";
-import FilterChip from "./search/FilterChip";
+import SearchFilterBar from "./search/SearchFilterBar";
 import EmailResultCard from "./search/EmailResultCard";
 import ContextCard from "./search/ContextCard";
 import {
@@ -424,22 +424,11 @@ export default function BriefingSearch({ onNavigateToEmail }) {
           <>
           {/* Email filter chip row — only in email mode with raw results */}
           {isEmailQuery && rawEmailHasResults && (
-            <div
-              className="shrink-0 flex items-center gap-1 px-3 py-2"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-            >
-              <FilterChip
-                label="All"
-                active={emailFilter === "all"}
-                onClick={() => handleEmailFilterChange("all")}
-              />
-              <FilterChip
-                label="Unread"
-                count={totalUnread}
-                active={emailFilter === "unread"}
-                onClick={() => handleEmailFilterChange("unread")}
-              />
-            </div>
+            <SearchFilterBar
+              emailFilter={emailFilter}
+              totalUnread={totalUnread}
+              onFilterChange={handleEmailFilterChange}
+            />
           )}
           <div
             ref={scrollRef}
