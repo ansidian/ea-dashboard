@@ -188,6 +188,11 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   }, [open, expandedId, openEmail]);
 
   useEffect(() => {
+    // On mobile the panel renders inside BottomSheet, which handles its own
+    // backdrop-click and drag-to-dismiss. panelRef is never attached in that
+    // path, so a global pointerdown listener would close the sheet as soon as
+    // the user touches it to scroll.
+    if (isMobile) return;
     function handleClick(e) {
       if (inputWrapRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return;
       setOpen(false);
@@ -195,7 +200,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     }
     if (open) document.addEventListener("pointerdown", handleClick);
     return () => document.removeEventListener("pointerdown", handleClick);
-  }, [open]);
+  }, [open, isMobile]);
 
   // Scroll trapping on the SCROLL CONTAINER (not the outer panel)
   useEffect(() => {
