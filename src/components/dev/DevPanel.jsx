@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { getDevScenarios } from "../../api";
 
-const CATEGORY_ORDER = ["Email", "Calendar", "States", "Other"];
+const CATEGORY_ORDER = ["Email", "Calendar", "Insights", "States", "Other"];
 
 function groupByCategory(scenarios) {
   const groups = {};
