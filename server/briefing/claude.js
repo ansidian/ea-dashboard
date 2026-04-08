@@ -34,6 +34,10 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
 3. GENERATE INSIGHTS (2-4 items): Connect dots across emails, calendar, and deadlines. Be specific and actionable.
    Calendar events with "passed": true already ended — skip them. Focus on what's ahead.
    When "Next Week's Calendar" is provided, naturally blend it into insights — reference upcoming events when they connect to today's emails, deadlines, or calendar (e.g., prep needed, follow-ups, busy days ahead). Do not force a separate next-week insight if nothing is noteworthy.
+   DATE RULES (strict):
+   - Always use absolute dates with weekday (e.g., "Wed Apr 9") in insight text. NEVER use "today", "tomorrow", "yesterday", "tonight", "this morning", or "later today" — briefings are often read hours after generation and relative words become wrong.
+   - Never invent calendar facts from memory (holidays, tax deadlines, observances). Only reference dates that appear in the input data or are computed from the "Now" field at the top of the user message. If you're not sure of a date, omit it.
+   - All date math (days until X, "one week away") must be computed from the "Now" date provided — not from your training data.
    When Historical Context is provided, USE it:
    - Compare current bills/transactions to historical amounts (note increases, decreases, trends)
    - Flag recurring senders or threads that span multiple briefings
@@ -74,11 +78,55 @@ export async function callClaude({ emails, calendar, ctmDeadlines, todoistTasks,
 
   const selectedModel = model || PREFERRED_MODELS[0];
 
-  const now = new Date().toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    dateStyle: "full",
-    timeStyle: "long",
-  });
+  // Build an unambiguous "Now" block — Claude has historically miscounted dates
+  // when given only a single localized string, so we provide today + tomorrow +
+  // the next 7 days as anchors and require all date math to derive from these.
+  const TZ = "America/Los_Angeles";
+  const nowDate = new Date();
+  const fmtDate = (d, opts) => d.toLocaleDateString("en-US", { timeZone: TZ, ...opts });
+  const fmtTime = (d) => d.toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  // YYYY-MM-DD in PT regardless of server tz
+  const isoInTZ = (d) => {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
+    const y = parts.find(p => p.type === "year").value;
+    const m = parts.find(p => p.type === "month").value;
+    const day = parts.find(p => p.type === "day").value;
+    return `${y}-${m}-${day}`;
+  };
+  const addDays = (d, n) => new Date(d.getTime() + n * 86_400_000);
+  const dayLine = (offset) => {
+    const d = addDays(nowDate, offset);
+    const iso = isoInTZ(d);
+    const label = fmtDate(d, { weekday: "long", month: "short", day: "numeric" });
+    return `${iso} = ${label}`;
+  };
+  const nowBlock = [
+    `Today:    ${dayLine(0)}`,
+    `Tomorrow: ${dayLine(1)}`,
+    `+2 days:  ${dayLine(2)}`,
+    `+3 days:  ${dayLine(3)}`,
+    `+4 days:  ${dayLine(4)}`,
+    `+5 days:  ${dayLine(5)}`,
+    `+6 days:  ${dayLine(6)}`,
+    `+7 days:  ${dayLine(7)}`,
+    `Current time: ${fmtTime(nowDate)}`,
+  ].join("\n");
+  const todayIso = isoInTZ(nowDate);
+
+  // Helper: annotate a YYYY-MM-DD with a relative offset so Claude doesn't
+  // have to do date math on raw dates.
+  const relLabel = (iso) => {
+    if (!iso) return "";
+    const target = new Date(iso + "T12:00:00Z");
+    const todayMid = new Date(todayIso + "T12:00:00Z");
+    const days = Math.round((target - todayMid) / 86_400_000);
+    if (days === 0) return " (today)";
+    if (days === 1) return " (tomorrow)";
+    if (days === -1) return " (yesterday)";
+    if (days > 1 && days <= 7) return ` (+${days}d)`;
+    if (days < -1 && days >= -7) return ` (${days}d)`;
+    return "";
+  };
 
   const interestsNote = emailInterests?.length
     ? `\n\n## Email Interests (ABSOLUTE RULE — if sender name contains any of these, classify as "fyi" NOT "noise", even if the email looks promotional)\n${emailInterests.join(", ")}`
@@ -112,12 +160,12 @@ export async function callClaude({ emails, calendar, ctmDeadlines, todoistTasks,
 
   // Compact CTM summary for insights (Canvas academic deadlines only)
   const ctmSummary = ctmDeadlines?.length
-    ? ctmDeadlines.map(d => `"${d.title}" due ${d.due_date} ${d.due_time || ""} (${d.class_name}, ${d.points_possible || 0}pts)`).join("; ")
+    ? ctmDeadlines.map(d => `"${d.title}" due ${d.due_date}${relLabel(d.due_date)} ${d.due_time || ""} (${d.class_name}, ${d.points_possible || 0}pts)`).join("; ")
     : "None";
 
   // Compact Todoist summary for insights (personal tasks)
   const todoistSummary = todoistTasks?.length
-    ? todoistTasks.map(d => `"${d.title}" due ${d.due_date} ${d.due_time || ""} (${d.class_name})`).join("; ")
+    ? todoistTasks.map(d => `"${d.title}" due ${d.due_date}${relLabel(d.due_date)} ${d.due_time || ""} (${d.class_name})`).join("; ")
     : "None";
 
   // Compact category list for bill matching
@@ -130,7 +178,10 @@ export async function callClaude({ emails, calendar, ctmDeadlines, todoistTasks,
     ? `\n\n## Scheduled Payments (from budget app — cross-reference with detected bills)\n${upcomingBills.map(b => `${b.payee} $${b.amount.toFixed(2)} due ${b.next_date}`).join("; ")}`
     : "";
 
-  const userMessage = `## Emails
+  const userMessage = `## Now (use these dates for ALL date math — do not rely on training data)
+${nowBlock}
+
+## Emails
 ${JSON.stringify(trimmedEmails)}
 
 ## Today's Calendar (for insights only — do NOT include in output)
@@ -143,9 +194,7 @@ ${ctmSummary}
 ${todoistSummary}
 
 ## Next Week's Calendar (for insights only — do NOT include in output)
-${nextWeekSummary || "No events"}
-
-## Now: ${now}${interestsNote}${categoriesNote}${scheduledNote}${historicalContext ? `\n\n## Historical Context (from your previous briefings — use for trends, comparisons, continuity)\n${historicalContext}` : ""}`;
+${nextWeekSummary || "No events"}${interestsNote}${categoriesNote}${scheduledNote}${historicalContext ? `\n\n## Historical Context (from your previous briefings — use for trends, comparisons, continuity)\n${historicalContext}` : ""}`;
 
   console.log(`[EA] Calling Claude API with model: ${selectedModel}`);
 
