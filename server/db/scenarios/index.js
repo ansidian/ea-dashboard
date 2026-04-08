@@ -11,6 +11,7 @@ import billMatch from "./bill-match.js";
 import nextWeek from "./next-week.js";
 import tomorrowEvents from "./tomorrow-events.js";
 import noBills from "./no-bills.js";
+import slotInsights from "./slot-insights.js";
 
 const scenarios = {
   "urgent-flags": urgentFlags,
@@ -20,6 +21,7 @@ const scenarios = {
   "next-week": nextWeek,
   "tomorrow-events": tomorrowEvents,
   "no-bills": noBills,
+  "slot-insights": slotInsights,
 };
 
 // Returns list of available scenario names + descriptions
