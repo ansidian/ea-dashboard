@@ -74,7 +74,8 @@ ea-dashboard/
 │   ├── index.js                    # Express entry: middleware, routes, migrations, scheduler
 │   ├── briefing/
 │   │   ├── index.js                # Orchestrator: generateBriefing, quickRefresh, delta merge
-│   │   ├── claude.js               # Claude API: system prompt, email triage, bill detection
+│   │   ├── claude.js               # Claude API: tool_choice-forced submit_briefing, slot minting, validator retry
+│   │   ├── insight-validator.js    # Pure-function insight validator (forbidden words, slot refs)
 │   │   ├── gmail.js                # Gmail OAuth, fetch, mark-read, trash
 │   │   ├── icloud.js               # IMAP connection pool, fetch, mark-read, trash
 │   │   ├── calendar.js             # Google Calendar: today/tomorrow/next-week ranges
@@ -106,7 +107,6 @@ ea-dashboard/
 │   ├── App.jsx                     # Router + auth guard (3 routes)
 │   ├── api.js                      # API client: apiFetch wrapper + 40 endpoint functions
 │   ├── transform.js                # Briefing normalization (camelCase/snake_case, stats)
-│   ├── dashboard-helpers.js        # Date formatting, urgency colors, greeting pools
 │   ├── index.css                   # Tailwind v4 + CSS tokens (oklch, Catppuccin Mocha)
 │   ├── pages/
 │   │   ├── Dashboard.jsx           # Main page: briefing display, refresh gestures
@@ -133,7 +133,9 @@ ea-dashboard/
 │   │   └── ui/                     # shadcn primitives + MotionWrappers, BottomSheet
 │   └── lib/
 │       ├── utils.ts                # cn() — clsx + tailwind-merge
-│       └── actualMetadata.js       # Singleton cache for Actual Budget metadata
+│       ├── actualMetadata.js       # Singleton cache for Actual Budget metadata
+│       ├── dashboard-helpers.js    # Date formatting, urgency colors, greeting pools
+│       └── insight-resolver.js     # Typed date slot renderer for Claude insights
 └── docs/
     └── superpowers/                # Feature plans and design specs
 ```
@@ -354,15 +356,43 @@ flowchart TD
 
 ### Claude Integration
 
-System prompt (~69 lines) instructs Claude to:
+Claude is called via **forced tool use**. A single tool `submit_briefing` with a strict `input_schema` is declared, and `tool_choice: { type: "tool", name: "submit_briefing" }` forces the model to respond via that tool. Required fields and types are enforced at decode time — there is no JSON-from-text parsing.
+
+System prompt (~120 lines) instructs Claude to:
 - **Triage emails**: actionable (needs response), fyi (real activity), noise (marketing/automated)
 - **Detect bills**: extract payee, amount, due_date, type, category
 - **Flag urgency**: set `urgentFlag: { label, date }` for hard deadlines
-- **Generate insights**: 2-4 actionable items connecting emails + calendar + deadlines
+- **Generate insights**: 2-4 items connecting emails + calendar + deadlines, written as templates with typed date slots (see "Typed Date Slots for Insights" below)
 
 Email interests from settings override noise classification. Scheduled payments from Actual Budget are cross-referenced to suppress duplicate bill detections.
 
-Model selection: user-configurable, defaults to `claude-sonnet-4-6`. Retries 3x with exponential backoff on 429/529.
+Model selection: user-configurable, defaults to `claude-sonnet-4-6`. Temperature `0` for format adherence. Retries 3x with exponential backoff on 429/529.
+
+### Typed Date Slots for Insights
+
+Claude never writes relative date words ("tomorrow", "tonight", "this morning") in insight text. Instead, each insight has a template and a slots object:
+
+```json
+{
+  "icon": "🎬",
+  "template": "The Boys viewing is {cal_a3f8}.",
+  "slots": { "cal_a3f8": { "iso": "2026-04-08", "time": "20:00" } }
+}
+```
+
+The frontend renders every temporal word from `src/lib/insight-resolver.js` based on the current time at read, so a morning-generated briefing's "tonight at 8pm" reads as "last night at 8pm" the next morning without regeneration. See the `renderSlot` function for the full mapping (today/tomorrow/yesterday/this morning/afternoon/evening/tonight/last night/weekday/absolute).
+
+**Slot pre-minting.** Before calling Claude, `server/briefing/claude.js` builds a dictionary of stable candidate slots from source data: `ctm_{id}`, `tk_{id}` (stable IDs from source), `cal_{hash8}`, `nwcal_{hash8}`, `bill_{hash8}` (content-based hashes for items without stable IDs). These slots are passed to Claude in the user message. Claude references them by ID (`{tk_abc}`) and leaves its own `slots` object empty. New slots are only minted when Claude references a computed date not present in the input; those keys are prefixed `new_`.
+
+**Embedded per-insight.** Slots are stored inside each insight object, not in a top-level briefing dictionary. This is necessary because delta generation merges new Claude output with previous-briefing insights — top-level slot dicts would collide across generations.
+
+**Validation and repair pipeline.** After Claude returns:
+1. Slot references are resolved: the template's `{id}` refs are looked up in Claude's `slots` first, then fall back to the pre-minted global dict. Only referenced slots are kept (dead-weight stripped).
+2. `insight-validator.js` runs: forbidden temporal words in the template → fail. Unknown slot refs → fail. Malformed iso/time → fail.
+3. On failure, a **Haiku reformatter** is called (`claude-haiku-4-5`) with a scoped prompt: "convert this broken insight to template format". Output is re-validated.
+4. If the reformatter still fails, the insight is dropped (fewer insights is better than corrupted ones).
+
+Historical briefings use `briefing.aiGeneratedAt` as the resolver's `now`, so they freeze to their original reading. The latest briefing's `now` ticks every 60s via `InsightsSection` so relative phrases roll over live. Old briefings in the DB that predate the slot system render unchanged via a back-compat path in `resolveInsight` (`!insight.template → insight.text`).
 
 ### Key Optimizations
 

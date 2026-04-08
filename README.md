@@ -16,7 +16,7 @@ The dashboard fetches data from multiple sources, sends it through Claude for an
 - **Academic deadlines** — Fetches Canvas LMS assignments via [Canvas-LMS-Task-Manager](https://github.com/ansidian/Canvas-LMS-Task-Manager), with status tracking (incomplete/in-progress/complete)
 - **Todoist integration** — Personal tasks merged and deduplicated with academic deadlines
 - **Weather** — Current conditions and hourly forecasts via Pirate Weather
-- **AI insights** — Claude generates 2-4 actionable insights connecting information across emails, calendar, and deadlines
+- **AI insights** — Claude generates 2-4 actionable insights connecting information across emails, calendar, and deadlines. Date references use a typed slot system that auto-updates as the day progresses — "tonight at 8pm" becomes "last night at 8pm" the next morning without regenerating the briefing
 - **Delta refresh** — On subsequent refreshes, only new emails are sent to Claude and merged with previous triage to save tokens
 - **Skip AI** — When inbox is clean and calendar unchanged, clones the previous briefing without an API call
 - **Live data** — 5-minute background polling for new emails, calendar changes, and weather updates between briefings
