@@ -1,5 +1,6 @@
 import Section from "../layout/Section";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
+import { resolveInsight } from "../../lib/insight-resolver";
 
 function formatStaleLabel(aiGeneratedAt) {
   if (!aiGeneratedAt) return null;
@@ -79,7 +80,7 @@ export default function InsightsSection({
               className={`text-[13px] leading-relaxed ${isStale ? "" : "text-foreground/75"}`}
               style={isStale ? { color: "rgba(205,214,244,0.45)" } : undefined}
             >
-              {insight.text}
+              {resolveInsight(insight, new Date())}
             </span>
           </MotionItem>
         ))}
