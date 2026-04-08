@@ -83,7 +83,9 @@ export async function fetchEmails(account, password, hoursBack) {
       envelope: true,
       flags: true,
       bodyStructure: true,
-      source: { start: 0, maxLength: 16384 },
+      // 256KB is comfortably larger than virtually any real email. Raised from
+      // 16KB so body_text captures the full content for FTS indexing.
+      source: { start: 0, maxLength: 262144 },
     })) {
       const msgDate = msg.envelope?.date;
       if (msgDate && new Date(msgDate) < cutoffDate) continue;
@@ -103,6 +105,7 @@ export async function fetchEmails(account, password, hoursBack) {
         from_email: fromAddress,
         subject: msg.envelope?.subject || "(no subject)",
         body_preview: extractPreview(msg.source),
+        body_text: extractBodyText(msg.source),
         date: msgDate ? new Date(msgDate).toISOString() : "",
         read: msg.flags?.has("\\Seen") || false,
       });
@@ -131,6 +134,17 @@ function extractPreview(source) {
   const clean = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   const amounts = extractAmounts(clean);
   return clean.slice(0, 600) + amounts;
+}
+
+// Full plain-text body for FTS indexing. Same stripping as extractPreview but
+// without the 600-char truncation.
+function extractBodyText(source) {
+  if (!source) return "";
+  const text = source.toString("utf8");
+  const bodyStart = text.indexOf("\r\n\r\n");
+  if (bodyStart === -1) return "";
+  const body = text.slice(bodyStart + 4);
+  return body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 export async function fetchEmailBody(email, password, uid) {

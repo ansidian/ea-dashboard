@@ -202,7 +202,8 @@ export async function fetchEmails(account, hoursBack) {
       "";
 
     const snippet = msg.snippet || "";
-    const amounts = extractAmounts(extractBodyText(msg.payload));
+    const bodyText = extractBodyText(msg.payload);
+    const amounts = extractAmounts(bodyText);
 
     return {
       uid: `gmail-${account.id}-${msg.id}`,
@@ -214,6 +215,7 @@ export async function fetchEmails(account, hoursBack) {
       from: getHeader("From"),
       subject: getHeader("Subject"),
       body_preview: snippet + amounts,
+      body_text: bodyText,
       date: getHeader("Date"),
       read: !msg.labelIds?.includes("UNREAD"),
       message_id: getHeader("Message-ID"),

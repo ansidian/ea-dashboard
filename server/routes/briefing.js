@@ -680,7 +680,7 @@ router.get("/email-search", async (req, res) => {
               idx.from_name, idx.from_address, idx.subject, idx.body_snippet,
               idx.email_date, idx.read,
               snippet(ea_email_fts, 3, '<mark>', '</mark>', '...', 32) AS subject_highlight,
-              snippet(ea_email_fts, 4, '<mark>', '</mark>', '...', 48) AS body_highlight,
+              snippet(ea_email_fts, 5, '<mark>', '</mark>', '...', 48) AS body_highlight,
               rank
             FROM ea_email_fts
             JOIN ea_email_index idx ON idx.uid = ea_email_fts.uid
