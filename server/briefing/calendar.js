@@ -141,8 +141,12 @@ export async function fetchCalendar(gmailAccounts, { startDate, endDate } = {}) 
             _start: new Date(start).getTime(),
             _end: new Date(end).getTime(),
             ...(isMultiDay && {
+              // All-day events arrive as bare YYYY-MM-DD strings which JS
+              // parses as UTC midnight. Formatting in Pacific time then shifts
+              // them back a day. Format in UTC for all-day events so the label
+              // matches the date Google actually returned.
               dayLabel: new Date(start).toLocaleDateString("en-US", {
-                timeZone: "America/Los_Angeles",
+                timeZone: isAllDay ? "UTC" : "America/Los_Angeles",
                 weekday: "short",
                 month: "short",
                 day: "numeric",
