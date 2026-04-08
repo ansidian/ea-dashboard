@@ -1,3 +1,4 @@
+import { useEffect, useReducer } from "react";
 import Section from "../layout/Section";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { resolveInsight } from "../../lib/insight-resolver";
@@ -22,7 +23,22 @@ export default function InsightsSection({
   className,
   staleCount = 0,
   aiGeneratedAt,
+  isLatest = true,
 }) {
+  // Time reference used by the slot resolver. For the latest briefing we tick
+  // every 60s so relative phrases like "tonight" roll over to "last night" as
+  // the day progresses without requiring a manual refresh. For historical
+  // briefings we freeze `now` to the briefing's generation time so it reads
+  // exactly as it did when first generated. `forceTick` only exists to
+  // trigger a re-render on interval — its reducer state is discarded.
+  const [, forceTick] = useReducer((x) => x + 1, 0);
+  useEffect(() => {
+    if (!isLatest) return undefined;
+    const id = setInterval(forceTick, 60_000);
+    return () => clearInterval(id);
+  }, [isLatest]);
+  const now = !isLatest && aiGeneratedAt ? new Date(aiGeneratedAt) : new Date();
+
   if (!insights?.length) return null;
   const isStale = staleCount >= 1;
 
@@ -80,7 +96,7 @@ export default function InsightsSection({
               className={`text-[13px] leading-relaxed ${isStale ? "" : "text-foreground/75"}`}
               style={isStale ? { color: "rgba(205,214,244,0.45)" } : undefined}
             >
-              {resolveInsight(insight, new Date())}
+              {resolveInsight(insight, now)}
             </span>
           </MotionItem>
         ))}

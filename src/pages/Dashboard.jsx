@@ -174,6 +174,7 @@ export default function Dashboard() {
         genProgress={bd.genProgress}
         liveData={liveData}
         isMock={isMock}
+        viewingPast={bd.viewingPast}
         onNavigateToEmail={bd.navigateToEmail}
         headerProps={{
           refreshing: bd.refreshing,
@@ -212,6 +213,7 @@ function DashboardMain({
   genProgress,
   liveData,
   isMock,
+  viewingPast,
   onNavigateToEmail,
   headerProps,
 }) {
@@ -279,6 +281,7 @@ function DashboardMain({
           insights={d.aiInsights}
           staleCount={d.nonAiGenerationCount || 0}
           aiGeneratedAt={d.aiGeneratedAt}
+          isLatest={!viewingPast}
           loaded={loaded}
           delay={200}
           className={halfClass}
