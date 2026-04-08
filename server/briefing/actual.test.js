@@ -1,19 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // vi.mock is hoisted — these factories run fresh after each vi.resetModules()
-vi.mock("@actual-app/api", () => ({
-  default: {
-    init: vi.fn().mockResolvedValue(undefined),
-    downloadBudget: vi.fn().mockResolvedValue(undefined),
-    shutdown: vi.fn().mockResolvedValue(undefined),
-    sync: vi.fn().mockResolvedValue(undefined),
-    getAccounts: vi.fn().mockResolvedValue([{ id: "a1", name: "Checking", type: "checking", closed: false }]),
-    getPayees: vi.fn().mockResolvedValue([{ id: "p1", name: "Test Payee", transfer_acct: null }]),
-    getCategoryGroups: vi.fn().mockResolvedValue([{ name: "Bills", categories: [{ id: "c1", name: "Rent" }] }]),
-    getBudgets: vi.fn().mockResolvedValue([{ groupId: "sync-123" }]),
-    addTransactions: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+// `q()` returns a chainable query builder; `runQuery` consumes it and returns
+// a `{ data }` envelope. Tests don't care about the filtered results, just
+// that the calls don't blow up on an undefined function.
+vi.mock("@actual-app/api", () => {
+  const queryBuilder = {
+    filter: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+  };
+  return {
+    default: {
+      init: vi.fn().mockResolvedValue(undefined),
+      downloadBudget: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      sync: vi.fn().mockResolvedValue(undefined),
+      getAccounts: vi.fn().mockResolvedValue([{ id: "a1", name: "Checking", type: "checking", closed: false }]),
+      getPayees: vi.fn().mockResolvedValue([{ id: "p1", name: "Test Payee", transfer_acct: null }]),
+      getCategoryGroups: vi.fn().mockResolvedValue([{ name: "Bills", categories: [{ id: "c1", name: "Rent" }] }]),
+      getBudgets: vi.fn().mockResolvedValue([{ groupId: "sync-123" }]),
+      addTransactions: vi.fn().mockResolvedValue(undefined),
+      q: vi.fn(() => queryBuilder),
+      runQuery: vi.fn().mockResolvedValue({ data: [] }),
+    },
+  };
+});
 
 vi.mock("../db/connection.js", () => ({
   default: {
