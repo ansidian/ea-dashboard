@@ -3,83 +3,102 @@ import { describe, it, expect } from "vitest";
 // Set dummy API key BEFORE importing claude.js — the module reads it at load time
 process.env.ANTHROPIC_API_KEY = "test-key";
 
-const { parseResponse } = await import("./claude.js");
+const { buildSlotCandidates } = await import("./claude.js");
 
-const validBriefing = {
-  aiInsights: [{ icon: "calendar", text: "You have a meeting at 2pm" }],
-  emails: {
-    summary: "3 emails across 1 account",
-    accounts: [{
-      name: "Gmail", icon: "envelope", color: "#red", unread: 1,
-      important: [{ id: "1", from: "Test", subject: "Hi", urgency: "low" }],
-      noise_count: 2,
-    }],
-  },
-  deadlines: [],
-};
-
-describe("parseResponse", () => {
-  describe("valid input", () => {
-    it("returns parsed object when given valid JSON with correct shape", () => {
-      const input = JSON.stringify(validBriefing);
-      const result = parseResponse(input);
-      expect(result.aiInsights).toBeInstanceOf(Array);
-      expect(result.emails).toBeInstanceOf(Object);
-      expect(result.deadlines).toBeInstanceOf(Array);
-    });
-
-    it("strips markdown code fences (```json ... ```) and parses correctly", () => {
-      const input = "```json\n" + JSON.stringify(validBriefing) + "\n```";
-      const result = parseResponse(input);
-      expect(result.aiInsights[0].text).toBe("You have a meeting at 2pm");
-    });
-
-    it("strips plain ``` fences and parses correctly", () => {
-      const input = "```\n" + JSON.stringify(validBriefing) + "\n```";
-      const result = parseResponse(input);
-      expect(result.emails.summary).toBe("3 emails across 1 account");
-    });
-
-    it("extracts JSON from surrounding prose via regex fallback", () => {
-      const input = "Here is the analysis:\n\n" + JSON.stringify(validBriefing) + "\n\nEnd of response.";
-      const result = parseResponse(input);
-      expect(result.deadlines).toEqual([]);
-    });
-
-    it("accepts JSON with extra keys beyond the required three", () => {
-      const extraKeys = { ...validBriefing, model: "claude-opus", extraField: "ignored" };
-      const input = JSON.stringify(extraKeys);
-      const result = parseResponse(input);
-      expect(result.model).toBe("claude-opus");
-      expect(result.aiInsights).toBeInstanceOf(Array);
-    });
+describe("buildSlotCandidates", () => {
+  it("returns empty dict on empty input", () => {
+    const slots = buildSlotCandidates({});
+    expect(slots).toEqual({});
   });
 
-  describe("invalid shape", () => {
-    it("throws when required key 'emails' is missing", () => {
-      const noEmails = { aiInsights: [], deadlines: [] };
-      expect(() => parseResponse(JSON.stringify(noEmails))).toThrow(/missing/i);
-      expect(() => parseResponse(JSON.stringify(noEmails))).toThrow(/emails/);
+  it("mints ctm slots with stable IDs from source id", () => {
+    const slots = buildSlotCandidates({
+      ctmDeadlines: [
+        { id: "hw42", title: "Problem Set 4", class_name: "Econ 101", due_date: "2026-04-12", due_time: "11:59 PM" },
+      ],
     });
-
-    it("throws when 'emails' is wrong type (string instead of object)", () => {
-      const wrongType = { ...validBriefing, emails: "not an object" };
-      expect(() => parseResponse(JSON.stringify(wrongType))).toThrow(/emails/);
-    });
-
-    it("throws when 'aiInsights' is wrong type (object instead of array)", () => {
-      const wrongType = { ...validBriefing, aiInsights: { insight: "bad" } };
-      expect(() => parseResponse(JSON.stringify(wrongType))).toThrow(/aiInsights/);
-    });
+    expect(Object.keys(slots)).toEqual(["ctm_hw42"]);
+    expect(slots.ctm_hw42.iso).toBe("2026-04-12");
+    expect(slots.ctm_hw42.time).toBe("23:59");
+    expect(slots.ctm_hw42.label).toMatch(/Problem Set 4/);
   });
 
-  describe("unparseable input", () => {
-    it("throws with 'Failed to parse' on empty string", () => {
-      expect(() => parseResponse("")).toThrow(/Failed to parse/);
+  it("mints todoist slots with stable IDs", () => {
+    const slots = buildSlotCandidates({
+      todoistTasks: [
+        { id: "task-99", title: "Order Poo-Pourri", class_name: "Inbox", due_date: "2026-04-09", due_time: null },
+      ],
     });
+    expect(Object.keys(slots)).toEqual(["tk_task_99"]);
+    expect(slots.tk_task_99.iso).toBe("2026-04-09");
+    expect(slots.tk_task_99.time).toBeUndefined();
+  });
 
-    it("throws with 'Failed to parse' on garbage non-JSON text", () => {
-      expect(() => parseResponse("this is not JSON at all!!!")).toThrow(/Failed to parse/);
+  it("mints bill slots with content-hash IDs", () => {
+    const slots = buildSlotCandidates({
+      upcomingBills: [
+        { payee: "Electric Co", amount: 95.99, next_date: "2026-04-10" },
+      ],
     });
+    const keys = Object.keys(slots);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatch(/^bill_[a-f0-9]{8}$/);
+    expect(slots[keys[0]].iso).toBe("2026-04-10");
+    expect(slots[keys[0]].label).toBe("Electric Co $95.99");
+  });
+
+  it("mints calendar slots with UTC date for all-day events", () => {
+    // _start is UTC midnight of the event date for all-day events
+    const apr15Midnight = Date.UTC(2026, 3, 15); // Apr 15 00:00 UTC
+    const slots = buildSlotCandidates({
+      nextWeekCalendar: [
+        { _start: apr15Midnight, _end: apr15Midnight + 86400000, title: "Tax Day", allDay: true },
+      ],
+    });
+    const keys = Object.keys(slots);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatch(/^nwcal_[a-f0-9]{8}$/);
+    expect(slots[keys[0]].iso).toBe("2026-04-15"); // NOT Apr 14 — UTC formatting applied
+    expect(slots[keys[0]].time).toBeUndefined();
+  });
+
+  it("mints calendar slots with PT iso+time for timed events", () => {
+    // 8pm PDT on Apr 8 2026 = 03:00 UTC Apr 9
+    const apr8_8pmPDT = Date.UTC(2026, 3, 9, 3, 0);
+    const slots = buildSlotCandidates({
+      calendar: [
+        { _start: apr8_8pmPDT, _end: apr8_8pmPDT + 3600000, title: "The Boys", allDay: false },
+      ],
+    });
+    const keys = Object.keys(slots);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatch(/^cal_[a-f0-9]{8}$/);
+    expect(slots[keys[0]].iso).toBe("2026-04-08");
+    expect(slots[keys[0]].time).toBe("20:00");
+  });
+
+  it("skips items missing required date fields", () => {
+    const slots = buildSlotCandidates({
+      ctmDeadlines: [{ id: "x", title: "No date" }],
+      todoistTasks: [{ id: "y", title: "No date" }],
+      upcomingBills: [{ payee: "No date", amount: 1 }],
+      calendar: [{ title: "No start", allDay: false }],
+    });
+    expect(slots).toEqual({});
+  });
+
+  it("parses 12-hour times correctly", () => {
+    const slots = buildSlotCandidates({
+      todoistTasks: [
+        { id: "a", title: "Morning", due_date: "2026-04-09", due_time: "9:00 AM" },
+        { id: "b", title: "Noon", due_date: "2026-04-09", due_time: "12:00 PM" },
+        { id: "c", title: "Evening", due_date: "2026-04-09", due_time: "11:59 PM" },
+        { id: "d", title: "Midnight", due_date: "2026-04-09", due_time: "12:00 AM" },
+      ],
+    });
+    expect(slots.tk_a.time).toBe("09:00");
+    expect(slots.tk_b.time).toBe("12:00");
+    expect(slots.tk_c.time).toBe("23:59");
+    expect(slots.tk_d.time).toBe("00:00");
   });
 });

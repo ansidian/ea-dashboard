@@ -1,3 +1,6 @@
+import { createHash } from "crypto";
+import { validateInsight, SLOT_REF_REGEX } from "./insight-validator.js";
+
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 // Preferred defaults in order — first available one is used if no model is configured
 const PREFERRED_MODELS = [
@@ -5,6 +8,10 @@ const PREFERRED_MODELS = [
   "claude-sonnet-4-5-20250514",
   "claude-haiku-4-5-20251001",
 ];
+// Small, fast model used for the single-insight reformatter fallback.
+const HAIKU_REFORMATTER_MODEL = "claude-haiku-4-5-20251001";
+
+const TZ = "America/Los_Angeles";
 
 const SYSTEM_PROMPT = `You are a personal executive assistant. You receive emails, calendar events, and academic deadlines. Your job is email triage, bill detection, and cross-source insights. Weather, calendar, deadlines, and CTM data are handled by the server — do NOT include them in your output.
 
@@ -34,13 +41,42 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
 3. GENERATE INSIGHTS (2-4 items): Connect dots across emails, calendar, and deadlines. Be specific and actionable.
    Calendar events with "passed": true already ended — skip them. Focus on what's ahead.
    When "Next Week's Calendar" is provided, naturally blend it into insights — reference upcoming events when they connect to today's emails, deadlines, or calendar (e.g., prep needed, follow-ups, busy days ahead). Do not force a separate next-week insight if nothing is noteworthy.
+
    GROUNDING RULE (absolute):
    - Every insight MUST reference specific items from the provided input (a particular email, calendar event, deadline, Todoist task, bill, or historical context entry). If an insight cannot point to a specific input item, do NOT generate it.
    - DO NOT surface holidays, observances, tax deadlines, seasonal reminders, cultural events, or any "did you know"-style facts from your training data. The user does not need Claude to remind them that Tax Day, Thanksgiving, Daylight Saving, etc. are approaching. These are BANNED from insights unconditionally — even if they feel helpful. The only exception is if such an event is explicitly mentioned in the input data (e.g., an email about tax filing), in which case reference the email, not the holiday.
-   DATE RULES (strict):
-   - Always use absolute dates with weekday (e.g., "Wed Apr 9") in insight text. NEVER use "today", "tomorrow", "yesterday", "tonight", "this morning", or "later today" — briefings are often read hours after generation and relative words become wrong.
-   - All date math (days until X, "one week away") MUST be computed from the "Now" block at the top of the user message — never from training data. The "Now" block lists today + the next 7 days with ISO dates and weekdays; use it as the single source of truth.
-   - If you're unsure of any date, omit it rather than guess.
+
+   TYPED DATE SLOT SYSTEM (for insight text):
+   Write insight text using the "template" + "slots" format. Templates MUST NOT contain any relative date words — instead, use {slot_id} placeholders for every date or time reference, and the frontend will render them into natural language based on when the user reads the briefing.
+
+   FORBIDDEN words in template (use a slot instead): today, tomorrow, yesterday, tonight, last night, this morning, this afternoon, this evening, later today, earlier today, this week, this weekend, next week, next Mon/Tue/Wed/Thu/Fri/Sat/Sun, in N days, in N weeks, soon.
+
+   HOW TO REFERENCE DATES:
+   - PREFER pre-minted slot IDs from the "Available date slots" section of the user message. Reference them with {slot_id}, e.g., {tk_abc123}. When you reference a pre-minted slot, leave the insight's "slots" object EMPTY ({}).
+   - Only MINT a new slot in the insight's "slots" object when referencing a date not present in the pre-minted list (e.g., a computed date like "three days before your flight"). New slot IDs must start with "new_" and contain only lowercase letters, digits, and underscores.
+   - A slot has shape { "iso": "YYYY-MM-DD", "time": "HH:MM" }. Time is optional (24-hour format). iso must be a valid calendar date derived from the "Now" block — NEVER from training data.
+
+   EXAMPLES:
+   Pre-minted slots available:
+     tk_abc = 2026-04-09 (Poo-Pourri task)
+     cal_xyz = 2026-04-08 20:00 (The Boys viewing)
+     bill_123 = 2026-04-10 (Electric $95.99)
+
+   ✅ CORRECT:
+     { "icon": "🎬", "template": "The Boys viewing is {cal_xyz}.", "slots": {} }
+     { "icon": "📋", "template": "Your Poo-Pourri task is due {tk_abc}.", "slots": {} }
+     { "icon": "💡", "template": "Your electric bill {bill_123} is $12 higher than last month — worth a look.", "slots": {} }
+     { "icon": "🛫", "template": "Start packing {new_prep} — three days before your flight.", "slots": { "new_prep": { "iso": "2026-04-18" } } }
+
+   ❌ WRONG — contains forbidden relative word:
+     { "template": "Your task is due tomorrow." }  ← use {tk_abc}
+     { "template": "The Boys is tonight at 8pm." } ← use {cal_xyz}
+     { "template": "Tax Day is next Wed." }        ← no pre-minted slot and not in input → don't mention
+
+   ❌ WRONG — minted a new slot when a pre-minted one exists:
+     { "template": "Your task is due {new_task}.", "slots": { "new_task": { "iso": "2026-04-09" } } }
+     (Should reference {tk_abc} instead.)
+
    When Historical Context is provided, USE it:
    - Compare current bills/transactions to historical amounts (note increases, decreases, trends)
    - Flag recurring senders or threads that span multiple briefings
@@ -48,47 +84,248 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
    - Reference what previous briefings flagged if it connects to today's data
    If no historical context is provided, generate insights from current data only.
 
-Respond with ONLY valid JSON matching this structure:
-{
-  "aiInsights": [{ "icon": string, "text": string }],
-  "emails": {
-    "summary": string,
-    "accounts": [{
-      "name": string, "icon": string, "color": string, "unread": number,
-      "important": [{
-        "id": string, "from": string, "fromEmail": string, "subject": string,
-        "preview": string (1-2 sentences), "action": string (max 3-4 words: "Reply needed", "FYI", "Pay by Apr 5"),
-        "urgency": string, "date": string, "read": boolean, "hasBill": boolean,
-        "extractedBill": { "payee": string, "amount": number, "due_date": string, "type": string, "category_id": string|null, "category_name": string|null } | null,
-        "urgentFlag": { "label": string, "date": string } | null
-      }],
-      "noise": [{ "id": string, "from": string, "subject": string }],
-      "noise_count": number
-    }]
-  }
-}
-
-RULES:
+RULES (for email triage):
 - Group emails by their account_label. Use account_label as "name", account_icon as "icon", account_color as "color".
 - "unread" MUST equal the length of "important" array. Do NOT fabricate emails.
 - "read" MUST be passed through from the input email's "read" field as-is.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.
 - When urgentFlag is set, the action field must NOT repeat the deadline — use a verb-only action instead (e.g., "Claim credit", "RSVP", "Register"). The urgentFlag already displays the date.
-- If an email is in a non-English language (Chinese, Spanish, etc.), write the preview and action fields in English. Summarize the content — do not translate literally.`;
+- If an email is in a non-English language (Chinese, Spanish, etc.), write the preview and action fields in English. Summarize the content — do not translate literally.
 
-export async function callClaude({ emails, calendar, ctmDeadlines, todoistTasks, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar }) {
-  if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+You MUST respond by calling the submit_briefing tool. Do not respond with free text.`;
 
-  const selectedModel = model || PREFERRED_MODELS[0];
+// --- Tool schema for submit_briefing ---
+// Forces Claude to return structured output conforming to the slot-system
+// contract. tool_choice below makes this the only allowed response path.
+const SUBMIT_BRIEFING_TOOL = {
+  name: "submit_briefing",
+  description: "Submit the daily briefing: email triage results + insight items using the typed date slot system.",
+  input_schema: {
+    type: "object",
+    required: ["aiInsights", "emails"],
+    properties: {
+      aiInsights: {
+        type: "array",
+        description: "2-4 insights. Each must use template + slots format. No relative date words in template.",
+        items: {
+          type: "object",
+          required: ["icon", "template", "slots"],
+          properties: {
+            icon: {
+              type: "string",
+              description: "Single emoji character.",
+            },
+            template: {
+              type: "string",
+              description: "Insight text with {slot_id} placeholders. FORBIDDEN: today, tomorrow, yesterday, tonight, last night, this morning, this afternoon, this evening, earlier today, later today, this week, this weekend, next week, next {weekday}, in N days, soon. Use slot placeholders for all date/time references.",
+            },
+            slots: {
+              type: "object",
+              description: "Date slots minted by Claude for dates NOT in the pre-minted list. Leave EMPTY when the template only uses pre-minted slot IDs. Keys must start with 'new_'.",
+              additionalProperties: {
+                type: "object",
+                required: ["iso"],
+                properties: {
+                  iso: {
+                    type: "string",
+                    description: "Calendar date in PT as YYYY-MM-DD.",
+                  },
+                  time: {
+                    type: "string",
+                    description: "Optional 24-hour time as HH:MM.",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      emails: {
+        type: "object",
+        required: ["summary", "accounts"],
+        properties: {
+          summary: { type: "string" },
+          accounts: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["name", "icon", "color", "unread", "important", "noise", "noise_count"],
+              properties: {
+                name: { type: "string" },
+                icon: { type: "string" },
+                color: { type: "string" },
+                unread: { type: "number" },
+                important: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      from: { type: "string" },
+                      fromEmail: { type: "string" },
+                      subject: { type: "string" },
+                      preview: { type: "string" },
+                      action: { type: "string" },
+                      urgency: { type: "string" },
+                      date: { type: "string" },
+                      read: { type: "boolean" },
+                      hasBill: { type: "boolean" },
+                      extractedBill: {
+                        type: ["object", "null"],
+                        properties: {
+                          payee: { type: "string" },
+                          amount: { type: "number" },
+                          due_date: { type: "string" },
+                          type: { type: "string" },
+                          category_id: { type: ["string", "null"] },
+                          category_name: { type: ["string", "null"] },
+                        },
+                      },
+                      urgentFlag: {
+                        type: ["object", "null"],
+                        properties: {
+                          label: { type: "string" },
+                          date: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+                noise: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      from: { type: "string" },
+                      subject: { type: "string" },
+                    },
+                  },
+                },
+                noise_count: { type: "number" },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
 
-  // Build an unambiguous "Now" block — Claude has historically miscounted dates
-  // when given only a single localized string, so we provide today + tomorrow +
-  // the next 7 days as anchors and require all date math to derive from these.
-  const TZ = "America/Los_Angeles";
+// --- Slot candidate building ---
+
+// 8-char SHA1 hash of a stable string representation
+function hash8(str) {
+  return createHash("sha1").update(str).digest("hex").slice(0, 8);
+}
+
+// Keep only [a-z0-9_] so IDs match the slot reference regex.
+function slugify(str) {
+  return String(str).toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 16);
+}
+
+// Convert a calendar item's _start/_end (ms) + allDay flag into { iso, time? }.
+// All-day events have _start as UTC midnight of the event's date, so we
+// format in UTC. Timed events format in PT.
+function calendarSlotFromItem(item) {
+  const d = new Date(item._start);
+  if (item.allDay) {
+    const iso = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(d);
+    return { iso };
+  }
+  const iso = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(d);
+  return { iso, time };
+}
+
+// Parse CTM/Todoist due_time "H:MM AM/PM" → "HH:MM" 24-hour.
+function parseAmPmTime(str) {
+  if (!str || typeof str !== "string") return null;
+  const m = str.trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = m[2];
+  const period = m[3].toLowerCase();
+  if (period === "pm" && h !== 12) h += 12;
+  if (period === "am" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${min}`;
+}
+
+/**
+ * Build the pre-minted slot candidate dictionary from briefing input data.
+ * Each slot has a stable, content-derived ID plus a human label for Claude's
+ * reference in the prompt. The frontend renderer consumes only { iso, time }.
+ */
+export function buildSlotCandidates({
+  ctmDeadlines,
+  todoistTasks,
+  calendar,
+  nextWeekCalendar,
+  upcomingBills,
+}) {
+  const slots = {}; // id → { iso, time?, label }
+
+  for (const d of ctmDeadlines || []) {
+    if (!d.due_date) continue;
+    const id = `ctm_${slugify(d.id || hash8(d.title + d.due_date))}`;
+    slots[id] = {
+      iso: d.due_date,
+      ...(parseAmPmTime(d.due_time) ? { time: parseAmPmTime(d.due_time) } : {}),
+      label: `${d.title} (${d.class_name || "deadline"})`,
+    };
+  }
+
+  for (const t of todoistTasks || []) {
+    if (!t.due_date) continue;
+    const id = `tk_${slugify(t.id || hash8(t.title + t.due_date))}`;
+    slots[id] = {
+      iso: t.due_date,
+      ...(parseAmPmTime(t.due_time) ? { time: parseAmPmTime(t.due_time) } : {}),
+      label: `${t.title}${t.class_name ? ` (${t.class_name})` : ""}`,
+    };
+  }
+
+  for (const b of upcomingBills || []) {
+    if (!b.next_date) continue;
+    const id = `bill_${hash8(`${b.payee}|${b.next_date}`)}`;
+    slots[id] = {
+      iso: b.next_date,
+      label: `${b.payee}${typeof b.amount === "number" ? ` $${b.amount.toFixed(2)}` : ""}`,
+    };
+  }
+
+  for (const e of calendar || []) {
+    if (typeof e._start !== "number") continue;
+    const data = calendarSlotFromItem(e);
+    const id = `cal_${hash8(`${data.iso}|${data.time || ""}|${e.title}`)}`;
+    slots[id] = { ...data, label: `${e.title}${e.allDay ? " (all day)" : ""}` };
+  }
+
+  for (const e of nextWeekCalendar || []) {
+    if (typeof e._start !== "number") continue;
+    const data = calendarSlotFromItem(e);
+    const id = `nwcal_${hash8(`${data.iso}|${data.time || ""}|${e.title}`)}`;
+    slots[id] = { ...data, label: `${e.title}${e.allDay ? " (all day)" : ""}` };
+  }
+
+  return slots;
+}
+
+// Strip the human `label` field from a slot — Claude-facing context vs
+// stored slot data are different things.
+function slotDataOnly(slot) {
+  const { iso, time } = slot;
+  return time ? { iso, time } : { iso };
+}
+
+// --- Now block ---
+
+function buildNowBlock() {
   const nowDate = new Date();
   const fmtDate = (d, opts) => d.toLocaleDateString("en-US", { timeZone: TZ, ...opts });
   const fmtTime = (d) => d.toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit", timeZoneName: "short" });
-  // YYYY-MM-DD in PT regardless of server tz
   const isoInTZ = (d) => {
     const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
     const y = parts.find(p => p.type === "year").value;
@@ -103,7 +340,7 @@ export async function callClaude({ emails, calendar, ctmDeadlines, todoistTasks,
     const label = fmtDate(d, { weekday: "long", month: "short", day: "numeric" });
     return `${iso} = ${label}`;
   };
-  const nowBlock = [
+  const block = [
     `Today:    ${dayLine(0)}`,
     `Tomorrow: ${dayLine(1)}`,
     `+2 days:  ${dayLine(2)}`,
@@ -114,100 +351,25 @@ export async function callClaude({ emails, calendar, ctmDeadlines, todoistTasks,
     `+7 days:  ${dayLine(7)}`,
     `Current time: ${fmtTime(nowDate)}`,
   ].join("\n");
-  const todayIso = isoInTZ(nowDate);
+  return { block, todayIso: isoInTZ(nowDate) };
+}
 
-  // Helper: annotate a YYYY-MM-DD with a relative offset so Claude doesn't
-  // have to do date math on raw dates.
-  const relLabel = (iso) => {
-    if (!iso) return "";
-    const target = new Date(iso + "T12:00:00Z");
-    const todayMid = new Date(todayIso + "T12:00:00Z");
-    const days = Math.round((target - todayMid) / 86_400_000);
-    if (days === 0) return " (today)";
-    if (days === 1) return " (tomorrow)";
-    if (days === -1) return " (yesterday)";
-    if (days > 1 && days <= 7) return ` (+${days}d)`;
-    if (days < -1 && days >= -7) return ` (${days}d)`;
-    return "";
-  };
+function relLabel(iso, todayIso) {
+  if (!iso) return "";
+  const target = new Date(iso + "T12:00:00Z");
+  const todayMid = new Date(todayIso + "T12:00:00Z");
+  const days = Math.round((target - todayMid) / 86_400_000);
+  if (days === 0) return " (today)";
+  if (days === 1) return " (tomorrow)";
+  if (days === -1) return " (yesterday)";
+  if (days > 1 && days <= 7) return ` (+${days}d)`;
+  if (days < -1 && days >= -7) return ` (${days}d)`;
+  return "";
+}
 
-  const interestsNote = emailInterests?.length
-    ? `\n\n## Email Interests (ABSOLUTE RULE — if sender name contains any of these, classify as "fyi" NOT "noise", even if the email looks promotional)\n${emailInterests.join(", ")}`
-    : "";
+// --- Anthropic API call with 429/529 retry ---
 
-  // Trim emails to only fields Claude needs for triage
-  const trimmedEmails = emails.map(e => ({
-    id: e.id || e.uid,
-    from: e.from,
-    from_email: e.from_email,
-    subject: e.subject,
-    body_preview: e.body_preview,
-    date: e.date,
-    account_label: e.account_label,
-    account_icon: e.account_icon,
-    account_color: e.account_color,
-    read: e.read || false,
-  }));
-
-  // Compact calendar summary for insights (not output — server handles display)
-  const calendarSummary = calendar.map(e =>
-    `${e.time} ${e.duration} "${e.title}"${e.passed ? " [PASSED]" : ""}${e.flag ? ` [${e.flag}]` : ""}`
-  ).join("; ");
-
-  // Compact next-week calendar summary for insights
-  const nextWeekSummary = nextWeekCalendar?.length
-    ? nextWeekCalendar.map(e =>
-        `${e.dayLabel} ${e.time} ${e.duration} "${e.title}"${e.flag ? ` [${e.flag}]` : ""}`
-      ).join("; ")
-    : "";
-
-  // Compact CTM summary for insights (Canvas academic deadlines only)
-  const ctmSummary = ctmDeadlines?.length
-    ? ctmDeadlines.map(d => `"${d.title}" due ${d.due_date}${relLabel(d.due_date)} ${d.due_time || ""} (${d.class_name}, ${d.points_possible || 0}pts)`).join("; ")
-    : "None";
-
-  // Compact Todoist summary for insights (personal tasks)
-  const todoistSummary = todoistTasks?.length
-    ? todoistTasks.map(d => `"${d.title}" due ${d.due_date}${relLabel(d.due_date)} ${d.due_time || ""} (${d.class_name})`).join("; ")
-    : "None";
-
-  // Compact category list for bill matching
-  const categoriesNote = categories?.length
-    ? `\n\n## Budget Categories (for bill detection — match extractedBill to closest category)\n${categories.flatMap(g => g.categories.map(c => `${c.id}:${c.name}`)).join(", ")}`
-    : "";
-
-  // Scheduled payments for cross-referencing detected bills
-  const scheduledNote = upcomingBills?.length
-    ? `\n\n## Scheduled Payments (from budget app — cross-reference with detected bills)\n${upcomingBills.map(b => `${b.payee} $${b.amount.toFixed(2)} due ${b.next_date}`).join("; ")}`
-    : "";
-
-  const userMessage = `## Now (use these dates for ALL date math — do not rely on training data)
-${nowBlock}
-
-## Emails
-${JSON.stringify(trimmedEmails)}
-
-## Today's Calendar (for insights only — do NOT include in output)
-${calendarSummary || "No events"}
-
-## Academic Deadlines (for insights only — do NOT include in output)
-${ctmSummary}
-
-## Todoist Tasks (for insights only — do NOT include in output)
-${todoistSummary}
-
-## Next Week's Calendar (for insights only — do NOT include in output)
-${nextWeekSummary || "No events"}${interestsNote}${categoriesNote}${scheduledNote}${historicalContext ? `\n\n## Historical Context (from your previous briefings — use for trends, comparisons, continuity)\n${historicalContext}` : ""}`;
-
-  console.log(`[EA] Calling Claude API with model: ${selectedModel}`);
-
-  const body = JSON.stringify({
-    model: selectedModel,
-    max_tokens: 16384,
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: userMessage }],
-  });
-
+async function callAnthropicAPI(body) {
   const maxRetries = 3;
   let res;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -235,17 +397,264 @@ ${nextWeekSummary || "No events"}${interestsNote}${categoriesNote}${scheduledNot
     throw new Error(`Claude API error (${res.status}): ${text}`);
   }
 
-  const data = await res.json();
+  return res.json();
+}
+
+function extractToolUseInput(data, toolName) {
+  const block = (data.content || []).find(
+    c => c.type === "tool_use" && c.name === toolName,
+  );
+  if (!block || !block.input) {
+    const fallbackText = (data.content || []).find(c => c.type === "text")?.text || "";
+    throw new Error(
+      `Claude response missing ${toolName} tool_use block. stop_reason=${data.stop_reason}, text=${fallbackText.slice(0, 200)}`,
+    );
+  }
+  return block.input;
+}
+
+// --- Slot resolution and validation pipeline ---
+
+// Resolve slot references: for each {id} in the template, prefer the insight's
+// own `slots` entry, then fall back to the pre-minted global dict. Returns a
+// clean slots object containing only the referenced slots (no dead weight).
+function resolveInsightSlots(insight, preMinted) {
+  const template = insight.template || "";
+  const refs = [...template.matchAll(SLOT_REF_REGEX)].map(m => m[1]);
+  const clean = {};
+  for (const ref of refs) {
+    if (insight.slots && insight.slots[ref]) {
+      clean[ref] = slotDataOnly(insight.slots[ref]);
+    } else if (preMinted[ref]) {
+      clean[ref] = slotDataOnly(preMinted[ref]);
+    }
+    // else: unresolved — validator will flag
+  }
+  return { ...insight, slots: clean };
+}
+
+// Format pre-minted slots as a compact reference block for the Claude prompt.
+function formatSlotReferenceBlock(preMinted) {
+  const entries = Object.entries(preMinted);
+  if (entries.length === 0) return "No pre-minted slots.";
+  return entries
+    .map(([id, slot]) => `${id} = ${slot.iso}${slot.time ? ` ${slot.time}` : ""}${slot.label ? ` (${slot.label})` : ""}`)
+    .join("\n");
+}
+
+// --- Haiku reformatter (fallback) ---
+
+async function reformatInsightWithHaiku({ brokenInsight, errors, preMinted, nowBlock }) {
+  const slotRefs = formatSlotReferenceBlock(preMinted);
+  const system = `You convert a broken insight object into the correct typed date slot format. NEVER use relative date words (today, tomorrow, tonight, yesterday, last night, this morning, this afternoon, this evening, this week, next week, in N days, soon, next {weekday}). Always reference dates via {slot_id} placeholders. Prefer pre-minted slot IDs; only mint a new slot (prefixed "new_") if no pre-minted slot fits. Respond with ONLY a JSON object, no commentary.`;
+
+  const user = `## Broken insight (fix this)
+${JSON.stringify(brokenInsight)}
+
+## Validation errors
+${errors.join("\n")}
+
+## Now
+${nowBlock}
+
+## Available pre-minted slots
+${slotRefs}
+
+## Output format
+Return a single JSON object with the keys: icon (string), template (string), slots (object).
+Example:
+{ "icon": "📋", "template": "Your task is due {tk_abc}.", "slots": {} }
+If the insight cannot be rescued (e.g. references something no longer in scope), return an empty template string: { "icon": "", "template": "", "slots": {} }`;
+
+  const body = JSON.stringify({
+    model: HAIKU_REFORMATTER_MODEL,
+    max_tokens: 512,
+    temperature: 0,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+
+  const data = await callAnthropicAPI(body);
+  const rawText = (data.content || []).find(c => c.type === "text")?.text || "";
+  const cleaned = rawText.trim().replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      try { return JSON.parse(match[0]); } catch { /* fall through */ }
+    }
+    throw new Error(`Haiku reformatter returned unparseable text: ${rawText.slice(0, 200)}`);
+  }
+}
+
+// --- Main entry point ---
+
+export async function callClaude({
+  emails,
+  calendar,
+  ctmDeadlines,
+  todoistTasks,
+  model,
+  emailInterests,
+  categories,
+  historicalContext,
+  upcomingBills,
+  nextWeekCalendar,
+}) {
+  if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+
+  const selectedModel = model || PREFERRED_MODELS[0];
+
+  // --- Context blocks ---
+  const { block: nowBlock, todayIso } = buildNowBlock();
+
+  const preMintedSlots = buildSlotCandidates({
+    ctmDeadlines, todoistTasks, calendar, nextWeekCalendar, upcomingBills,
+  });
+
+  const interestsNote = emailInterests?.length
+    ? `\n\n## Email Interests (ABSOLUTE RULE — if sender name contains any of these, classify as "fyi" NOT "noise", even if the email looks promotional)\n${emailInterests.join(", ")}`
+    : "";
+
+  const trimmedEmails = emails.map(e => ({
+    id: e.id || e.uid,
+    from: e.from,
+    from_email: e.from_email,
+    subject: e.subject,
+    body_preview: e.body_preview,
+    date: e.date,
+    account_label: e.account_label,
+    account_icon: e.account_icon,
+    account_color: e.account_color,
+    read: e.read || false,
+  }));
+
+  const calendarSummary = calendar.map(e =>
+    `${e.time} ${e.duration} "${e.title}"${e.passed ? " [PASSED]" : ""}${e.flag ? ` [${e.flag}]` : ""}`,
+  ).join("; ");
+
+  const nextWeekSummary = nextWeekCalendar?.length
+    ? nextWeekCalendar.map(e =>
+        `${e.dayLabel} ${e.time} ${e.duration} "${e.title}"${e.flag ? ` [${e.flag}]` : ""}`,
+      ).join("; ")
+    : "";
+
+  const ctmSummary = ctmDeadlines?.length
+    ? ctmDeadlines.map(d => `"${d.title}" due ${d.due_date}${relLabel(d.due_date, todayIso)} ${d.due_time || ""} (${d.class_name}, ${d.points_possible || 0}pts)`).join("; ")
+    : "None";
+
+  const todoistSummary = todoistTasks?.length
+    ? todoistTasks.map(d => `"${d.title}" due ${d.due_date}${relLabel(d.due_date, todayIso)} ${d.due_time || ""} (${d.class_name})`).join("; ")
+    : "None";
+
+  const categoriesNote = categories?.length
+    ? `\n\n## Budget Categories (for bill detection — match extractedBill to closest category)\n${categories.flatMap(g => g.categories.map(c => `${c.id}:${c.name}`)).join(", ")}`
+    : "";
+
+  const scheduledNote = upcomingBills?.length
+    ? `\n\n## Scheduled Payments (from budget app — cross-reference with detected bills)\n${upcomingBills.map(b => `${b.payee} $${b.amount.toFixed(2)} due ${b.next_date}`).join("; ")}`
+    : "";
+
+  const slotReferenceBlock = formatSlotReferenceBlock(preMintedSlots);
+
+  const userMessage = `## Now (use these dates for ALL date math — do not rely on training data)
+${nowBlock}
+
+## Available date slots (reference these by ID in insight templates; leave the insight's "slots" object empty when using them)
+${slotReferenceBlock}
+
+## Emails
+${JSON.stringify(trimmedEmails)}
+
+## Today's Calendar (for insights only — do NOT include in output)
+${calendarSummary || "No events"}
+
+## Academic Deadlines (for insights only — do NOT include in output)
+${ctmSummary}
+
+## Todoist Tasks (for insights only — do NOT include in output)
+${todoistSummary}
+
+## Next Week's Calendar (for insights only — do NOT include in output)
+${nextWeekSummary || "No events"}${interestsNote}${categoriesNote}${scheduledNote}${historicalContext ? `\n\n## Historical Context (from your previous briefings — use for trends, comparisons, continuity)\n${historicalContext}` : ""}`;
+
+  console.log(`[EA] Calling Claude API with model: ${selectedModel}`);
+
+  const body = JSON.stringify({
+    model: selectedModel,
+    max_tokens: 16384,
+    temperature: 0,
+    tools: [SUBMIT_BRIEFING_TOOL],
+    tool_choice: { type: "tool", name: "submit_briefing" },
+    // cache_control on system caches [tools, system] (tools come first in the
+    // cache prefix order). Keeping the marker here preserves the existing cache
+    // hit behaviour and also covers the newly-added tool schema.
+    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: userMessage }],
+  });
+
+  const data = await callAnthropicAPI(body);
   const usage = data.usage || {};
   if (usage.cache_read_input_tokens) {
     console.log(`[EA] Cache hit: ${usage.cache_read_input_tokens} tokens read from cache, ${usage.cache_creation_input_tokens || 0} written`);
   } else if (usage.cache_creation_input_tokens) {
     console.log(`[EA] Cache miss: ${usage.cache_creation_input_tokens} tokens written to cache`);
   }
-  console.log(`[EA] Tokens — input: ${usage.input_tokens || '?'}, output: ${usage.output_tokens || '?'}, stop: ${data.stop_reason || '?'}`);
-  const rawText = data.content?.[0]?.text || "";
-  const result = parseResponse(rawText);
+  console.log(`[EA] Tokens — input: ${usage.input_tokens || "?"}, output: ${usage.output_tokens || "?"}, stop: ${data.stop_reason || "?"}`);
+
+  const result = extractToolUseInput(data, "submit_briefing");
   result.model = data.model || selectedModel;
+
+  // --- Insight validation + repair pipeline ---
+  const rawInsights = Array.isArray(result.aiInsights) ? result.aiInsights : [];
+  const finalInsights = [];
+
+  for (let i = 0; i < rawInsights.length; i++) {
+    let insight = resolveInsightSlots(rawInsights[i], preMintedSlots);
+    let check = validateInsight(insight);
+
+    if (check.valid) {
+      finalInsights.push(insight);
+      continue;
+    }
+
+    console.warn(`[EA] Insight ${i} failed validation: ${check.errors.join("; ")} — trying Haiku reformatter`);
+
+    // Fallback: Haiku reformatter. We skip the "targeted re-prompt to the main
+    // model" step because (a) the tool-use enforcement already catches shape
+    // errors, and (b) in practice the main model either gets it right or it
+    // doesn't — a second attempt at the same prompt rarely helps. Haiku on a
+    // narrow reformat task is cheaper and more reliable.
+    try {
+      const reformatted = await reformatInsightWithHaiku({
+        brokenInsight: insight,
+        errors: check.errors,
+        preMinted: preMintedSlots,
+        nowBlock,
+      });
+      // Reformatter may return an empty template to signal "unrecoverable"
+      if (reformatted && reformatted.template) {
+        const resolved = resolveInsightSlots(reformatted, preMintedSlots);
+        const recheck = validateInsight(resolved);
+        if (recheck.valid) {
+          finalInsights.push(resolved);
+          continue;
+        }
+        console.warn(`[EA] Haiku reformatter still invalid for insight ${i}: ${recheck.errors.join("; ")}`);
+      } else {
+        console.warn(`[EA] Haiku reformatter returned empty template for insight ${i} — dropping`);
+      }
+    } catch (err) {
+      console.warn(`[EA] Haiku reformatter threw for insight ${i}: ${err.message}`);
+    }
+
+    // Static fallback: drop the insight rather than render corrupted text.
+    // Resolver back-compat still handles any insight with `text` only, but
+    // we don't have a reliable `text` to synthesize here.
+  }
+
+  result.aiInsights = finalInsights;
   return result;
 }
 
@@ -268,59 +677,4 @@ export async function listModels() {
   return (data.data || [])
     .map(m => ({ id: m.id, name: m.display_name || m.id, created: m.created_at }))
     .sort((a, b) => (b.created || "").localeCompare(a.created || ""));
-}
-
-// Per D-04: top-level shape only — validate keys exist with correct types
-const REQUIRED_SHAPE = {
-  aiInsights: "array",
-  emails: "object",
-};
-
-function validateBriefingShape(parsed) {
-  const missing = [];
-  const wrongType = [];
-  for (const [key, expectedType] of Object.entries(REQUIRED_SHAPE)) {
-    if (!(key in parsed)) {
-      missing.push(key);
-    } else if (expectedType === "array" && !Array.isArray(parsed[key])) {
-      wrongType.push(`${key} (expected array, got ${typeof parsed[key]})`);
-    } else if (expectedType === "object" && (typeof parsed[key] !== "object" || Array.isArray(parsed[key]) || parsed[key] === null)) {
-      wrongType.push(`${key} (expected object, got ${Array.isArray(parsed[key]) ? "array" : typeof parsed[key]})`);
-    }
-  }
-  if (missing.length || wrongType.length) {
-    const parts = [];
-    if (missing.length) parts.push(`missing: ${missing.join(", ")}`);
-    if (wrongType.length) parts.push(`wrong type: ${wrongType.join(", ")}`);
-    throw new Error(`Claude response has invalid shape — ${parts.join("; ")}`);
-  }
-}
-
-export function parseResponse(rawText) {
-  let cleaned = rawText.trim();
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
-  }
-
-  try {
-    const parsed = JSON.parse(cleaned);
-    validateBriefingShape(parsed);
-    return parsed;
-  } catch (firstErr) {
-    // Re-throw shape validation errors immediately — they're not parse errors
-    if (firstErr.message.startsWith("Claude response has invalid shape")) throw firstErr;
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        const parsed = JSON.parse(match[0]);
-        validateBriefingShape(parsed);
-        return parsed;
-      } catch {
-        // fall through
-      }
-    }
-    throw new Error(
-      `Failed to parse Claude response as JSON: ${firstErr.message}\nRaw: ${rawText.slice(0, 500)}`,
-    );
-  }
 }
