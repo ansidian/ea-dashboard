@@ -25,14 +25,9 @@ async function getExecutedMigrations() {
 
 async function runMigration(name, sql) {
   console.log(`Running migration: ${name}`);
-  const statements = sql
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-
-  for (const statement of statements) {
-    await db.execute(statement);
-  }
+  // Delegate statement splitting to libsql. Handles comments, string literals,
+  // and trigger bodies correctly — unlike a naive sql.split(";").
+  await db.executeMultiple(sql);
 
   await db.execute({
     sql: "INSERT INTO migrations (name) VALUES (?)",
