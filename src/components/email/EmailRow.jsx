@@ -1,7 +1,4 @@
 import { cn } from "@/lib/utils";
-import EmailBody from "./EmailBody";
-import { MotionExpand, MotionChevron } from "../ui/motion-wrappers";
-import { markEmailAsRead } from "../../api";
 import useIsMobile from "../../hooks/useIsMobile";
 
 const getGmailUrl = (email) => {
@@ -63,35 +60,30 @@ function UrgentFlag({ email, size = "desktop" }) {
 }
 
 /**
- * Shared email row component used by both EmailSection and LiveEmailSection.
+ * Shared email row used by both EmailSection and LiveEmailSection. Clicking
+ * the row opens the email in an EmailReaderOverlay via `onOpen`. There is
+ * no inline expansion — the reader lives in a portal-based modal instead.
  *
  * Props:
  * - email          — email data object
- * - isOpen         — whether the row is expanded
- * - dimmed         — whether the row should appear faded (e.g. read, carried-over)
- * - onToggle       — called when user clicks to expand/collapse
- * - onMarkRead     — called when the row is opened for the first time
+ * - dimmed         — whether the row should appear faded (read, carried-over)
+ * - onOpen         — called with `email` when the row is clicked
  * - rowRef         — ref callback for scroll-into-view
- * - accentBar      — ReactNode for the left accent bar (or null)
- * - desktopMeta    — ReactNode for items before the from line on desktop (account icons, dots)
- * - desktopAfterFrom — ReactNode for items after the from line on desktop (badges, labels)
- * - mobileBeforeFrom — ReactNode rendered before the from line on mobile (account icons)
- * - mobileMeta     — ReactNode for items after the from line on mobile (stars, timestamps)
+ * - accentBar      — ReactNode for the left accent bar
+ * - desktopMeta    — ReactNode before the from line on desktop
+ * - desktopAfterFrom — ReactNode after the from line on desktop
+ * - mobileBeforeFrom — ReactNode before the from line on mobile
+ * - mobileMeta     — ReactNode after the from line on mobile
  * - desktopActions — ReactNode for the right-side action buttons on desktop
- * - mobileActions  — ReactNode for extra mobile-only action buttons in the meta row
- * - preview        — preview text to show when collapsed
- * - extraExpanded  — ReactNode for extra expanded content (e.g. BillBadge panel) rendered before EmailBody
- * - hideUrgentFlag — suppress built-in UrgentFlag rendering (parent handles it in desktopActions)
- * - borderColor    — open-state border color (default: rgba(99,102,241,0.2))
- * - emailBodyProps — additional props passed to EmailBody (model, onDismiss, onLoaded)
- * - className      — extra classes on the outer container
+ * - mobileActions  — ReactNode for extra mobile-only action buttons
+ * - preview        — preview text to show below the from line
+ * - hideUrgentFlag — suppress built-in UrgentFlag rendering
+ * - className      — extra classes
  */
 export default function EmailRow({
   email,
-  isOpen,
   dimmed,
-  onToggle,
-  onMarkRead,
+  onOpen,
   rowRef,
   accentBar,
   desktopMeta,
@@ -101,25 +93,14 @@ export default function EmailRow({
   desktopActions,
   mobileActions,
   preview,
-  extraExpanded,
   hideUrgentFlag,
-  borderColor = "rgba(99,102,241,0.2)",
-  emailBodyProps,
   className: cls,
 }) {
   const isMobile = useIsMobile();
 
-  const handleClick = (e) => {
-    if (isOpen && !e.target.closest("[data-email-header]")) return;
-    const opening = !isOpen;
-    onToggle(opening);
-    if (opening && onMarkRead) {
-      onMarkRead();
-      markEmailAsRead(email.uid || email.id).catch(() => {});
-    }
-  };
+  const handleClick = () => onOpen?.(email);
 
-  const row = (
+  return (
     <div
       ref={rowRef}
       data-email-id={email.uid || email.id}
@@ -129,22 +110,18 @@ export default function EmailRow({
       className={cn(
         "group relative rounded-lg cursor-pointer transition-all duration-150 py-3.5 px-4",
         accentBar && "pl-5",
-        dimmed && !isOpen && "opacity-50",
+        dimmed && "opacity-50",
         cls,
       )}
       style={{
-        background: isOpen ? "rgba(36,36,58,0.6)" : "rgba(36,36,58,0.4)",
-        border: isOpen
-          ? `1px solid ${borderColor}`
-          : "1px solid rgba(255,255,255,0.04)",
+        background: "rgba(36,36,58,0.4)",
+        border: "1px solid rgba(255,255,255,0.04)",
       }}
     >
       {accentBar}
 
       {/* Hover bg */}
-      {!isOpen && (
-        <div className="absolute inset-0 rounded-lg bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-150" />
-      )}
+      <div className="absolute inset-0 rounded-lg bg-white/0 group-hover:bg-white/[0.03] transition-colors duration-150" />
 
       <div
         data-email-header
@@ -167,7 +144,7 @@ export default function EmailRow({
               {mobileActions}
             </div>
             {!hideUrgentFlag && <UrgentFlag email={email} size="mobile" />}
-            {!isOpen && preview && (
+            {preview && (
               <div className="text-xs text-muted-foreground/40 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
                 {preview}
               </div>
@@ -187,7 +164,7 @@ export default function EmailRow({
                 {email.subject}
               </div>
               {!hideUrgentFlag && <UrgentFlag email={email} size="desktop" />}
-              {!isOpen && preview && (
+              {preview && (
                 <div className="text-[11px] text-muted-foreground/40 mt-1 leading-relaxed overflow-hidden text-ellipsis whitespace-nowrap">
                   {preview}
                 </div>
@@ -196,24 +173,10 @@ export default function EmailRow({
             <div className="flex items-center gap-2 shrink-0">
               {desktopActions}
               <GmailLink email={email} />
-              <MotionChevron isOpen={isOpen} className="text-muted-foreground/40" />
             </div>
           </>
         )}
       </div>
-
-      {extraExpanded}
-
-      <MotionExpand isOpen={isOpen}>
-        <div onClick={(e) => e.stopPropagation()}>
-          <EmailBody
-            email={email}
-            {...emailBodyProps}
-          />
-        </div>
-      </MotionExpand>
     </div>
   );
-
-  return row;
 }

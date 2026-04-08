@@ -1,22 +1,10 @@
-import { useRef, useState, useEffect } from "react";
 import DOMPurify from "dompurify";
+
+// Renders a sanitized email body inside an iframe. The iframe always fills
+// its parent container's height (100%) — EmailReader provides a fixed-size
+// scrollable region, and the iframe's own scrollbar handles overflow for
+// long emails. Width is 100% so multi-column layouts can reflow.
 export default function EmailIframe({ html }) {
-  const iframeRef = useRef(null);
-  const [height, setHeight] = useState(300);
-
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    function resize() {
-      try {
-        const h = iframe.contentDocument?.documentElement?.scrollHeight;
-        if (h && h > 50) setHeight(Math.min(h + 16, window.innerHeight * 0.7));
-      } catch { /* cross-origin */ }
-    }
-    iframe.addEventListener("load", resize);
-    return () => iframe.removeEventListener("load", resize);
-  }, [html]);
-
   // Sanitize then wrap in a full document so the email's own styles apply
   const sanitized = DOMPurify.sanitize(html, {
     ADD_TAGS: ["style", "link", "meta", "img", "center"],
@@ -29,9 +17,7 @@ export default function EmailIframe({ html }) {
 
   return (
     <iframe
-      ref={iframeRef}
-      className="w-full border-none rounded-default min-h-[200px] max-h-[70vh] bg-white"
-      style={{ height }}
+      className="w-full h-full border-none rounded-default bg-white"
       sandbox="allow-same-origin"
       srcDoc={sanitized}
       title="Email content"

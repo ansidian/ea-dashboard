@@ -1,12 +1,13 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 import { urgencyStyles } from "../../lib/dashboard-helpers";
-import EmailBody from "./EmailBody";
 import EmailRow from "./EmailRow";
+import EmailReaderOverlay from "./EmailReaderOverlay";
+import useEmailReaderNav from "../../hooks/email/useEmailReaderNav";
 import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
-import { markAllEmailsAsRead } from "../../api";
+import { markAllEmailsAsRead, trashEmail } from "../../api";
 import { CheckCheck } from "lucide-react";
 import useIsMobile from "../../hooks/useIsMobile";
 import SwipeToReveal from "../ui/SwipeToReveal";
@@ -36,6 +37,54 @@ function GhostAction({ onClick, disabled, children, className: cls, active }) {
   );
 }
 
+// Overlay footer action: two-step Trash confirm. State is owned by the
+// parent so it resets when the user cycles to a new email via ↑/↓.
+function TrashAction({ email, state, setState, onDismiss }) {
+  if (!email) return null;
+  if (state === "trashing") {
+    return <span className="text-[10px] text-muted-foreground/30">Moving to trash…</span>;
+  }
+  if (state === "confirm") {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-muted-foreground/40">Move to trash?</span>
+        <button
+          onClick={async () => {
+            setState("trashing");
+            try {
+              await trashEmail(email.uid || email.id);
+              onDismiss?.(email.id || email.uid);
+            } catch {
+              setState("idle");
+            }
+          }}
+          className="text-[10px] font-semibold rounded-md px-2.5 py-1 cursor-pointer font-[inherit] transition-all duration-150 hover:brightness-125"
+          style={{ color: "#f38ba8", background: "rgba(243,139,168,0.1)", border: "1px solid rgba(243,139,168,0.2)" }}
+        >
+          Trash
+        </button>
+        <button
+          onClick={() => setState("idle")}
+          className="text-[10px] text-muted-foreground/40 bg-transparent border-none cursor-pointer p-0 font-[inherit] transition-colors duration-150 hover:text-muted-foreground/60"
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={() => setState("confirm")}
+      className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground/50 bg-transparent border border-white/[0.06] rounded-md px-2.5 py-1 cursor-pointer transition-colors duration-150 hover:text-[#f38ba8] hover:border-[#f38ba8]/30"
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 6h18" /><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+      </svg>
+      Trash
+    </button>
+  );
+}
+
 // Inline confirm chip — used for dismiss confirmations
 function ConfirmChip({ label, color, onConfirm, onCancel }) {
   return (
@@ -57,7 +106,7 @@ function ConfirmChip({ label, color, onConfirm, onCancel }) {
   );
 }
 
-export default function EmailSection({ summary, model, loaded, delay, style, className, embedded }) {
+export default function EmailSection({ summary, model: _model, loaded, delay, style, className, embedded, active = true }) {
   const isMobile = useIsMobile();
   const {
     emailAccounts, currentAccount,
@@ -71,10 +120,143 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
   const emailRowRefs = useRef({});
   const [markedRead, setMarkedRead] = useState(() => new Set());
   const [noiseExpanded, setNoiseExpanded] = useState(false);
-  const [selectedNoiseId, setSelectedNoiseId] = useState(null);
+  const [openNoise, setOpenNoise] = useState(null);
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
   const hasUnread = currentAccount?.important?.some(e => !e.read && !markedRead.has(e.uid || e.id) && !markedRead.has(e.id));
+
+  // Enrich the currently selected briefing email with account metadata so
+  // EmailReader can render the account chip/label/icon. The dashboard list
+  // shape keeps account info on the parent account, not on each email.
+  const enrichedSelectedEmail = useMemo(() => {
+    if (!selectedEmail) return null;
+    const acct = emailAccounts.find((a) =>
+      a.important?.some((e) => e.id === selectedEmail.id),
+    ) || currentAccount;
+    return {
+      ...selectedEmail,
+      account_label: acct?.name,
+      account_email: acct?.email,
+      account_color: acct?.color,
+      account_icon: acct?.icon,
+      account_id: acct?.account_id || acct?.id,
+    };
+  }, [selectedEmail, emailAccounts, currentAccount]);
+
+  // Flat list that ↑/↓ cycles through in the reader overlay — scoped to the
+  // active account tab so navigation stays within the user's current view.
+  const navList = currentAccount?.important || [];
+
+  const openEmailInReader = useCallback((email) => {
+    setSelectedEmail(email);
+  }, [setSelectedEmail]);
+
+  const closeReader = useCallback(() => {
+    setSelectedEmail(null);
+    setLoadingBillId(null);
+  }, [setSelectedEmail, setLoadingBillId]);
+
+  // Portals escape display:none on a parent, so when EmailTabSection hides
+  // this section via the display-swap, the overlay would otherwise float
+  // over the sibling Live tab. The overlay render below uses `active` in
+  // its open condition — we intentionally keep selectedEmail/openNoise state
+  // alive across tab switches so the reader reopens where you left off.
+
+  const readerNav = useEmailReaderNav({
+    list: navList,
+    openEmail: selectedEmail,
+    onOpen: openEmailInReader,
+  });
+
+  // Build the Claude triage strip from briefing email fields. Only present
+  // when there's actually something to show.
+  const readerTriage = useMemo(() => {
+    if (!enrichedSelectedEmail) return null;
+    const { action, urgency, hasBill, preview } = enrichedSelectedEmail;
+    if (!action && !urgency && !hasBill && !preview) return null;
+    return { action, urgency, hasBill, summary: preview };
+  }, [enrichedSelectedEmail]);
+
+  // When the reader auto-marks an email as read, mirror that into the local
+  // markedRead set so the row visibly dims. Keyed by both id and uid so
+  // lookups in the row-level unread check work regardless of which key the
+  // email carries.
+  const handleReaderMarkedRead = useCallback(() => {
+    if (!selectedEmail) return;
+    setMarkedRead((prev) => {
+      const next = new Set(prev);
+      if (selectedEmail.id) next.add(selectedEmail.id);
+      if (selectedEmail.uid) next.add(selectedEmail.uid);
+      return next;
+    });
+  }, [selectedEmail]);
+
+  // Trash action for the overlay footer. Two-step confirm lives in local
+  // state, keyed by email id so it auto-resets when the user cycles via ↑/↓.
+  // Storing the id alongside the state avoids a cascading setState effect.
+  const [trashState, setTrashState] = useState({ id: null, value: "idle" }); // value: idle | confirm | trashing
+  const currentTrashState =
+    trashState.id === selectedEmail?.id ? trashState.value : "idle";
+  const setCurrentTrashState = useCallback(
+    (value) => setTrashState({ id: selectedEmail?.id, value }),
+    [selectedEmail?.id],
+  );
+
+  const readerActions = selectedEmail ? (
+    <TrashAction
+      email={enrichedSelectedEmail}
+      state={currentTrashState}
+      setState={setCurrentTrashState}
+      onDismiss={(id) => {
+        onDismiss(id);
+        setSelectedEmail(null);
+      }}
+    />
+  ) : null;
+
+  // --- Noise drawer overlay wiring ---
+  // Build a flat list of noise emails across all accounts so ↑/↓ can cycle
+  // through them once the drawer opens. Each entry carries account metadata
+  // inline so the reader chip renders correctly without extra lookups.
+  const noiseAccountsMemo = useMemo(
+    () => emailAccounts.filter((acc) => acc.noise?.length),
+    [emailAccounts],
+  );
+  const flatNoise = useMemo(
+    () =>
+      noiseAccountsMemo.flatMap((acc, i) =>
+        acc.noise.map((n, j) => ({
+          ...n,
+          uid: n.uid || n.id || `noise-${i}-${j}`,
+          account_label: acc.name,
+          account_email: acc.email,
+          account_color: acc.color,
+          account_icon: acc.icon,
+          account_id: acc.account_id || acc.id,
+        })),
+      ),
+    [noiseAccountsMemo],
+  );
+
+  const openNoiseInReader = useCallback((noiseEmail, acct) => {
+    setOpenNoise({
+      ...noiseEmail,
+      uid: noiseEmail.uid || noiseEmail.id,
+      account_label: acct.name,
+      account_email: acct.email,
+      account_color: acct.color,
+      account_icon: acct.icon,
+      account_id: acct.account_id || acct.id,
+    });
+  }, []);
+
+  const closeNoise = useCallback(() => setOpenNoise(null), []);
+
+  const noiseNav = useEmailReaderNav({
+    list: flatNoise,
+    openEmail: openNoise,
+    onOpen: setOpenNoise,
+  });
 
   const handleMarkAllRead = async () => {
     const uids = currentAccount.important.map(e => e.uid || e.id);
@@ -94,8 +276,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
     setMarkingAllRead(false);
   };
 
-  const noiseAccounts = emailAccounts.filter(acc => acc.noise?.length);
-  const multiNoiseAccounts = noiseAccounts.length > 1;
+  const multiNoiseAccounts = noiseAccountsMemo.length > 1;
 
   const content = (
     <>
@@ -161,19 +342,16 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
       <MotionList className="flex flex-col gap-1.5" loaded={loaded} delay={delay + 100} stagger={0.04}>
         {currentAccount.important.map((email) => {
           const s = urgencyStyles[email.urgency] || urgencyStyles.low;
-          const isOpen = selectedEmail?.id === email.id;
           const isCarriedOver = (email.seenCount || 1) >= 2;
+          const isRead = markedRead.has(email.id) || markedRead.has(email.uid) || email.read;
           return (
             <MotionItem key={email.id}>
               <MaybeSwipe isMobile={isMobile} onAction={() => onDismiss(email.id)}>
               <EmailRow
                 email={email}
-                isOpen={isOpen}
-                dimmed={isCarriedOver}
-                onToggle={(opening) => setSelectedEmail(opening ? email : null)}
-                onMarkRead={!markedRead.has(email.id) ? () => setMarkedRead(prev => new Set(prev).add(email.id)) : undefined}
+                dimmed={isCarriedOver || isRead}
+                onOpen={openEmailInReader}
                 rowRef={(el) => { emailRowRefs.current[email.id] = el; }}
-                borderColor={`${currentAccount.color}25`}
                 preview={email.preview}
                 accentBar={
                   <div
@@ -277,19 +455,6 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                   </>
                 }
                 hideUrgentFlag
-                emailBodyProps={{
-                  model,
-                  onDismiss,
-                  onLoaded: () => {
-                    setLoadingBillId(null);
-                    const row = emailRowRefs.current[email.id];
-                    if (!row) return;
-                    const rect = row.getBoundingClientRect();
-                    if (rect.bottom > window.innerHeight) {
-                      row.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                    }
-                  },
-                }}
               />
               </MaybeSwipe>
             </MotionItem>
@@ -312,7 +477,7 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
               className="rounded-lg mt-1.5 py-3 px-4"
               style={{ background: "rgba(36,36,58,0.25)", border: "1px solid rgba(255,255,255,0.04)" }}
             >
-              {noiseAccounts.map((acc, i) => (
+              {noiseAccountsMemo.map((acc, i) => (
                 <div key={i} className={i > 0 ? "mt-3 pt-3 border-t border-white/[0.04]" : ""}>
                   {multiNoiseAccounts && (
                     <div className="flex items-center gap-1.5 mb-1.5">
@@ -326,29 +491,16 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
                   <div className="flex flex-col">
                     {acc.noise.map((noiseEmail, j) => {
                       const noiseId = noiseEmail.id || `noise-${i}-${j}`;
-                      const isNoiseOpen = selectedNoiseId === noiseId;
                       return (
-                        <div key={noiseId}>
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setSelectedNoiseId(isNoiseOpen ? null : noiseId)}
-                            className="flex items-center gap-2 min-w-0 py-1.5 px-1 rounded cursor-pointer hover:bg-white/[0.04] transition-colors duration-150"
-                          >
-                            <span className="text-[11px] max-sm:text-xs text-muted-foreground/35 shrink-0 min-w-[80px] max-w-[140px] truncate">{noiseEmail.from}</span>
-                            <span className="text-[11px] max-sm:text-xs text-muted-foreground/55 truncate flex-1">{noiseEmail.subject}</span>
-                            <MotionChevron isOpen={isNoiseOpen} className="text-muted-foreground/20 shrink-0" />
-                          </div>
-                          <MotionExpand isOpen={isNoiseOpen}>
-                            <div onClick={(e) => e.stopPropagation()} className="pb-2">
-                              <EmailBody
-                                email={{ ...noiseEmail, uid: noiseEmail.id }}
-                                model={model}
-                                onDismiss={() => {}}
-                                onLoaded={() => {}}
-                              />
-                            </div>
-                          </MotionExpand>
+                        <div
+                          key={noiseId}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openNoiseInReader(noiseEmail, acc)}
+                          className="flex items-center gap-2 min-w-0 py-1.5 px-1 rounded cursor-pointer hover:bg-white/[0.04] transition-colors duration-150"
+                        >
+                          <span className="text-[11px] max-sm:text-xs text-muted-foreground/35 shrink-0 min-w-[80px] max-w-[140px] truncate">{noiseEmail.from}</span>
+                          <span className="text-[11px] max-sm:text-xs text-muted-foreground/55 truncate flex-1">{noiseEmail.subject}</span>
                         </div>
                       );
                     })}
@@ -359,6 +511,37 @@ export default function EmailSection({ summary, model, loaded, delay, style, cla
           </MotionExpand>
         </div>
       )}
+
+      {/* Focus reader overlay — briefing list */}
+      <EmailReaderOverlay
+        open={active && !!selectedEmail}
+        email={enrichedSelectedEmail}
+        onClose={closeReader}
+        navigation={readerNav}
+        triage={readerTriage}
+        actions={readerActions}
+        onMarkedRead={handleReaderMarkedRead}
+        onLoaded={() => {
+          setLoadingBillId(null);
+          // Scroll the originating row into view if it's off-screen, so
+          // closing the reader doesn't leave the user orphaned at the top.
+          if (!selectedEmail) return;
+          const row = emailRowRefs.current[selectedEmail.id];
+          if (!row) return;
+          const rect = row.getBoundingClientRect();
+          if (rect.bottom > window.innerHeight || rect.top < 0) {
+            row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }
+        }}
+      />
+
+      {/* Focus reader overlay — noise drawer */}
+      <EmailReaderOverlay
+        open={active && !!openNoise}
+        email={openNoise}
+        onClose={closeNoise}
+        navigation={noiseNav}
+      />
     </>
   );
 

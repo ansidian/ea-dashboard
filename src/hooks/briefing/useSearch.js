@@ -132,6 +132,8 @@ export default function useSearch() {
 
   return {
     query,
+    setQuery,
+    setResults,
     results,
     emailResults,
     searching,

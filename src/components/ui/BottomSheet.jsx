@@ -14,7 +14,12 @@ function findScrollableParent(el, boundary) {
   return boundary;
 }
 
-export default function BottomSheet({ open, onClose, title, children }) {
+// `height` (optional) forces a definite sheet height, overriding `maxHeight`.
+// Pass this when hosting content that fills its parent via flex-1 / h-full
+// (e.g. EmailReader): without a definite height, the sheet sizes to content
+// and percentage/flex-1 children collapse. When `height` is set, the content
+// wrapper also becomes a flex column so children's flex-1 engages.
+export default function BottomSheet({ open, onClose, title, children, maxHeight = "70vh", height }) {
   const sheetRef = useRef(null);
   const contentRef = useRef(null);
   const dragStartY = useRef(null);
@@ -97,7 +102,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
         ref={sheetRef}
         className="absolute bottom-0 left-0 right-0 flex flex-col animate-[slideUp_300ms_cubic-bezier(0.16,1,0.3,1)]"
         style={{
-          maxHeight: "70vh",
+          ...(height ? { height } : { maxHeight }),
           background: "#16161e",
           borderRadius: "12px 12px 0 0",
           border: "1px solid rgba(255,255,255,0.08)",
@@ -137,7 +142,7 @@ export default function BottomSheet({ open, onClose, title, children }) {
         {/* Content */}
         <div
           ref={contentRef}
-          className="flex-1 overflow-y-auto"
+          className={height ? "flex-1 min-h-0 overflow-y-auto flex flex-col" : "flex-1 overflow-y-auto"}
           style={{ overscrollBehavior: "contain" }}
         >
           {children}

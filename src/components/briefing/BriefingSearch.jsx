@@ -6,7 +6,7 @@ import useSearch from "../../hooks/briefing/useSearch";
 import useEmailNavigation from "../../hooks/briefing/useEmailNavigation";
 import useSearchAnalysis from "../../hooks/briefing/useSearchAnalysis";
 import BottomSheet from "../ui/BottomSheet";
-import EmailSearchBody from "../email/EmailSearchBody";
+import EmailReader from "../email/EmailReader";
 import SearchModeToggle from "./search/SearchModeToggle";
 import SearchFilterBar from "./search/SearchFilterBar";
 import EmptyState from "./search/EmptyState";
@@ -136,6 +136,13 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     return () => document.removeEventListener("pointerdown", handleClick);
   }, [open, isMobile, setOpenEmail]);
 
+  // Mobile: when an email is opened from the results list, also dismiss the
+  // keyboard. Tapping a list item on iOS doesn't blur the focused input on
+  // its own, so the reader would otherwise mount behind the keyboard.
+  useEffect(() => {
+    if (isMobile && openEmail) inputRef.current?.blur();
+  }, [isMobile, openEmail]);
+
   // Scroll trapping on the SCROLL CONTAINER (not the outer panel)
   useEffect(() => {
     const el = scrollRef.current;
@@ -154,6 +161,16 @@ export default function BriefingSearch({ onNavigateToEmail }) {
 
   function handleKeyDown(e) {
     if (!open) return;
+    // Mobile: Enter submits the current query and dismisses the keyboard.
+    // Live search is disabled on mobile (see input onChange), so Enter is
+    // the only trigger. Runs before the arrow-key nav branch so it fires
+    // even when the results list is empty (first search of the session).
+    if (isMobile && e.key === "Enter") {
+      e.preventDefault();
+      if (query.trim()) search.doSearch(query, searchMode);
+      inputRef.current?.blur();
+      return;
+    }
     const inEmailMode = isEmailQuery;
     const list = inEmailMode ? flatEmails : relevant;
     if (!list.length) return;
@@ -230,10 +247,25 @@ export default function BriefingSearch({ onNavigateToEmail }) {
             onChange={(e) => {
               setOpen(true);
               clearAnalysis();
-              search.handleInputChange(e.target.value);
+              const val = e.target.value;
+              if (isMobile) {
+                // Mobile: no live search — just track the query locally and
+                // wait for Enter. Clear any stale results when the box is
+                // emptied so the old "no results" state doesn't linger.
+                search.setQuery(val);
+                if (!val.trim()) {
+                  search.setResults(null);
+                  search.setEmailResults(null);
+                }
+              } else {
+                search.handleInputChange(val);
+              }
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
+            // Let the mobile keyboard show a "Search" submit button and
+            // convert Enter into a form-submit style action.
+            enterKeyHint="search"
             placeholder={searchMode === "emails" ? "Search emails..." : "Search briefings..."}
             className="flex-1 bg-transparent border-none outline-none text-foreground text-[13px] max-sm:text-[16px] font-[inherit] placeholder:text-muted-foreground/40"
           />
@@ -278,6 +310,11 @@ export default function BriefingSearch({ onNavigateToEmail }) {
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto overscroll-contain min-h-0"
+            // Mobile: dismiss the keyboard as soon as the user touches the
+            // results area. Matches iOS Safari's native behavior — without
+            // this, live search fills the screen behind the keyboard and the
+            // user has to manually dismiss it to read results.
+            onTouchStart={isMobile ? () => inputRef.current?.blur() : undefined}
           >
               {/* Error state */}
               {error && (
@@ -385,6 +422,10 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                 inputRef.current?.blur();
               }}
               title={emailNav.openEmail ? undefined : "Search Results"}
+              // When reading an email, force a definite sheet height so
+              // EmailReader's flex-1 / iframe h-full chain resolves. Without
+              // it the iframe collapses to its ~150px intrinsic default.
+              {...(emailNav.openEmail ? { height: "92vh" } : {})}
             >
               {emailNav.openEmail ? (
                 <div className="flex flex-col h-full min-h-0">
@@ -396,7 +437,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                     <BackArrowIcon size={14} />
                     Back to search
                   </button>
-                  <EmailSearchBody email={emailNav.openEmail} onMarkedRead={emailNav.handleMarkedRead} onMarkedUnread={emailNav.handleMarkedUnread} />
+                  <EmailReader email={emailNav.openEmail} onMarkedRead={emailNav.handleMarkedRead} onMarkedUnread={emailNav.handleMarkedUnread} />
                 </div>
               ) : dropdownContent}
             </BottomSheet>
@@ -467,7 +508,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                 className="relative flex flex-col min-h-0 flex-1 animate-in fade-in duration-150"
                 style={{ borderLeft: "1px solid rgba(255,255,255,0.06)" }}
               >
-                <EmailSearchBody
+                <EmailReader
                   email={emailNav.openEmail}
                   onMarkedRead={emailNav.handleMarkedRead}
                   onMarkedUnread={emailNav.handleMarkedUnread}

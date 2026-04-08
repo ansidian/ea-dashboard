@@ -159,6 +159,7 @@ export default function EmailTabSection({
               loaded={loaded}
               delay={delay}
               embedded
+              active={activeTab === "briefing"}
             />
           </div>
           <div style={{ display: activeTab === "live" ? "block" : "none" }}>
@@ -167,6 +168,7 @@ export default function EmailTabSection({
               loaded={loaded}
               delay={delay}
               embedded
+              active={activeTab === "live"}
               onRefreshLive={onRefreshLive}
               liveState={liveState}
             />

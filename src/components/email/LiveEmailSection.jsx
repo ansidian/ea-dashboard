@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import Section from "../layout/Section";
 import EmailRow from "./EmailRow";
-import BillBadge from "../bills/BillBadge";
-import { MotionExpand, MotionList, MotionItem } from "../ui/motion-wrappers";
+import EmailReaderOverlay from "./EmailReaderOverlay";
+import useEmailReaderNav from "../../hooks/email/useEmailReaderNav";
+import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { timeAgo } from "../../lib/dashboard-helpers";
 import { CheckCheck } from "lucide-react";
 
@@ -29,7 +30,52 @@ function getSectionTitle(briefingGeneratedAt) {
   return "Since This Morning";
 }
 
-export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, className, embedded, onRefreshLive, liveState }) {
+// Overlay footer Dismiss button — hides the email from the live list.
+// Local-only; no server round-trip. Single-click (no confirm) because
+// dismiss is reversible via page refresh, unlike briefing Trash.
+function DismissAction({ onDismiss }) {
+  return (
+    <button
+      onClick={onDismiss}
+      className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground/50 bg-transparent border border-white/[0.06] rounded-md px-2.5 py-1 cursor-pointer transition-colors duration-150 hover:text-foreground hover:border-white/[0.15]"
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+      Dismiss
+    </button>
+  );
+}
+
+// Header toggle for the manual bill entry form. Live emails haven't been
+// through Claude's bill extractor, so this lets the user fill in the form
+// manually and push to Actual Budget via the same BillBadge component the
+// briefing view uses for extracted bills. Responsive: icon-only below md.
+function BillToggleAction({ open, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "flex items-center gap-1 text-[10px] transition-colors px-2 py-1 cursor-pointer font-[inherit]",
+        open
+          ? "text-[#a6e3a1] bg-[#a6e3a1]/[0.08] hover:bg-[#a6e3a1]/[0.12]"
+          : "text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.04]",
+      )}
+      style={{ borderRadius: 8 }}
+      aria-label={open ? "Hide bill form" : "Add bill"}
+      title={open ? "Hide bill form" : "Add bill"}
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="1" x2="12" y2="23" />
+        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+      </svg>
+      <span className="hidden md:inline">{open ? "Hide bill" : "Add bill"}</span>
+    </button>
+  );
+}
+
+export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, className, embedded, active = true, onRefreshLive, liveState }) {
   const {
     visibleEmails,
     unreadCount,
@@ -41,9 +87,61 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
     markingAllRead,
   } = liveState;
 
-  const [selectedId, setSelectedId] = useState(null);
-  const [billPayId, setBillPayId] = useState(null);
+  const [openEmail, setOpenEmail] = useState(null);
+  // Keyed by email uid so the bill form state auto-resets when the user
+  // cycles to a different email via ↑/↓. Empty string = closed, uid = open.
+  const [billFormForUid, setBillFormForUid] = useState("");
   const emailRowRefs = useRef({});
+
+  const showBillForm = billFormForUid && billFormForUid === openEmail?.uid;
+  const toggleBillForm = useCallback(() => {
+    if (!openEmail?.uid) return;
+    setBillFormForUid((prev) => (prev === openEmail.uid ? "" : openEmail.uid));
+  }, [openEmail]);
+
+  // Sorted list drives both the render order AND ↑/↓ navigation so keyboard
+  // cycling matches what the user sees in the list.
+  const sortedEmails = useMemo(
+    () => [...visibleEmails].sort(
+      (a, b) =>
+        (b.isImportantSender ? 1 : 0) - (a.isImportantSender ? 1 : 0) ||
+        new Date(b.date) - new Date(a.date),
+    ),
+    [visibleEmails],
+  );
+
+  const openEmailInReader = useCallback((email) => {
+    setOpenEmail(email);
+    // Mirror the row's "clicked = marked-read" behavior that was previously
+    // wired via onMarkRead. Live emails mark-read locally; the reader's
+    // auto-mark-read only covers the server call for search/briefing.
+    if (email?.uid) markRead(email.uid);
+  }, [markRead]);
+
+  const closeReader = useCallback(() => setOpenEmail(null), []);
+
+  // Portals escape display:none on a parent tab. The overlay render below
+  // uses `active` in its open condition — we intentionally keep openEmail
+  // state alive across tab switches so the reader reopens where you left off.
+
+  const readerNav = useEmailReaderNav({
+    list: sortedEmails,
+    openEmail,
+    onOpen: openEmailInReader,
+  });
+
+  const readerHeaderActions = openEmail ? (
+    <BillToggleAction open={showBillForm} onToggle={toggleBillForm} />
+  ) : null;
+
+  const readerActions = openEmail ? (
+    <DismissAction
+      onDismiss={() => {
+        dismiss(openEmail.uid);
+        setOpenEmail(null);
+      }}
+    />
+  ) : null;
 
   const handleMarkAllRead = async () => {
     await markAllRead();
@@ -108,19 +206,15 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
       )}
 
       <MotionList className="flex flex-col gap-1.5" loaded={loaded} delay={delay + 100} stagger={0.04}>
-        {[...visibleEmails].sort((a, b) => (b.isImportantSender ? 1 : 0) - (a.isImportantSender ? 1 : 0) || new Date(b.date) - new Date(a.date)).map((email) => {
-          const isOpen = selectedId === email.uid;
-          const isBillPayOpen = billPayId === email.uid;
+        {sortedEmails.map((email) => {
           const rowIsRead = isRead(email);
           const tsColor = getTimestampColor(email.date);
           return (
             <MotionItem key={email.uid}>
               <EmailRow
                 email={email}
-                isOpen={isOpen}
                 dimmed={rowIsRead}
-                onToggle={(opening) => setSelectedId(opening ? email.uid : null)}
-                onMarkRead={rowIsRead ? undefined : () => markRead(email.uid)}
+                onOpen={openEmailInReader}
                 rowRef={(el) => { emailRowRefs.current[email.uid] = el; }}
                 preview={email.body_preview}
                 accentBar={email.isImportantSender ? (
@@ -161,81 +255,39 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                     </span>
                   </>
                 }
-                mobileActions={
-                  <button
-                    className={cn(
-                      "transition-all duration-150 bg-transparent border-none cursor-pointer p-0.5 leading-none rounded shrink-0",
-                      isBillPayOpen
-                        ? "text-green-400/80"
-                        : "text-muted-foreground/25",
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setBillPayId(isBillPayOpen ? null : email.uid);
-                    }}
-                    title="Send to Actual Budget"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="1" x2="12" y2="23" />
-                      <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-                    </svg>
-                  </button>
-                }
                 desktopActions={
-                  <>
-                    <span
-                      className="text-[10px] text-muted-foreground/30 tabular-nums"
-                      style={tsColor ? { color: tsColor } : undefined}
-                    >
-                      {timeAgo(email.date, { compact: true })}
-                    </span>
-                    <button
-                      className={cn(
-                        "transition-all duration-150 bg-transparent border-none cursor-pointer p-1 leading-none rounded",
-                        isBillPayOpen
-                          ? "text-green-400/80 bg-green-400/[0.08]"
-                          : "text-muted-foreground/20 opacity-0 group-hover:opacity-100 hover:text-green-400/60 hover:bg-white/[0.04]",
-                      )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBillPayId(isBillPayOpen ? null : email.uid);
-                      }}
-                      title="Send to Actual Budget"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="1" x2="12" y2="23" />
-                        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-                      </svg>
-                    </button>
-                  </>
+                  <span
+                    className="text-[10px] text-muted-foreground/30 tabular-nums"
+                    style={tsColor ? { color: tsColor } : undefined}
+                  >
+                    {timeAgo(email.date, { compact: true })}
+                  </span>
                 }
-                extraExpanded={
-                  <MotionExpand isOpen={isBillPayOpen}>
-                    <div onClick={(e) => e.stopPropagation()} className="mt-3 pt-3 border-t border-white/[0.06]">
-                      <BillBadge bill={{}} model={null} />
-                    </div>
-                  </MotionExpand>
-                }
-                emailBodyProps={{
-                  model: null,
-                  onDismiss: (uid) => {
-                    dismiss(uid);
-                    setSelectedId(null);
-                  },
-                  onLoaded: () => {
-                    const row = emailRowRefs.current[email.uid];
-                    if (!row) return;
-                    const rect = row.getBoundingClientRect();
-                    if (rect.bottom > window.innerHeight) {
-                      row.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                    }
-                  },
-                }}
               />
             </MotionItem>
           );
         })}
       </MotionList>
+
+      {/* Focus reader overlay — live list */}
+      <EmailReaderOverlay
+        open={active && !!openEmail}
+        email={openEmail}
+        onClose={closeReader}
+        navigation={readerNav}
+        headerActions={readerHeaderActions}
+        actions={readerActions}
+        showManualBillForm={showBillForm}
+        onLoaded={() => {
+          if (!openEmail) return;
+          const row = emailRowRefs.current[openEmail.uid];
+          if (!row) return;
+          const rect = row.getBoundingClientRect();
+          if (rect.bottom > window.innerHeight || rect.top < 0) {
+            row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }
+        }}
+      />
     </>
   );
 
