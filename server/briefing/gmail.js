@@ -154,30 +154,46 @@ function extractBodyText(payload) {
 
 // --- Email fetch ---
 
+// Safety cap on pagination so a misconfigured query can never spin forever.
+// At 500 per page this is 10k messages — far above any realistic briefing window.
+const MAX_LIST_PAGES = 20;
+
 export async function fetchEmails(account, hoursBack) {
   const token = await getValidToken(account);
 
-  // List message IDs
-  const listUrl = new URL(
-    "https://www.googleapis.com/gmail/v1/users/me/messages",
-  );
-  listUrl.searchParams.set("q", `newer_than:${hoursBack}h`);
-  listUrl.searchParams.set("labelIds", "INBOX");
-  listUrl.searchParams.set("maxResults", "100");
+  // Page through message IDs until nextPageToken is exhausted
+  const messageIds = [];
+  let pageToken;
+  let pages = 0;
+  do {
+    const listUrl = new URL(
+      "https://www.googleapis.com/gmail/v1/users/me/messages",
+    );
+    listUrl.searchParams.set("q", `newer_than:${hoursBack}h`);
+    listUrl.searchParams.set("labelIds", "INBOX");
+    listUrl.searchParams.set("maxResults", "500");
+    if (pageToken) listUrl.searchParams.set("pageToken", pageToken);
 
-  const listRes = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!listRes.ok) throw new Error(`Gmail list failed: ${listRes.status}`);
-  const listData = await listRes.json();
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!listRes.ok) throw new Error(`Gmail list failed: ${listRes.status}`);
+    const listData = await listRes.json();
 
-  if (!listData.messages || listData.messages.length === 0) return [];
+    if (listData.messages) {
+      for (const m of listData.messages) messageIds.push(m.id);
+    }
+    pageToken = listData.nextPageToken;
+    pages++;
+    if (pages >= MAX_LIST_PAGES && pageToken) {
+      console.warn(`[Gmail] ${account.email}: hit MAX_LIST_PAGES (${MAX_LIST_PAGES}), truncating list at ${messageIds.length} messages`);
+      break;
+    }
+  } while (pageToken);
 
-  // Batch fetch message metadata
-  const messages = await batchGetMessages(
-    token,
-    listData.messages.map((m) => m.id),
-  );
+  if (messageIds.length === 0) return [];
+
+  const messages = await fetchMessages(token, messageIds);
 
   return messages.map((msg) => {
     const headers = msg.payload?.headers || [];
@@ -205,64 +221,6 @@ export async function fetchEmails(account, hoursBack) {
   });
 }
 
-async function batchGetMessages(token, messageIds) {
-  // Gmail batch API: POST multipart/mixed to /batch/gmail/v1
-  const boundary = "batch_briefing_" + Date.now();
-  const parts = messageIds.map(
-    (id) =>
-      `--${boundary}\r\nContent-Type: application/http\r\n\r\nGET /gmail/v1/users/me/messages/${id}?format=full HTTP/1.1\r\n`,
-  );
-  const body = parts.join("\r\n") + `\r\n--${boundary}--`;
-
-  const res = await fetch("https://www.googleapis.com/batch/gmail/v1", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": `multipart/mixed; boundary=${boundary}`,
-    },
-    body,
-  });
-
-  if (!res.ok) {
-    // Fallback: fetch individually if batch fails
-    return fetchMessagesIndividually(token, messageIds);
-  }
-
-  const responseText = await res.text();
-  return parseBatchResponse(responseText);
-}
-
-function parseBatchResponse(responseText) {
-  const messages = [];
-  // Extract JSON objects from multipart response
-  const parts = responseText.split(/--batch/);
-
-  for (const part of parts) {
-    const jsonStart = part.indexOf("{");
-    if (jsonStart === -1) continue;
-    // Find the matching closing brace
-    let depth = 0;
-    let jsonEnd = jsonStart;
-    for (let i = jsonStart; i < part.length; i++) {
-      if (part[i] === "{") depth++;
-      else if (part[i] === "}") {
-        depth--;
-        if (depth === 0) {
-          jsonEnd = i + 1;
-          break;
-        }
-      }
-    }
-    try {
-      const obj = JSON.parse(part.slice(jsonStart, jsonEnd));
-      if (obj.id && obj.payload) messages.push(obj);
-    } catch {
-      // skip malformed parts
-    }
-  }
-  return messages;
-}
-
 export function chunkArray(arr, size) {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -271,22 +229,30 @@ export function chunkArray(arr, size) {
   return chunks;
 }
 
-export async function fetchMessagesIndividually(token, messageIds) {
-  const ids = messageIds.slice(0, 50); // cap at 50 to avoid rate limits
-  const chunks = chunkArray(ids, 10);
+// Fetch Gmail messages in parallel chunks. Drops are logged, not silent.
+export async function fetchMessages(token, messageIds) {
+  const chunks = chunkArray(messageIds, 15);
   const results = [];
+  let dropped = 0;
   for (const chunk of chunks) {
     const settled = await Promise.allSettled(
       chunk.map((id) =>
         fetch(
           `https://www.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
           { headers: { Authorization: `Bearer ${token}` } },
-        ).then((res) => (res.ok ? res.json() : Promise.reject(res.status))),
+        ).then((res) => (res.ok ? res.json() : Promise.reject(new Error(`${id}: HTTP ${res.status}`)))),
       ),
     );
     for (const s of settled) {
       if (s.status === "fulfilled") results.push(s.value);
+      else {
+        dropped++;
+        console.warn(`[Gmail] dropped message: ${s.reason?.message || s.reason}`);
+      }
     }
+  }
+  if (dropped > 0) {
+    console.warn(`[Gmail] ${dropped}/${messageIds.length} messages dropped during fetch`);
   }
   return results;
 }

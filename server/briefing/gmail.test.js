@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // We need to stub global fetch before importing the module
 vi.stubGlobal("fetch", vi.fn());
 
-const { chunkArray, fetchMessagesIndividually } = await import("./gmail.js");
+const { chunkArray, fetchMessages } = await import("./gmail.js");
 
 describe("gmail", () => {
   describe("chunkArray", () => {
@@ -20,7 +20,7 @@ describe("gmail", () => {
     });
   });
 
-  describe("fetchMessagesIndividually", () => {
+  describe("fetchMessages", () => {
     beforeEach(() => {
       vi.resetAllMocks();
     });
@@ -32,25 +32,27 @@ describe("gmail", () => {
       });
 
       const ids = Array.from({ length: 25 }, (_, i) => `id${i}`);
-      const results = await fetchMessagesIndividually("token", ids);
+      const results = await fetchMessages("token", ids);
 
       expect(fetch).toHaveBeenCalledTimes(25);
       expect(results.length).toBe(25);
     });
 
-    it("caps at 50 messages when given 55 IDs", async () => {
+    it("does not cap input — fetches all 120 IDs", async () => {
       fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ id: "msg", payload: {} }),
       });
 
-      const ids = Array.from({ length: 55 }, (_, i) => `id${i}`);
-      await fetchMessagesIndividually("token", ids);
+      const ids = Array.from({ length: 120 }, (_, i) => `id${i}`);
+      const results = await fetchMessages("token", ids);
 
-      expect(fetch).toHaveBeenCalledTimes(50);
+      expect(fetch).toHaveBeenCalledTimes(120);
+      expect(results.length).toBe(120);
     });
 
-    it("skips failed fetches silently and returns only successful results", async () => {
+    it("logs a warning for each dropped fetch and returns only successes", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       fetch
         .mockResolvedValueOnce({ ok: false, status: 404 })
         .mockResolvedValueOnce({
@@ -64,10 +66,13 @@ describe("gmail", () => {
         });
 
       const ids = Array.from({ length: 5 }, (_, i) => `id${i}`);
-      const results = await fetchMessagesIndividually("token", ids);
+      const results = await fetchMessages("token", ids);
 
       // First and third calls fail; 3 of 5 succeed
       expect(results.length).toBe(3);
+      // 2 per-message warnings + 1 summary warning
+      expect(warnSpy).toHaveBeenCalledTimes(3);
+      warnSpy.mockRestore();
     });
 
     it("concatenates results from all chunks in order", async () => {
@@ -81,7 +86,7 @@ describe("gmail", () => {
       });
 
       const ids = Array.from({ length: 12 }, (_, i) => `id${i}`);
-      const results = await fetchMessagesIndividually("token", ids);
+      const results = await fetchMessages("token", ids);
 
       expect(results.length).toBe(12);
       expect(results[0].id).toBe("msg0");
