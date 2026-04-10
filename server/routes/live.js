@@ -105,11 +105,16 @@ router.get("/all", async (req, res) => {
       hoursBack = Math.max(1, Math.min(24, Math.ceil((Date.now() - lastTime) / 3600000)));
     }
 
-    // Build important senders list (auto + manual)
-    const [autoSenders, manualSendersRaw] = await Promise.all([
+    // Build important senders list (auto + manual) + load pinned email IDs
+    const [autoSenders, manualSendersRaw, pinnedResult] = await Promise.all([
       getAutoImportantSenders(userId),
       Promise.resolve(settings.important_senders_json),
+      db.execute({
+        sql: "SELECT email_id FROM ea_pinned_emails WHERE user_id = ?",
+        args: [userId],
+      }),
     ]);
+    const pinnedIds = pinnedResult.rows.map(r => r.email_id);
 
     let manualSenders = [];
     try {
@@ -260,6 +265,7 @@ router.get("/all", async (req, res) => {
       importantSenders: Array.from(importantSendersMap.values()),
       briefingGeneratedAt,
       briefingReadStatus,
+      pinnedIds,
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {

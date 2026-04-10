@@ -54,6 +54,8 @@ export const getBriefingHistory = () => apiFetch("/api/briefing/history");
 export const getBriefingById = (id) => apiFetch(`/api/briefing/${id}`);
 export const getEmailBody = (uid) => apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}`);
 export const dismissEmail = (emailId) => apiFetch(`/api/briefing/dismiss/${encodeURIComponent(emailId)}`, { method: "POST" });
+export const pinEmail = (emailId) => apiFetch(`/api/briefing/pin/${encodeURIComponent(emailId)}`, { method: "POST" });
+export const unpinEmail = (emailId) => apiFetch(`/api/briefing/pin/${encodeURIComponent(emailId)}`, { method: "DELETE" });
 export const completeTask = (taskId) => apiFetch(`/api/briefing/complete-task/${encodeURIComponent(taskId)}`, { method: "POST" });
 export const updateTaskStatus = (taskId, status) => apiFetch(`/api/briefing/task-status/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ status }) });
 export const markEmailAsRead = (uid) => apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}/mark-read`, { method: "POST" });

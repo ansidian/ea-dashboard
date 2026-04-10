@@ -16,6 +16,7 @@ export default function useLiveData({ disabled = false } = {}) {
   const [isPolling, setIsPolling] = useState(false);
   const [billsLoading, setBillsLoading] = useState(true);
   const [actualConfigured, setActualConfigured] = useState(true);
+  const [pinnedIds, setPinnedIds] = useState([]);
   const mountedRef = useRef(true);
   const fetchingRef = useRef(false);
 
@@ -38,6 +39,7 @@ export default function useLiveData({ disabled = false } = {}) {
       setBriefingReadStatus(data.briefingReadStatus || {});
       setLastFetched(data.fetchedAt || new Date().toISOString());
       setActualConfigured(data.actualConfigured || false);
+      setPinnedIds(data.pinnedIds || []);
       setBillsLoading(false);
     } catch (err) {
       console.error("[Live] Fetch failed:", err.message);
@@ -83,6 +85,7 @@ export default function useLiveData({ disabled = false } = {}) {
     isPolling,
     billsLoading,
     actualConfigured,
+    pinnedIds,
     refreshNow,
   };
 }

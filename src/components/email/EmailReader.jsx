@@ -59,6 +59,8 @@ function stripQuotes(s) {
 //    onPrev, onNext }. Position renders in the header. onPrev/onNext render
 //    prev/next buttons — omit if the parent owns keyboard navigation (e.g.
 //    search, where ↑/↓ live on the search input).
+//  - preActions: optional ReactNode rendered in the header row, before the
+//    mark-read toggle. Use for high-priority constructive actions (e.g. pin).
 //  - headerActions: optional ReactNode rendered in the header row, between
 //    mark-read and the Gmail link. Use for non-destructive actions like
 //    "Add bill". Kept separate from `actions` so constructive and
@@ -78,6 +80,7 @@ export default function EmailReader({
   email,
   triage,
   navigation,
+  preActions,
   headerActions,
   actions,
   onMarkedRead,
@@ -231,6 +234,7 @@ export default function EmailReader({
                 </svg>
               </button>
             )}
+            {preActions}
             <button
               type="button"
               onClick={handleToggleRead}

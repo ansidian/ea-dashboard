@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { Pin } from "lucide-react";
 import Section from "../layout/Section";
 import EmailRow from "./EmailRow";
 import EmailReaderOverlay from "./EmailReaderOverlay";
@@ -75,14 +76,43 @@ function BillToggleAction({ open, onToggle }) {
   );
 }
 
+function PinAction({ pinned, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "flex items-center gap-1 text-[10px] transition-colors px-2 py-1 cursor-pointer font-[inherit]",
+        pinned
+          ? "text-[#6366f1] bg-[#6366f1]/[0.08] hover:bg-[#6366f1]/[0.12]"
+          : "text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.04]",
+      )}
+      style={{ borderRadius: 8 }}
+      aria-label={
+        pinned ? "Remove from next briefing" : "Include in next briefing"
+      }
+      title={pinned ? "Remove from next briefing" : "Include in next briefing"}
+    >
+      <Pin size={11} fill={pinned ? "currentColor" : "none"} />
+      <span className="hidden md:inline">
+        {pinned ? "Included" : "Include in briefing"}
+      </span>
+    </button>
+  );
+}
+
 export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, className, embedded, active = true, onRefreshLive, liveState }) {
   const {
     visibleEmails,
     unreadCount,
     hasUnread,
     isRead,
+    isPinned,
     markRead,
+    markUnread,
     dismiss,
+    pin,
+    unpin,
     markAllRead,
     markingAllRead,
   } = liveState;
@@ -110,25 +140,30 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
     [visibleEmails],
   );
 
-  const openEmailInReader = useCallback((email) => {
-    setOpenEmail(email);
-    // Mirror the row's "clicked = marked-read" behavior that was previously
-    // wired via onMarkRead. Live emails mark-read locally; the reader's
-    // auto-mark-read only covers the server call for search/briefing.
-    if (email?.uid) markRead(email.uid);
-  }, [markRead]);
+  const openEmailInReader = useCallback(
+    (email) => {
+      const effective = isRead(email) ? { ...email, read: true } : email;
+      setOpenEmail(effective);
+    },
+    [isRead],
+  );
 
   const closeReader = useCallback(() => setOpenEmail(null), []);
-
-  // Portals escape display:none on a parent tab. The overlay render below
-  // uses `active` in its open condition — we intentionally keep openEmail
-  // state alive across tab switches so the reader reopens where you left off.
 
   const readerNav = useEmailReaderNav({
     list: sortedEmails,
     openEmail,
     onOpen: openEmailInReader,
   });
+
+  const readerPreActions = openEmail ? (
+    <PinAction
+      pinned={isPinned(openEmail)}
+      onToggle={() =>
+        isPinned(openEmail) ? unpin(openEmail.uid) : pin(openEmail.uid)
+      }
+    />
+  ) : null;
 
   const readerHeaderActions = openEmail ? (
     <BillToggleAction open={showBillForm} onToggle={toggleBillForm} />
@@ -170,13 +205,18 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
       <div className="flex items-center gap-2 mb-4">
         <span
           className="text-[10px] max-sm:text-xs font-bold px-2 py-0.5 rounded-full tabular-nums"
-          style={{ background: "rgba(99,102,241,0.1)", color: "rgba(99,102,241,0.8)" }}
+          style={{
+            background: "rgba(99,102,241,0.1)",
+            color: "rgba(99,102,241,0.8)",
+          }}
         >
           {visibleEmails.length}
         </span>
         <span className="text-[12px] text-muted-foreground/50">
           email{visibleEmails.length !== 1 ? "s" : ""}
-          {unreadCount > 0 && unreadCount < visibleEmails.length && ` · ${unreadCount} unread`}
+          {unreadCount > 0 &&
+            unreadCount < visibleEmails.length &&
+            ` · ${unreadCount} unread`}
           {briefingTime && ` · briefing ${briefingTime}`}
         </span>
         <span
@@ -205,31 +245,56 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
         </div>
       )}
 
-      <MotionList className="flex flex-col gap-1.5" loaded={loaded} delay={delay + 100} stagger={0.04}>
+      <MotionList
+        className="flex flex-col gap-1.5"
+        loaded={loaded}
+        delay={delay + 100}
+        stagger={0.04}
+      >
         {sortedEmails.map((email) => {
           const rowIsRead = isRead(email);
+          const pinned = isPinned(email);
           const tsColor = getTimestampColor(email.date);
           return (
             <MotionItem key={email.uid}>
               <EmailRow
                 email={email}
-                dimmed={rowIsRead}
+                dimmed={rowIsRead && !pinned}
                 onOpen={openEmailInReader}
-                rowRef={(el) => { emailRowRefs.current[email.uid] = el; }}
+                rowRef={(el) => {
+                  emailRowRefs.current[email.uid] = el;
+                }}
                 preview={email.body_preview}
-                accentBar={email.isImportantSender ? (
-                  <div
-                    className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
-                    style={{ background: "#f97316", opacity: 0.7, boxShadow: "0 0 6px rgba(249,115,22,0.3)" }}
-                  />
-                ) : null}
+                accentBar={
+                  pinned ? (
+                    <div
+                      className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                      style={{
+                        background: "#6366f1",
+                        opacity: 0.7,
+                        boxShadow: "0 0 6px rgba(99,102,241,0.3)",
+                      }}
+                    />
+                  ) : email.isImportantSender ? (
+                    <div
+                      className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                      style={{
+                        background: "#f97316",
+                        opacity: 0.7,
+                        boxShadow: "0 0 6px rgba(249,115,22,0.3)",
+                      }}
+                    />
+                  ) : null
+                }
                 desktopMeta={
                   <>
                     {email.account_icon && (
                       <span className="text-[10px]">{email.account_icon}</span>
                     )}
                     {email.account_label && (
-                      <span className="text-[10px] text-muted-foreground/35">{email.account_label}</span>
+                      <span className="text-[10px] text-muted-foreground/35">
+                        {email.account_label}
+                      </span>
                     )}
                     <span
                       className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
@@ -237,31 +302,56 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                     />
                   </>
                 }
-                desktopAfterFrom={email.isImportantSender ? (
-                  <span className="text-[9px] text-orange-400/80 font-semibold tracking-wide">
-                    ★
-                  </span>
-                ) : null}
-                mobileBeforeFrom={email.account_icon ? (
-                  <span className="text-xs">{email.account_icon}</span>
-                ) : null}
+                desktopAfterFrom={
+                  email.isImportantSender ? (
+                    <span className="text-[9px] text-orange-400/80 font-semibold tracking-wide">
+                      ★
+                    </span>
+                  ) : null
+                }
+                mobileBeforeFrom={
+                  email.account_icon ? (
+                    <span className="text-xs">{email.account_icon}</span>
+                  ) : null
+                }
                 mobileMeta={
                   <>
-                    {email.isImportantSender && (
-                      <span className="text-xs text-orange-400/80 font-semibold">★</span>
+                    {isPinned(email) && (
+                      <Pin
+                        size={10}
+                        className="text-[#6366f1]/80"
+                        fill="currentColor"
+                      />
                     )}
-                    <span className="text-xs text-muted-foreground/30 tabular-nums" style={tsColor ? { color: tsColor } : undefined}>
+                    {email.isImportantSender && (
+                      <span className="text-xs text-orange-400/80 font-semibold">
+                        ★
+                      </span>
+                    )}
+                    <span
+                      className="text-xs text-muted-foreground/30 tabular-nums"
+                      style={tsColor ? { color: tsColor } : undefined}
+                    >
                       · {timeAgo(email.date, { compact: true })}
                     </span>
                   </>
                 }
                 desktopActions={
-                  <span
-                    className="text-[10px] text-muted-foreground/30 tabular-nums"
-                    style={tsColor ? { color: tsColor } : undefined}
-                  >
-                    {timeAgo(email.date, { compact: true })}
-                  </span>
+                  <>
+                    {isPinned(email) && (
+                      <Pin
+                        size={10}
+                        className="text-[#6366f1]/80"
+                        fill="currentColor"
+                      />
+                    )}
+                    <span
+                      className="text-[10px] text-muted-foreground/30 tabular-nums"
+                      style={tsColor ? { color: tsColor } : undefined}
+                    >
+                      {timeAgo(email.date, { compact: true })}
+                    </span>
+                  </>
                 }
               />
             </MotionItem>
@@ -275,8 +365,11 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
         email={openEmail}
         onClose={closeReader}
         navigation={readerNav}
+        preActions={readerPreActions}
         headerActions={readerHeaderActions}
         actions={readerActions}
+        onMarkedRead={markRead}
+        onMarkedUnread={markUnread}
         showManualBillForm={showBillForm}
         onLoaded={() => {
           if (!openEmail) return;

@@ -7,7 +7,7 @@ import { useDashboard } from "../../context/DashboardContext";
 import useLiveEmailState from "../../hooks/useLiveEmailState";
 
 export default function EmailTabSection({
-  summary, model, emails, briefingGeneratedAt, loaded, delay, className, onRefreshLive,
+  summary, model, emails, pinnedIds, briefingGeneratedAt, loaded, delay, className, onRefreshLive,
 }) {
   const [activeTab, setActiveTab] = useState("briefing");
   const { emailSectionRef } = useDashboard();
@@ -15,7 +15,7 @@ export default function EmailTabSection({
   const prevHeight = useRef(null);
   const scrollTimer = useRef(null);
 
-  const liveState = useLiveEmailState(emails);
+  const liveState = useLiveEmailState(emails, pinnedIds);
   const liveCount = liveState.unreadCount;
 
   function switchTab(tab) {

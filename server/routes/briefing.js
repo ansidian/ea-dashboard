@@ -343,6 +343,37 @@ router.post("/dismiss/:emailId", async (req, res) => {
   }
 });
 
+// --- Pin email for next briefing ---
+router.post("/pin/:emailId", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const emailId = req.params.emailId;
+  try {
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO ea_pinned_emails (user_id, email_id) VALUES (?, ?)",
+      args: [userId, emailId],
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error pinning email:", err);
+    res.status(500).json({ message: "Failed to pin email" });
+  }
+});
+
+router.delete("/pin/:emailId", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const emailId = req.params.emailId;
+  try {
+    await db.execute({
+      sql: "DELETE FROM ea_pinned_emails WHERE user_id = ? AND email_id = ?",
+      args: [userId, emailId],
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error unpinning email:", err);
+    res.status(500).json({ message: "Failed to unpin email" });
+  }
+});
+
 // --- Complete task (Todoist, Canvas/CTM, or manual CTM) ---
 router.post("/complete-task/:taskId", async (req, res) => {
   const userId = process.env.EA_USER_ID;

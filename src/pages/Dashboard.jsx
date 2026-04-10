@@ -319,6 +319,7 @@ function DashboardMain({
           summary={d.emails?.summary}
           model={d.model}
           emails={liveData.liveEmails}
+          pinnedIds={liveData.pinnedIds}
           briefingGeneratedAt={liveData.briefingGeneratedAt}
           loaded={loaded}
           delay={500}

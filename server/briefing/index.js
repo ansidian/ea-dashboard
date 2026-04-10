@@ -361,9 +361,26 @@ async function loadDismissedIds(userId) {
   return new Set(result.rows.map(r => r.email_id));
 }
 
+// Load pinned email IDs for this user
+async function loadPinnedIds(userId) {
+  const result = await db.execute({
+    sql: "SELECT email_id FROM ea_pinned_emails WHERE user_id = ?",
+    args: [userId],
+  });
+  return new Set(result.rows.map(r => r.email_id));
+}
+
+// Clear consumed pins after a briefing processes them
+async function clearPinnedIds(userId) {
+  await db.execute({
+    sql: "DELETE FROM ea_pinned_emails WHERE user_id = ?",
+    args: [userId],
+  });
+}
+
 // Load previously triaged email IDs from the last ready briefing
 async function loadPreviousTriage(userId) {
-  const [result, dismissedIds] = await Promise.all([
+  const [result, dismissedIds, pinnedIds] = await Promise.all([
     db.execute({
       sql: `SELECT briefing_json FROM ea_briefings
             WHERE user_id = ? AND status = 'ready' AND briefing_json LIKE '%aiGeneratedAt%'
@@ -371,8 +388,9 @@ async function loadPreviousTriage(userId) {
       args: [userId],
     }),
     loadDismissedIds(userId),
+    loadPinnedIds(userId),
   ]);
-  if (!result.rows.length) return { triagedIds: new Set(), prevBriefing: null, dismissedIds };
+  if (!result.rows.length) return { triagedIds: new Set(), prevBriefing: null, dismissedIds, pinnedIds };
 
   const prev = JSON.parse(result.rows[0].briefing_json);
   const triagedIds = new Set();
@@ -381,7 +399,7 @@ async function loadPreviousTriage(userId) {
       if (email.id) triagedIds.add(email.id);
     }
   }
-  return { triagedIds, prevBriefing: prev, dismissedIds };
+  return { triagedIds, prevBriefing: prev, dismissedIds, pinnedIds };
 }
 
 // Check if calendar data has meaningfully changed (CTM doesn't go to Haiku)
@@ -493,7 +511,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks }, emails, { triagedIds, prevBriefing, dismissedIds }] = await Promise.all([
+    const [{ calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks }, emails, { triagedIds, prevBriefing, dismissedIds, pinnedIds }] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
@@ -517,9 +535,14 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const completedTaskIds = await loadCompletedTaskIds(userId, todoistTasks);
 
     // Optimization #2: Skip if nothing new (also exclude dismissed emails)
-    const newEmails = emails.filter(e => !triagedIds.has(e.id || e.uid) && !dismissedIds.has(e.id || e.uid));
-    const unreadNew = newEmails.filter(e => !e.read);
-    const readNew = newEmails.filter(e => e.read);
+    // Pinned emails bypass triaged filter and are treated as unread for Claude
+    const newEmails = emails.filter(e => {
+      const eid = e.id || e.uid;
+      if (pinnedIds.has(eid)) return true;
+      return !triagedIds.has(eid) && !dismissedIds.has(eid);
+    });
+    const unreadNew = newEmails.filter(e => !e.read || pinnedIds.has(e.id || e.uid));
+    const readNew = newEmails.filter(e => e.read && !pinnedIds.has(e.id || e.uid));
     const calendarChanged = prevBriefing ? hasCalendarChanged(prevBriefing, calendar) : true;
 
     await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${unreadNew.length} unread new, ${readNew.length} read · Analyzing...`);
@@ -674,6 +697,13 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       sql: `UPDATE ea_briefings SET status = 'ready', briefing_json = ?, generation_time_ms = ? WHERE id = ?`,
       args: [JSON.stringify(briefingJson), elapsed, briefingId],
     });
+
+    // Clear consumed pins — these emails have now been sent through Claude
+    if (pinnedIds.size > 0) {
+      clearPinnedIds(userId).catch(err =>
+        console.error("[EA] Failed to clear pinned emails:", err.message)
+      );
+    }
 
     // Async: embed this briefing's chunks for future RAG (fire-and-forget)
     const sourceDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });

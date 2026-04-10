@@ -29,6 +29,7 @@ export default function EmailReaderOverlay({
   navigation,
   accountNav,
   triage,
+  preActions,
   headerActions,
   actions,
   onMarkedRead,
@@ -127,6 +128,7 @@ export default function EmailReaderOverlay({
           email={email}
           triage={triage}
           navigation={navigation}
+          preActions={preActions}
           headerActions={headerActions}
           actions={actions}
           onMarkedRead={onMarkedRead}
@@ -175,6 +177,7 @@ export default function EmailReaderOverlay({
           email={email}
           triage={triage}
           navigation={navigation}
+          preActions={preActions}
           headerActions={headerActions}
           actions={actions}
           onMarkedRead={onMarkedRead}
