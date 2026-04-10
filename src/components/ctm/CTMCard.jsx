@@ -47,7 +47,7 @@ function StatusSpine({ status, statuses, expanded, onStatusChange }) {
   }
 
   return (
-    <div className="ctm-spine-v" onClick={e => e.stopPropagation()}>
+    <div className="ctm-spine-v" onClick={expanded ? e => e.stopPropagation() : undefined}>
       {statuses.map((s, i) => {
         const color = SPINE_COLORS[s];
         const isActive = i <= idx;
