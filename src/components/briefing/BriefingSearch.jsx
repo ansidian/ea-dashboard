@@ -468,8 +468,11 @@ export default function BriefingSearch({ onNavigateToEmail }) {
           : baseWidth;
         const maxLeft = window.innerWidth - expandedWidth - VIEWPORT_MARGIN;
         const finalLeft = Math.max(VIEWPORT_MARGIN, Math.min(pos.left, maxLeft));
-        const expandedMaxHeight = emailNav.openEmail
+        const expandedHeight = emailNav.openEmail
           ? `calc(100vh - ${pos.top + VIEWPORT_MARGIN}px)`
+          : undefined;
+        const expandedMaxHeight = emailNav.openEmail
+          ? undefined
           : `min(480px, calc(100vh - ${pos.top + VIEWPORT_MARGIN}px))`;
 
         return createPortal(
@@ -481,13 +484,14 @@ export default function BriefingSearch({ onNavigateToEmail }) {
               top: pos.top,
               left: finalLeft,
               width: expandedWidth,
+              height: expandedHeight,
               maxHeight: expandedMaxHeight,
               background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
               borderRadius: 12,
               border: "1px solid rgba(255,255,255,0.08)",
               boxShadow:
                 "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
-              transition: "width 200ms ease, left 200ms ease, max-height 200ms ease",
+              transition: "width 200ms ease, left 200ms ease, height 200ms ease, max-height 200ms ease",
               overflow: "hidden",
             }}
           >
