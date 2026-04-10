@@ -70,16 +70,26 @@ function mapColor(todoistColor) {
   return TODOIST_COLORS[todoistColor] || "#cba6da";
 }
 
+// Todoist returns due datetimes in the user's local timezone without a Z
+// suffix, so parse the time directly from the string to avoid UTC reinterpretation.
 function formatTime12h(dateStr) {
   if (!dateStr || !dateStr.includes("T")) return null;
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString("en-US", {
-    timeZone: "America/Los_Angeles",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const match = dateStr.match(/T(\d{2}):(\d{2})/);
+  if (!match) return null;
+  let hour = parseInt(match[1], 10);
+  const minute = match[2];
+  const ampm = hour >= 12 ? "PM" : "AM";
+  if (hour === 0) hour = 12;
+  else if (hour > 12) hour -= 12;
+  return `${hour}:${minute} ${ampm}`;
+}
+
+function todoistTaskUrl(content, id) {
+  const slug = content
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `https://app.todoist.com/app/task/${slug}-${id}`;
 }
 
 function extractDate(due) {
@@ -124,7 +134,7 @@ export async function fetchTodoistTasks(userId) {
         status: "incomplete",
         source: "todoist",
         description: t.description || "",
-        url: `https://todoist.com/showTask?id=${t.id}`,
+        url: todoistTaskUrl(t.content, t.id),
         priority: t.priority,
         labels: t.labels || [],
       };
