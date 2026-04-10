@@ -27,6 +27,7 @@ export default function EmailReaderOverlay({
   email,
   onClose,
   navigation,
+  accountNav,
   triage,
   headerActions,
   actions,
@@ -54,11 +55,17 @@ export default function EmailReaderOverlay({
       } else if (e.key === "ArrowUp" && navigation?.onPrev) {
         e.preventDefault();
         if (navigation.hasPrev !== false) navigation.onPrev();
+      } else if (e.key === "ArrowLeft" && accountNav?.onPrev) {
+        e.preventDefault();
+        accountNav.onPrev();
+      } else if (e.key === "ArrowRight" && accountNav?.onNext) {
+        e.preventDefault();
+        accountNav.onNext();
       }
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, onClose, navigation]);
+  }, [open, onClose, navigation, accountNav]);
 
   // Lock body scroll on desktop so the dashboard behind doesn't chase the
   // overlay. BottomSheet handles its own scroll locking on mobile.

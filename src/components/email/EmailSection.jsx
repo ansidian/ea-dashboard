@@ -168,6 +168,20 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
     onOpen: openEmailInReader,
   });
 
+  // ←/→ switch account tabs and open the first email in that tab
+  const accountNav = useMemo(() => {
+    if (emailAccounts.length <= 1) return null;
+    const switchTo = (i) => {
+      setActiveAccount(i);
+      const first = emailAccounts[i]?.important?.[0] || null;
+      setSelectedEmail(first);
+    };
+    return {
+      onPrev: activeAccount > 0 ? () => switchTo(activeAccount - 1) : null,
+      onNext: activeAccount < emailAccounts.length - 1 ? () => switchTo(activeAccount + 1) : null,
+    };
+  }, [emailAccounts, activeAccount, setActiveAccount, setSelectedEmail]);
+
   // Build the Claude triage strip from briefing email fields. Only present
   // when there's actually something to show.
   const readerTriage = useMemo(() => {
@@ -518,6 +532,7 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
         email={enrichedSelectedEmail}
         onClose={closeReader}
         navigation={readerNav}
+        accountNav={accountNav}
         triage={readerTriage}
         actions={readerActions}
         onMarkedRead={handleReaderMarkedRead}
