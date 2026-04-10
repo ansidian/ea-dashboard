@@ -129,23 +129,17 @@ export default function EmailTabSection({
               <polyline points="12 6 12 12 16 14" />
             </svg>
             Live
-            {activeTab !== "live" && liveCount > 0 && (
+            {liveCount > 0 && (
               <span
                 className="text-[10px] font-bold tabular-nums rounded-full min-w-[16px] text-center"
                 style={{
                   padding: "2px 6px",
-                  background: "rgba(99,102,241,0.15)",
-                  color: "rgba(99,102,241,0.9)",
+                  background: activeTab === "live" ? "rgba(99,102,241,0.08)" : "rgba(99,102,241,0.15)",
+                  color: activeTab === "live" ? "rgba(99,102,241,0.5)" : "rgba(99,102,241,0.9)",
                 }}
               >
                 {liveCount}
               </span>
-            )}
-            {activeTab === "live" && (
-              <span
-                className="inline-block w-1.5 h-1.5 rounded-full animate-pulse"
-                style={{ background: "rgba(99,102,241,0.6)" }}
-              />
             )}
           </button>
         </div>

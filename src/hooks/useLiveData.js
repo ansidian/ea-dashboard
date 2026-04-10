@@ -60,8 +60,10 @@ export default function useLiveData({ disabled = false } = {}) {
       return;
     }
     fetchLive();
+    const intervalId = setInterval(fetchLive, 2 * 60 * 1000);
 
     return () => {
+      clearInterval(intervalId);
       mountedRef.current = false;
     };
   }, [fetchLive, disabled]);
