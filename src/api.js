@@ -62,6 +62,11 @@ export const trashEmail = (uid) => apiFetch(`/api/briefing/email/${encodeURIComp
 export const markAllEmailsAsRead = (uids) => apiFetch("/api/briefing/email/mark-all-read", { method: "POST", body: JSON.stringify({ uids }) });
 export const deleteBriefing = (id) => apiFetch(`/api/briefing/${id}`, { method: "DELETE" });
 
+// Todoist
+export const getTodoistProjects = () => apiFetch("/api/briefing/todoist/projects");
+export const getTodoistLabels = () => apiFetch("/api/briefing/todoist/labels");
+export const createTodoistTask = (data) => apiFetch("/api/briefing/todoist/tasks", { method: "POST", body: JSON.stringify(data) });
+
 // Actual Budget
 export const sendToActualBudget = (bill) => apiFetch("/api/briefing/actual/send", { method: "POST", body: JSON.stringify(bill) });
 export const getActualAccounts = () => apiFetch("/api/briefing/actual/accounts");

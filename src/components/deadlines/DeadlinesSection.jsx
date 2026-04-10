@@ -1,11 +1,16 @@
+import { useState, useRef } from "react";
 import Section from "../layout/Section";
 import { parseDueDate } from "../../lib/dashboard-helpers";
 import CTMCard from "../ctm/CTMCard";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
+import AddTaskPanel from "../todoist/AddTaskPanel";
 
 export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, className }) {
-  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus } = useDashboard();
+  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus, handleAddTask } = useDashboard();
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [addBtnHover, setAddBtnHover] = useState(false);
+  const addBtnRef = useRef(null);
   const ctmItems = (ctm?.upcoming || []).map(t => ({ ...t, _type: "ctm" }));
   const todoistItems = (todoist?.upcoming || []).map(t => ({ ...t, _type: "ctm" }));
   const allItems = [...ctmItems, ...todoistItems].sort((a, b) => {
@@ -32,6 +37,34 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
       className={className}
       summaryBadge={totalDueToday > 0 ? `${totalDueToday} due today` : `${totalIncomplete} total`}
       defaultExpanded={false}
+      headerAction={
+        <button
+          ref={addBtnRef}
+          onClick={() => setAddPanelOpen(v => !v)}
+          onMouseEnter={() => setAddBtnHover(true)}
+          onMouseLeave={() => setAddBtnHover(false)}
+          style={{
+            background: addPanelOpen ? "rgba(203,166,218,0.15)" : addBtnHover ? "rgba(203,166,218,0.12)" : "rgba(203,166,218,0.06)",
+            border: addPanelOpen || addBtnHover ? "1px solid rgba(203,166,218,0.25)" : "1px solid rgba(203,166,218,0.12)",
+            borderRadius: 6,
+            padding: "4px 10px",
+            cursor: "pointer",
+            color: addPanelOpen || addBtnHover ? "#cba6da" : "rgba(203,166,218,0.6)",
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: "0.5px",
+            lineHeight: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            transition: "all 0.2s",
+            whiteSpace: "nowrap",
+            boxShadow: addBtnHover && !addPanelOpen ? "0 2px 8px rgba(203,166,218,0.2)" : "none",
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600 }}>+</span> Todoist
+        </button>
+      }
     >
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
         <div
@@ -95,6 +128,13 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
           return null;
         })}
       </MotionList>
+      {addPanelOpen && (
+        <AddTaskPanel
+          anchorRef={addBtnRef}
+          onClose={() => setAddPanelOpen(false)}
+          onTaskAdded={(task) => handleAddTask(task)}
+        />
+      )}
     </Section>
   );
 }

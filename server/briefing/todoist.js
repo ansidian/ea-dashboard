@@ -3,9 +3,10 @@ import db from "../db/connection.js";
 
 const BASE_URL = "https://api.todoist.com/api/v1";
 
-// --- Project cache: 10-minute TTL ---
-const PROJECT_TTL_MS = 10 * 60 * 1000;
+// --- Caches: 10-minute TTL ---
+const CACHE_TTL_MS = 10 * 60 * 1000;
 let projectCache = { data: null, ts: 0 };
+let labelCache = { data: null, ts: 0 };
 
 async function getToken(userId) {
   const result = await db.execute({
@@ -35,7 +36,7 @@ async function todoistFetch(token, path, options = {}) {
 }
 
 async function fetchProjects(token) {
-  if (projectCache.data && Date.now() - projectCache.ts < PROJECT_TTL_MS) {
+  if (projectCache.data && Date.now() - projectCache.ts < CACHE_TTL_MS) {
     return projectCache.data;
   }
   const map = new Map();
@@ -145,6 +146,62 @@ export async function completeTodoistTask(userId, taskId) {
   const token = await getToken(userId);
   if (!token) throw new Error("Todoist not configured");
   await todoistFetch(token, `/tasks/${taskId}/close`, { method: "POST" });
+}
+
+export async function fetchTodoistProjects(userId) {
+  const token = await getToken(userId);
+  if (!token) throw new Error("Todoist not configured");
+  const projects = await fetchProjects(token);
+  return Array.from(projects.entries()).map(([id, p]) => ({ id, name: p.name, color: mapColor(p.color) }));
+}
+
+export async function fetchTodoistLabels(userId) {
+  const token = await getToken(userId);
+  if (!token) throw new Error("Todoist not configured");
+  if (labelCache.data && Date.now() - labelCache.ts < CACHE_TTL_MS) {
+    return labelCache.data;
+  }
+  const data = await todoistFetch(token, "/labels");
+  const labels = (data.results || data).map(l => ({ id: l.id, name: l.name, color: mapColor(l.color) }));
+  labelCache = { data: labels, ts: Date.now() };
+  return labels;
+}
+
+export async function createTodoistTask(userId, { content, description, project_id, priority, labels, due_string }) {
+  const token = await getToken(userId);
+  if (!token) throw new Error("Todoist not configured");
+  if (!content?.trim()) throw new Error("Task content is required");
+
+  const body = { content: content.trim() };
+  if (description) body.description = description;
+  if (project_id) body.project_id = project_id;
+  if (priority) body.priority = priority;
+  if (labels?.length) body.labels = labels;
+  if (due_string) body.due_string = due_string;
+
+  const task = await todoistFetch(token, "/tasks", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+  // Return in the same format as fetchTodoistTasks
+  const projects = await fetchProjects(token);
+  const proj = projects.get(task.project_id);
+  return {
+    id: task.id,
+    title: task.content,
+    due_date: extractDate(task.due),
+    due_time: formatTime12h(task.due?.date),
+    class_name: proj?.name || "Todoist",
+    class_color: proj ? mapColor(proj.color) : "#cba6da",
+    points_possible: null,
+    status: "incomplete",
+    source: "todoist",
+    description: task.description || "",
+    url: todoistTaskUrl(task.content, task.id),
+    priority: task.priority,
+    labels: task.labels || [],
+  };
 }
 
 export async function testConnection(userId) {

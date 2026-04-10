@@ -7,7 +7,7 @@ import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, markAs
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, markAsUnread as icloudMarkAsUnread, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
-import { completeTodoistTask } from "../briefing/todoist.js";
+import { completeTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask } from "../briefing/todoist.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
 import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
@@ -853,6 +853,38 @@ router.post("/actual/test", async (req, res) => {
   } catch (err) {
     console.error("Actual Budget test failed:", err.message);
     res.status(400).json({ message: err.message || "Connection failed" });
+  }
+});
+
+// Todoist
+router.get("/todoist/projects", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    res.json(await fetchTodoistProjects(userId));
+  } catch (err) {
+    console.error("Error fetching Todoist projects:", err.message);
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.get("/todoist/labels", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    res.json(await fetchTodoistLabels(userId));
+  } catch (err) {
+    console.error("Error fetching Todoist labels:", err.message);
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.post("/todoist/tasks", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    const task = await createTodoistTask(userId, req.body);
+    res.json(task);
+  } catch (err) {
+    console.error("Error creating Todoist task:", err.message);
+    res.status(400).json({ message: err.message });
   }
 });
 

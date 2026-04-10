@@ -34,6 +34,7 @@ export default function Section({
   tier = 1,
   summaryBadge,
   defaultExpanded = true,
+  headerAction,
 }) {
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -74,24 +75,30 @@ export default function Section({
               </span>
             )}
           </div>
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-muted-foreground/50 transition-transform duration-200"
-            style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
-          >
-            <path d="M4.5 3L7.5 6L4.5 9" />
-          </svg>
+          <div className="flex items-center gap-2">
+            {headerAction && <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>{headerAction}</span>}
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-muted-foreground/50 transition-transform duration-200"
+              style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
+            >
+              <path d="M4.5 3L7.5 6L4.5 9" />
+            </svg>
+          </div>
         </div>
       ) : (
-        <div className={cn(t.titleClass, "mb-3")} style={t.titleStyle}>
-          {title}
+        <div className="flex items-center justify-between mb-3">
+          <div className={t.titleClass} style={t.titleStyle}>
+            {title}
+          </div>
+          {headerAction}
         </div>
       )}
 

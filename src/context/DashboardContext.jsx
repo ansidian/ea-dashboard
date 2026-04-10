@@ -79,6 +79,26 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
     if (expandedTask === taskId) setExpandedTask(null);
   }, [expandedTask, setBriefing, removeCompletedTask]);
 
+  const handleAddTask = useCallback((task) => {
+    setBriefing(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      if (!updated.todoist) updated.todoist = { upcoming: [], stats: { incomplete: 0, dueToday: 0, dueThisWeek: 0, totalPoints: 0 } };
+      updated.todoist.upcoming.push(task);
+
+      // Recalculate stats
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+      const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+      let dueToday = 0, dueThisWeek = 0;
+      for (const d of updated.todoist.upcoming) {
+        if (d.due_date === today) dueToday++;
+        if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+      }
+      updated.todoist.stats = { incomplete: updated.todoist.upcoming.length, dueToday, dueThisWeek, totalPoints: 0 };
+
+      return updated;
+    });
+  }, [setBriefing]);
+
   const handleUpdateTaskStatus = useCallback(async (taskId, status) => {
     updateTaskStatus(taskId, status).catch(() => {});
 
@@ -149,6 +169,7 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
       setExpandedTask,
       handleDismiss,
       handleCompleteTask,
+      handleAddTask,
       handleUpdateTaskStatus,
       markAccountEmailsRead,
       emailAccounts,
