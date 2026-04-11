@@ -24,16 +24,18 @@ export default function ContextMenu({ x, y, items, onClose }) {
 
 function MenuPanel({ x, y, items, onClose, isRoot, anchorWidth }) {
   const panelRef = useRef(null);
-  const [pos, setPos] = useState({ top: y, left: x });
-  const [visible, setVisible] = useState(false);
   const [openSubIdx, setOpenSubIdx] = useState(null);
   const [subAnchorRect, setSubAnchorRect] = useState(null);
   const openTimerRef = useRef(null);
   const closeTimerRef = useRef(null);
 
+  // Position and reveal imperatively to avoid double-render: we need the
+  // panel's measured size to clamp it inside the viewport, so the first
+  // render is hidden, then this layout effect places it and fades it in.
   useLayoutEffect(() => {
-    if (!panelRef.current) return;
-    const rect = panelRef.current.getBoundingClientRect();
+    const el = panelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
     let top = y;
     let left = x;
     // For submenus, if the panel would overflow the right edge, flip to the
@@ -49,8 +51,13 @@ function MenuPanel({ x, y, items, onClose, isRoot, anchorWidth }) {
       top = Math.max(8, window.innerHeight - rect.height - 8);
     }
     if (top < 8) top = 8;
-    setPos({ top, left });
-    requestAnimationFrame(() => setVisible(true));
+    el.style.top = `${top}px`;
+    el.style.left = `${left}px`;
+    const raf = requestAnimationFrame(() => {
+      el.style.opacity = "1";
+      el.style.transform = "scale(1)";
+    });
+    return () => cancelAnimationFrame(raf);
   }, [x, y, isRoot, anchorWidth]);
 
   // Root-only: pointerdown-outside + scroll/resize dismissal.
@@ -134,8 +141,8 @@ function MenuPanel({ x, y, items, onClose, isRoot, anchorWidth }) {
       onMouseLeave={panelLeave}
       style={{
         position: "fixed",
-        top: pos.top,
-        left: pos.left,
+        top: y,
+        left: x,
         minWidth: 180,
         background: "#16161e",
         border: "1px solid rgba(205,214,244,0.12)",
@@ -145,8 +152,8 @@ function MenuPanel({ x, y, items, onClose, isRoot, anchorWidth }) {
         boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
         isolation: "isolate",
         fontFamily: "system-ui, -apple-system, sans-serif",
-        opacity: visible ? 1 : 0,
-        transform: visible ? "scale(1)" : "scale(0.96)",
+        opacity: 0,
+        transform: "scale(0.96)",
         transformOrigin: "top left",
         transition:
           "opacity 120ms ease, transform 120ms cubic-bezier(0.16, 1, 0.3, 1)",
