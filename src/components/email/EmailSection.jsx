@@ -195,9 +195,17 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
       const first = emailAccounts[i]?.important?.[0] || null;
       setSelectedEmail(first);
     };
+    const findNonEmpty = (start, step) => {
+      for (let i = start; i >= 0 && i < emailAccounts.length; i += step) {
+        if (emailAccounts[i]?.important?.length) return i;
+      }
+      return -1;
+    };
+    const prevIdx = findNonEmpty(activeAccount - 1, -1);
+    const nextIdx = findNonEmpty(activeAccount + 1, 1);
     return {
-      onPrev: activeAccount > 0 ? () => switchTo(activeAccount - 1) : null,
-      onNext: activeAccount < emailAccounts.length - 1 ? () => switchTo(activeAccount + 1) : null,
+      onPrev: prevIdx >= 0 ? () => switchTo(prevIdx) : null,
+      onNext: nextIdx >= 0 ? () => switchTo(nextIdx) : null,
     };
   }, [emailAccounts, activeAccount, setActiveAccount, setSelectedEmail]);
 
