@@ -152,13 +152,16 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
     const acct = emailAccounts.find((a) =>
       a.important?.some((e) => e.id === selectedEmail.id),
     ) || currentAccount;
+    // Only overlay account fields when the email itself is missing them —
+    // briefing-account objects don't carry account_id/account_email, so
+    // unconditional override would clobber the values stored on the email.
     return {
       ...selectedEmail,
-      account_label: acct?.name,
-      account_email: acct?.email,
-      account_color: acct?.color,
-      account_icon: acct?.icon,
-      account_id: acct?.account_id || acct?.id,
+      account_label: selectedEmail.account_label || acct?.name,
+      account_email: selectedEmail.account_email || acct?.email,
+      account_color: selectedEmail.account_color || acct?.color,
+      account_icon: selectedEmail.account_icon || acct?.icon,
+      account_id: selectedEmail.account_id || acct?.account_id || acct?.id,
     };
   }, [selectedEmail, emailAccounts, currentAccount]);
 
