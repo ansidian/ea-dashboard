@@ -103,16 +103,9 @@ export default function EmailReaderOverlay({
   }, []);
 
   // Click-outside-to-close on desktop. Skip on mobile — BottomSheet owns
-  // backdrop interaction.
-  useEffect(() => {
-    if (!open || isMobile) return;
-    function handleClick(e) {
-      if (panelRef.current?.contains(e.target)) return;
-      onClose?.();
-    }
-    document.addEventListener("pointerdown", handleClick);
-    return () => document.removeEventListener("pointerdown", handleClick);
-  }, [open, isMobile, onClose]);
+  // backdrop interaction. Handled via onPointerDown on the backdrop div
+  // (below) rather than a document listener, so portaled popovers whose DOM
+  // lives outside panelRef's subtree don't incorrectly trigger dismissal.
 
   if (!open || !email) return null;
 
@@ -143,6 +136,9 @@ export default function EmailReaderOverlay({
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-150"
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
       style={{
         background: "rgba(0,0,0,0.55)",
         isolation: "isolate",
