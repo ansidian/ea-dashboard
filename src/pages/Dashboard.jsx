@@ -113,7 +113,7 @@ export default function Dashboard() {
           return e;
         });
         if (important === acct.important) return acct;
-        return { ...acct, important, unread: important.filter(e => !e.read).length };
+        return { ...acct, important, unread: important.length };
       });
       return changed ? { ...prev, emails: { ...prev.emails, accounts } } : prev;
     });

@@ -12,7 +12,7 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
   const emailSectionRef = useRef(null);
 
   const recountUnread = (acct) => {
-    acct.unread = (acct.important || []).filter(e => !e.read).length;
+    acct.unread = (acct.important || []).length;
   };
 
   const markAccountEmailsRead = useCallback(() => {

@@ -276,7 +276,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
   // Replace accounts with corrected grouping, fix unread counts
   briefingJson.emails.accounts = [...grouped.values()].map((acct) => ({
     ...acct,
-    unread: acct.important.filter(e => !e.read).length,
+    unread: acct.important.length,
   }));
 
   // Invariant check: email count in should equal email count out (per D-01, D-02)
