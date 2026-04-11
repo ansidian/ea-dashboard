@@ -281,9 +281,10 @@ function PriorityIndicator({ level }) {
     1: "#f38ba8", // urgent
     2: "#f9e2af",
     3: "#89b4fa",
-    4: "rgba(205,214,244,0.3)",
+    4: "#a6adc8", // low
   };
   const color = colors[level] || colors[4];
+  const litCount = 5 - level;
   return (
     <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
       {[1, 2, 3, 4].map((i) => (
@@ -293,7 +294,8 @@ function PriorityIndicator({ level }) {
             width: 3,
             height: 10,
             borderRadius: 1,
-            background: i <= 5 - level ? color : `${color}22`,
+            background: color,
+            opacity: i <= litCount ? 1 : 0.22,
           }}
         />
       ))}
