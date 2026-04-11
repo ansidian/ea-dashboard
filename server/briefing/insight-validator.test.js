@@ -65,11 +65,14 @@ describe("validateInsight — forbidden temporal words", () => {
     ["in a week", "Due in a week."],
     ["in one day", "Due in one day."],
     ["soon", "Payment due soon."],
+    ["bare weekday", "Review the SCE bill {d1} on Wed.", { d1: goodSlot }],
+    ["parenthetical weekday", "Spotify renewal {d1} (Tue).", { d1: goodSlot }],
+    ["full weekday", "Meeting on Wednesday.", {}],
   ];
 
-  for (const [label, template] of cases) {
+  for (const [label, template, slots = {}] of cases) {
     it(`rejects "${label}"`, () => {
-      const r = validateInsight({ template, slots: {} });
+      const r = validateInsight({ template, slots });
       expect(r.valid).toBe(false);
       expect(r.errors.some(e => e.includes("forbidden temporal"))).toBe(true);
     });

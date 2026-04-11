@@ -36,6 +36,11 @@ export const FORBIDDEN_TEMPORAL_REGEX = new RegExp(
     "\\bnext\\s+weekend\\b",
     // "next Tuesday", "next Wed", "next Thurs" and friends (full and abbreviated)
     "\\bnext\\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\\b",
+    // Bare weekday names — the slot renderer emits the weekday itself, so
+    // any weekday in the template is either a duplicate hint next to a slot
+    // (e.g., "SCE bill (Wed) on Wed") or a freestanding relative reference
+    // ("review it Tue") that should have been a slot.
+    "\\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues|tue|wed|thurs|thur|thu|fri|sat|sun)\\b",
     // "in 3 days", "in a week"
     "\\bin\\s+\\d+\\s+(?:hour|day|week|month)s?\\b",
     "\\bin\\s+(?:a|an|one|two|three|four|five|six|seven)\\s+(?:hour|day|week|month)s?\\b",
