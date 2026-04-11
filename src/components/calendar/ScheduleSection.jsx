@@ -586,7 +586,7 @@ export default function ScheduleSection({ calendar, tomorrowCalendar, nextWeekCa
                 lastUserScrollRef.current = Date.now();
               }}
             >
-              <div className="relative pl-5">
+              <div className="relative pl-5 pb-5">
                 {/* Timeline spine */}
                 <div
                   className="absolute left-[5px] top-2 bottom-2 w-px"
