@@ -1,5 +1,6 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import { htmlToPlainText } from "./html-to-text.js";
 
 const ICLOUD_HOST = "imap.mail.me.com";
 const ICLOUD_PORT = 993;
@@ -130,8 +131,7 @@ function extractPreview(source) {
   const text = source.toString("utf8");
   const bodyStart = text.indexOf("\r\n\r\n");
   if (bodyStart === -1) return "";
-  const body = text.slice(bodyStart + 4);
-  const clean = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const clean = htmlToPlainText(text.slice(bodyStart + 4));
   const amounts = extractAmounts(clean);
   return clean.slice(0, 600) + amounts;
 }
@@ -143,8 +143,7 @@ function extractBodyText(source) {
   const text = source.toString("utf8");
   const bodyStart = text.indexOf("\r\n\r\n");
   if (bodyStart === -1) return "";
-  const body = text.slice(bodyStart + 4);
-  return body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return htmlToPlainText(text.slice(bodyStart + 4));
 }
 
 export async function fetchEmailBody(email, password, uid) {

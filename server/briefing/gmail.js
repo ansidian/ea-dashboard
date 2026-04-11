@@ -1,5 +1,6 @@
 import db from "../db/connection.js";
 import { encrypt, decrypt } from "./encryption.js";
+import { htmlToPlainText } from "./html-to-text.js";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -148,8 +149,7 @@ function extractBodyText(payload) {
   }
 
   walk(payload);
-  // Strip HTML tags, collapse whitespace
-  return parts.join(" ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return htmlToPlainText(parts.join(" "));
 }
 
 // --- Email fetch ---
