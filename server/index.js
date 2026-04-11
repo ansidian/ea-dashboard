@@ -13,7 +13,7 @@ import briefingRoutes from "./routes/briefing.js";
 import accountsRoutes from "./routes/accounts.js";
 import searchRoutes from "./routes/search.js";
 import liveRoutes from "./routes/live.js";
-import { initScheduler } from "./briefing/scheduler.js";
+import { initScheduler, startBackgroundIndexer } from "./briefing/scheduler.js";
 import { migrate } from "./db/migrate.js";
 
 
@@ -77,6 +77,7 @@ migrate().then(() => {
     initScheduler().catch((err) =>
       console.error("[EA Scheduler] Init failed:", err.message),
     );
+    startBackgroundIndexer();
   });
 }).catch((err) => {
   console.error("Migration failed:", err);

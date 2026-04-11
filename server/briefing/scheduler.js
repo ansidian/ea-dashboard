@@ -1,8 +1,17 @@
 import cron from "node-cron";
 import db from "../db/connection.js";
-import { generateBriefing } from "./index.js";
+import { generateBriefing, loadUserConfig, fetchAllEmails } from "./index.js";
+import { indexEmails } from "./email-index.js";
 
 const activeJobs = [];
+// Background indexer state lives outside activeJobs so initScheduler's re-runs
+// (triggered on account changes) don't tear down the passive email sweep.
+let indexerJob = null;
+let sweepInFlight = false;
+// 2h lookback gives the 10-minute cadence generous overlap — nothing falls
+// through the cracks if one sweep runs long or a briefing pauses the pipeline.
+const INDEXER_LOOKBACK_HOURS = 2;
+const INDEXER_CRON = "*/10 * * * *";
 
 export async function initScheduler() {
   // Clear any existing jobs (in case of re-init)
@@ -76,4 +85,60 @@ export async function initScheduler() {
     // ea_settings table may not exist yet on first run before migration
     console.log("[EA Scheduler] Skipping — ea_settings not yet available");
   }
+}
+
+// Passive email indexer: sweeps every account's inbox every 10 minutes and
+// upserts recent messages into the FTS index so search finds mail that
+// arrived between briefing runs. No Claude, no briefing — cheap enough to
+// run continuously.
+async function sweepIndex() {
+  if (sweepInFlight) return;
+  sweepInFlight = true;
+  try {
+    const result = await db.execute(
+      "SELECT DISTINCT user_id FROM ea_accounts",
+    );
+    for (const row of result.rows) {
+      try {
+        const { accounts, settings } = await loadUserConfig(row.user_id);
+        const hasEmail = accounts.some(
+          (a) => a.type === "gmail" || a.type === "icloud",
+        );
+        if (!hasEmail) continue;
+        const emails = await fetchAllEmails(
+          accounts,
+          settings,
+          INDEXER_LOOKBACK_HOURS,
+        );
+        if (emails.length) await indexEmails(row.user_id, emails);
+      } catch (err) {
+        console.error(
+          `[EA Indexer] Sweep failed for user ${row.user_id}:`,
+          err.message,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[EA Indexer] Sweep iteration failed:", err.message);
+  } finally {
+    sweepInFlight = false;
+  }
+}
+
+export function startBackgroundIndexer() {
+  if (indexerJob) {
+    indexerJob.stop();
+    indexerJob = null;
+  }
+  indexerJob = cron.schedule(INDEXER_CRON, sweepIndex);
+  console.log(
+    `[EA Indexer] Background indexer scheduled (${INDEXER_CRON}, ${INDEXER_LOOKBACK_HOURS}h lookback)`,
+  );
+  // Run once shortly after startup so a freshly booted server catches up
+  // without waiting for the first cron tick.
+  setTimeout(() => {
+    sweepIndex().catch((err) =>
+      console.error("[EA Indexer] Initial sweep failed:", err.message),
+    );
+  }, 5000);
 }

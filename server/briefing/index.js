@@ -523,9 +523,9 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       console.error("[EA] Email indexing failed:", err.message)
     );
     if (indexEmpty) {
-      // one-time backfill: fetch 30 days of email metadata
-      console.log("[EA] Email index empty — starting 30-day backfill...");
-      fetchAllEmails(accounts, settings, 720)
+      // one-time backfill: fetch 90 days of email metadata
+      console.log("[EA] Email index empty — starting 90-day backfill...");
+      fetchAllEmails(accounts, settings, 2160)
         .then(allEmails => indexEmails(userId, allEmails))
         .then(() => console.log("[EA] Backfill complete"))
         .catch(err => console.error("[EA] Backfill indexing failed:", err.message));
