@@ -3,6 +3,7 @@ import { getEmailBody, markEmailAsRead, markEmailAsUnread } from "../../api";
 import EmailIframe from "./EmailIframe";
 import BillBadge from "../bills/BillBadge";
 import { urgencyStyles } from "../../lib/dashboard-helpers";
+import { getGmailUrl } from "../../lib/email-links";
 
 const AUTO_MARK_DELAY_MS = 1500;
 
@@ -261,33 +262,36 @@ export default function EmailReader({
               )}
             </button>
             {headerActions}
-            {email.web_url ? (
-              <a
-                href={email.web_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[10px] text-primary/80 hover:text-primary transition-colors px-2 py-1 hover:bg-white/[0.04]"
-                style={{ borderRadius: 8 }}
-                aria-label="Open in Gmail"
-                title="Open in Gmail"
-              >
-                <span className="hidden md:inline">Open in Gmail</span>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M7 17L17 7" />
-                  <path d="M7 7h10v10" />
-                </svg>
-              </a>
-            ) : (
-              // iCloud: no deep link available — Message-ID isn't indexed,
-              // so we can't build a `message:` URL for Mail.app. Hidden on
-              // mobile to save header real estate.
-              <span
-                className="hidden md:flex items-center gap-1 text-[10px] text-muted-foreground/30 px-2 py-1 cursor-not-allowed"
-                title="Direct links unavailable for iCloud"
-              >
-                No web link
-              </span>
-            )}
+            {(() => {
+              const webUrl = email.web_url || getGmailUrl(email);
+              return webUrl ? (
+                <a
+                  href={webUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[10px] text-primary/80 hover:text-primary transition-colors px-2 py-1 hover:bg-white/[0.04]"
+                  style={{ borderRadius: 8 }}
+                  aria-label="Open in Gmail"
+                  title="Open in Gmail"
+                >
+                  <span className="hidden md:inline">Open in Gmail</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M7 17L17 7" />
+                    <path d="M7 7h10v10" />
+                  </svg>
+                </a>
+              ) : (
+                // iCloud: no deep link available — Message-ID isn't indexed,
+                // so we can't build a `message:` URL for Mail.app. Hidden on
+                // mobile to save header real estate.
+                <span
+                  className="hidden md:flex items-center gap-1 text-[10px] text-muted-foreground/30 px-2 py-1 cursor-not-allowed"
+                  title="Direct links unavailable for iCloud"
+                >
+                  No web link
+                </span>
+              );
+            })()}
             {onClose && (
               <button
                 type="button"

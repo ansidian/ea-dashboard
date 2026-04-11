@@ -1,17 +1,6 @@
 import { cn } from "@/lib/utils";
 import useIsMobile from "../../hooks/useIsMobile";
-
-const getGmailUrl = (email) => {
-  // Direct link via API message ID extracted from uid (gmail-{accountId}-{messageId}).
-  // authuser={email} routes to the correct Gmail account regardless of /u/N position.
-  if (!email.uid || !email.account_id) return null;
-  const prefix = `gmail-${email.account_id}-`;
-  if (!email.uid.startsWith(prefix)) return null;
-  const messageId = email.uid.slice(prefix.length);
-  if (!messageId) return null;
-  const authuser = email.account_email ? encodeURIComponent(email.account_email) : 0;
-  return `https://mail.google.com/mail/?authuser=${authuser}#all/${messageId}`;
-};
+import { getGmailUrl } from "../../lib/email-links";
 
 // Gmail external link — shared across email row variants
 function GmailLink({ email }) {
