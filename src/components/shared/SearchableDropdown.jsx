@@ -17,7 +17,7 @@ export default function SearchableDropdown({ options, value, onChange, placehold
   const selected = options.find(o => o.id === value);
   const displayName = selected?.name || (allowCreate && value && !selected ? value : null);
 
-  const filtered = allowCreate && search
+  const filtered = search
     ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()))
     : options;
   const exactMatch = search && filtered.some(o => o.name.toLowerCase() === search.toLowerCase());
