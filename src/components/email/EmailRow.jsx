@@ -13,7 +13,7 @@ function GmailLink({ email }) {
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
       title="Open in Gmail"
-      className="opacity-0 group-hover:opacity-100 transition-all duration-150 text-muted-foreground/20 hover:text-muted-foreground/60 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
+      className="transition-colors duration-150 text-muted-foreground/30 hover:text-muted-foreground/70 hover:bg-white/[0.04] p-1 rounded leading-none inline-flex"
     >
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
