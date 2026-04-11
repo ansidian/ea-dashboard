@@ -11,16 +11,39 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
   const [expandedTask, setExpandedTask] = useState(null);
   const emailSectionRef = useRef(null);
 
+  const recountUnread = (acct) => {
+    acct.unread = (acct.important || []).filter(e => !e.read).length;
+  };
+
   const markAccountEmailsRead = useCallback(() => {
     setBriefing(prev => {
       const updated = JSON.parse(JSON.stringify(prev));
       const acct = updated.emails?.accounts?.[activeAccount];
       if (acct) {
         for (const e of acct.important) e.read = true;
+        recountUnread(acct);
       }
       return updated;
     });
   }, [activeAccount, setBriefing]);
+
+  const setEmailReadState = useCallback((emailKey, read) => {
+    setBriefing(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      for (const acct of updated.emails?.accounts || []) {
+        for (const e of acct.important || []) {
+          if (e.id === emailKey || e.uid === emailKey) {
+            e.read = read;
+          }
+        }
+        recountUnread(acct);
+      }
+      return updated;
+    });
+  }, [setBriefing]);
+
+  const markEmailRead = useCallback((emailKey) => setEmailReadState(emailKey, true), [setEmailReadState]);
+  const markEmailUnread = useCallback((emailKey) => setEmailReadState(emailKey, false), [setEmailReadState]);
 
   const handleDismiss = useCallback(async (emailId) => {
     dismissEmail(emailId).catch(() => {});
@@ -29,7 +52,7 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
       const updated = JSON.parse(JSON.stringify(prev));
       for (const acct of updated.emails?.accounts || []) {
         acct.important = acct.important.filter(e => e.id !== emailId);
-        acct.unread = acct.important.length;
+        recountUnread(acct);
       }
       return updated;
     });
@@ -172,6 +195,8 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
       handleAddTask,
       handleUpdateTaskStatus,
       markAccountEmailsRead,
+      markEmailRead,
+      markEmailUnread,
       emailAccounts,
       currentAccount,
       emailSectionRef,

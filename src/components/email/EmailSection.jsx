@@ -113,17 +113,16 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
     activeAccount, setActiveAccount,
     selectedEmail, setSelectedEmail,
     confirmDismissId, setConfirmDismissId, handleDismiss: onDismiss,
-    markAccountEmailsRead,
+    markAccountEmailsRead, markEmailRead, markEmailUnread,
     setLoadingBillId, emailSectionRef, totalNoiseCount,
   } = useDashboard();
 
   const emailRowRefs = useRef({});
-  const [markedRead, setMarkedRead] = useState(() => new Set());
   const [noiseExpanded, setNoiseExpanded] = useState(false);
   const [openNoise, setOpenNoise] = useState(null);
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
-  const hasUnread = currentAccount?.important?.some(e => !e.read && !markedRead.has(e.uid || e.id) && !markedRead.has(e.id));
+  const hasUnread = currentAccount?.important?.some(e => !e.read);
 
   // Enrich the currently selected briefing email with account metadata so
   // EmailReader can render the account chip/label/icon. The dashboard list
@@ -191,19 +190,6 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
     return { action, urgency, hasBill, summary: preview };
   }, [enrichedSelectedEmail]);
 
-  // When the reader auto-marks an email as read, mirror that into the local
-  // markedRead set so the row visibly dims. Keyed by both id and uid so
-  // lookups in the row-level unread check work regardless of which key the
-  // email carries.
-  const handleReaderMarkedRead = useCallback(() => {
-    if (!selectedEmail) return;
-    setMarkedRead((prev) => {
-      const next = new Set(prev);
-      if (selectedEmail.id) next.add(selectedEmail.id);
-      if (selectedEmail.uid) next.add(selectedEmail.uid);
-      return next;
-    });
-  }, [selectedEmail]);
 
   // Trash action for the overlay footer. Two-step confirm lives in local
   // state, keyed by email id so it auto-resets when the user cycles via ↑/↓.
@@ -278,11 +264,6 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
     setMarkingAllRead(true);
     try {
       await markAllEmailsAsRead(uids);
-      setMarkedRead(prev => {
-        const next = new Set(prev);
-        uids.forEach(id => next.add(id));
-        return next;
-      });
       markAccountEmailsRead();
     } catch {
       // silently fail
@@ -357,7 +338,7 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
         {currentAccount.important.map((email) => {
           const s = urgencyStyles[email.urgency] || urgencyStyles.low;
           const isCarriedOver = (email.seenCount || 1) >= 2;
-          const isRead = markedRead.has(email.id) || markedRead.has(email.uid) || email.read;
+          const isRead = !!email.read;
           return (
             <MotionItem key={email.id}>
               <MaybeSwipe isMobile={isMobile} onAction={() => onDismiss(email.id)}>
@@ -535,7 +516,8 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
         accountNav={accountNav}
         triage={readerTriage}
         actions={readerActions}
-        onMarkedRead={handleReaderMarkedRead}
+        onMarkedRead={markEmailRead}
+        onMarkedUnread={markEmailUnread}
         onLoaded={() => {
           setLoadingBillId(null);
           // Scroll the originating row into view if it's off-screen, so
