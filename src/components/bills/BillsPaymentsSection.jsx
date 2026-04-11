@@ -4,6 +4,7 @@ import { typeLabels } from "../../lib/dashboard-helpers";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { markBillPaid } from "../../api";
 
 const LOADING_MESSAGES = [
   "Pulling in bills from Actual...",
@@ -96,7 +97,31 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
   } = useDashboard();
 
   const allEmailBills = billEmails.filter((e) => e.extractedBill);
-  const scheduledBills = useMemo(() => bills || [], [bills]);
+  const [paidLocal, setPaidLocal] = useState(() => new Set());
+  const [payingId, setPayingId] = useState(null);
+  const [payError, setPayError] = useState(null);
+  const scheduledBills = useMemo(
+    () => (bills || []).filter((b) => !paidLocal.has(b.id)),
+    [bills, paidLocal],
+  );
+
+  async function handleMarkPaid(billId) {
+    if (payingId) return;
+    setPayingId(billId);
+    setPayError(null);
+    try {
+      await markBillPaid(billId);
+      setPaidLocal((prev) => {
+        const next = new Set(prev);
+        next.add(billId);
+        return next;
+      });
+    } catch (err) {
+      setPayError(err.message || "Failed to mark paid");
+    } finally {
+      setPayingId(null);
+    }
+  }
 
   // Combine scheduled bills + recent transactions for cross-reference matching
   const txns = useMemo(() => recentTransactions || [], [recentTransactions]);
@@ -389,6 +414,10 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
             </div>
           )}
 
+          {payError && (
+            <div className="text-[10px] text-[#f38ba8] mb-1.5">{payError}</div>
+          )}
+
           {/* Populated bills */}
           {scheduledBills.length > 0 && (
           <div style={{ maxHeight: 320, overflowY: "auto", overscrollBehavior: "contain" }}>
@@ -399,7 +428,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
               return (
                 <MotionItem key={bill.id}>
                   <div
-                    className="relative rounded-md py-2 px-3 pl-4 transition-all duration-150"
+                    className="group relative rounded-md py-2 px-3 pl-4 transition-all duration-150"
                     style={{
                       background: days !== null && days <= 1 ? `${uc.accent}0a` : "rgba(36,36,58,0.4)",
                       border: days !== null && days <= 1 ? `1px solid ${uc.accent}20` : "1px solid rgba(255,255,255,0.04)",
@@ -422,6 +451,22 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
+                        {days !== null && days <= 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleMarkPaid(bill.id); }}
+                            disabled={payingId === bill.id}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-[10px] font-semibold uppercase tracking-wide cursor-pointer rounded px-2 py-0.5"
+                            style={{
+                              color: "#a6e3a1",
+                              background: "rgba(166,227,161,0.1)",
+                              border: "1px solid rgba(166,227,161,0.25)",
+                              fontFamily: "inherit",
+                            }}
+                          >
+                            {payingId === bill.id ? "Marking..." : "Mark paid"}
+                          </button>
+                        )}
                         <span
                           className="text-[10px] max-sm:text-xs font-semibold tabular-nums px-2 py-0.5 rounded"
                           style={{ color: uc.text, background: uc.bg }}

@@ -71,6 +71,7 @@ export const createTodoistTask = (data) => apiFetch("/api/briefing/todoist/tasks
 
 // Actual Budget
 export const sendToActualBudget = (bill) => apiFetch("/api/briefing/actual/send", { method: "POST", body: JSON.stringify(bill) });
+export const markBillPaid = (id) => apiFetch(`/api/briefing/actual/bills/${encodeURIComponent(id)}/mark-paid`, { method: "POST" });
 export const getActualAccounts = () => apiFetch("/api/briefing/actual/accounts");
 export const getActualPayees = () => apiFetch("/api/briefing/actual/payees");
 export const getActualCategories = () => apiFetch("/api/briefing/actual/categories");

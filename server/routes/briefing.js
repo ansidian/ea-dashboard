@@ -6,7 +6,7 @@ import { indexEmails } from "../briefing/email-index.js";
 import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, markAsUnread as gmailMarkAsUnread, trashMessage as gmailTrash, batchMarkAsRead as gmailBatchMarkAsRead } from "../briefing/gmail.js";
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, markAsUnread as icloudMarkAsUnread, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
-import { sendBill, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
+import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
 import { completeTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask } from "../briefing/todoist.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
@@ -833,6 +833,16 @@ router.post("/actual/send", async (req, res) => {
     res.json(await sendBill(billData, userId));
   } catch (err) {
     console.error("Error sending to Actual Budget:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/actual/bills/:id/mark-paid", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    res.json(await markBillPaid(req.params.id, userId));
+  } catch (err) {
+    console.error("Error marking bill paid:", err);
     res.status(500).json({ message: err.message });
   }
 });

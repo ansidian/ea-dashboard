@@ -364,6 +364,21 @@ export async function getUpcomingBills(userId) {
     .sort((a, b) => a.next_date.localeCompare(b.next_date));
 }
 
+export function markBillPaid(scheduleId, userId) {
+  return withLock(async () => {
+    const { serverURL, password, syncId } = await getActualConfig(userId);
+    try {
+      await actualApi.init({ serverURL, password });
+      await actualApi.downloadBudget(syncId);
+      await actualApi.internal.send("schedule/post-transaction", { id: scheduleId });
+      await actualApi.sync();
+      return { success: true };
+    } finally {
+      await actualApi.shutdown().catch(() => {});
+    }
+  });
+}
+
 export function sendBill(billData, userId) {
   return withLock(async () => {
     const { serverURL, password, syncId } = await getActualConfig(userId);
