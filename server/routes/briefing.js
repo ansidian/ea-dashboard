@@ -7,7 +7,7 @@ import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, markAs
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, markAsUnread as icloudMarkAsUnread, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
-import { completeTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask } from "../briefing/todoist.js";
+import { completeTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask, updateTodoistTask } from "../briefing/todoist.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
 import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
@@ -925,6 +925,17 @@ router.post("/todoist/tasks", async (req, res) => {
     res.json(task);
   } catch (err) {
     console.error("Error creating Todoist task:", err.message);
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.post("/todoist/tasks/:id", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    const task = await updateTodoistTask(userId, req.params.id, req.body);
+    res.json(task);
+  } catch (err) {
+    console.error("Error updating Todoist task:", err.message);
     res.status(400).json({ message: err.message });
   }
 });

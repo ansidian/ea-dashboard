@@ -47,7 +47,7 @@ async function fetchProjects(token) {
     params.set("limit", "200");
     const data = await todoistFetch(token, `/projects?${params}`);
     for (const p of data.results || data) {
-      map.set(p.id, { name: p.name, color: p.color });
+      map.set(p.id, { name: p.name, color: p.color, isInbox: !!p.is_inbox_project });
     }
     cursor = data.next_cursor || null;
   } while (cursor);
@@ -152,7 +152,12 @@ export async function fetchTodoistProjects(userId) {
   const token = await getToken(userId);
   if (!token) throw new Error("Todoist not configured");
   const projects = await fetchProjects(token);
-  return Array.from(projects.entries()).map(([id, p]) => ({ id, name: p.name, color: mapColor(p.color) }));
+  return Array.from(projects.entries()).map(([id, p]) => ({
+    id,
+    name: p.name,
+    color: mapColor(p.color),
+    isInbox: !!p.isInbox,
+  }));
 }
 
 export async function fetchTodoistLabels(userId) {
@@ -185,6 +190,43 @@ export async function createTodoistTask(userId, { content, description, project_
   });
 
   // Return in the same format as fetchTodoistTasks
+  const projects = await fetchProjects(token);
+  const proj = projects.get(task.project_id);
+  return {
+    id: task.id,
+    title: task.content,
+    due_date: extractDate(task.due),
+    due_time: formatTime12h(task.due?.date),
+    class_name: proj?.name || "Todoist",
+    class_color: proj ? mapColor(proj.color) : "#cba6da",
+    points_possible: null,
+    status: "incomplete",
+    source: "todoist",
+    description: task.description || "",
+    url: todoistTaskUrl(task.content, task.id),
+    priority: task.priority,
+    labels: task.labels || [],
+  };
+}
+
+export async function updateTodoistTask(userId, taskId, { content, description, project_id, priority, labels, due_string }) {
+  const token = await getToken(userId);
+  if (!token) throw new Error("Todoist not configured");
+  if (!taskId) throw new Error("Task id is required");
+
+  const body = {};
+  if (content !== undefined) body.content = content.trim();
+  if (description !== undefined) body.description = description;
+  if (project_id !== undefined) body.project_id = project_id;
+  if (priority !== undefined) body.priority = priority;
+  if (labels !== undefined) body.labels = labels;
+  if (due_string !== undefined) body.due_string = due_string;
+
+  const task = await todoistFetch(token, `/tasks/${taskId}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
   const projects = await fetchProjects(token);
   const proj = projects.get(task.project_id);
   return {

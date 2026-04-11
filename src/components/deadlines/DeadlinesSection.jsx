@@ -5,12 +5,60 @@ import CTMCard from "../ctm/CTMCard";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
 import AddTaskPanel from "../todoist/AddTaskPanel";
+import ContextMenu from "../ui/ContextMenu";
+
+function openInNewTab(url) {
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function buildTaskMenu(task, { onEdit, onComplete, onStatusChange }) {
+  const isTodoist = task.source === "todoist";
+  const isCanvas = task.source === "canvas";
+  const isComplete = task.status === "complete";
+
+  if (isTodoist) {
+    return [
+      { label: "Edit task", onSelect: onEdit },
+      !isComplete && { label: "Mark complete", onSelect: onComplete },
+      { type: "separator" },
+      task.url && { label: "Open in Todoist", onSelect: () => openInNewTab(task.url) },
+    ].filter(Boolean);
+  }
+
+  // Canvas / manual CTM — spine statuses: incomplete, in_progress, complete
+  const statusItems = [];
+  if (task.status !== "incomplete") {
+    statusItems.push({ label: "Mark incomplete", onSelect: () => onStatusChange("incomplete") });
+  }
+  if (task.status !== "in_progress") {
+    statusItems.push({ label: "Mark in-progress", onSelect: () => onStatusChange("in_progress") });
+  }
+  if (task.status !== "complete") {
+    statusItems.push({ label: "Mark complete", onSelect: () => onStatusChange("complete") });
+  }
+
+  const ctmUrl = `https://ctm.andysu.tech/#/event/${task.id}`;
+  const openItems = [];
+  if (isCanvas && task.url) {
+    openItems.push({ label: "Open in Canvas", onSelect: () => openInNewTab(task.url) });
+  }
+  openItems.push({ label: "Open in CTM", onSelect: () => openInNewTab(ctmUrl) });
+
+  return [
+    ...statusItems,
+    { type: "separator" },
+    ...openItems,
+  ];
+}
 
 export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, className }) {
-  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus, handleAddTask } = useDashboard();
+  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus, handleAddTask, handleUpdateTask } = useDashboard();
   const [addPanelOpen, setAddPanelOpen] = useState(false);
   const [addBtnHover, setAddBtnHover] = useState(false);
   const addBtnRef = useRef(null);
+  const [menuState, setMenuState] = useState(null); // { task, x, y, rowEl }
+  const [editingTask, setEditingTask] = useState(null); // { task, anchorRef }
   const ctmItems = (ctm?.upcoming || []).map(t => ({ ...t, _type: "ctm" }));
   const todoistItems = (todoist?.upcoming || []).map(t => ({ ...t, _type: "ctm" }));
   const allItems = [...ctmItems, ...todoistItems].sort((a, b) => {
@@ -121,6 +169,16 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
                   }
                   onComplete={handleCompleteTask}
                   onStatusChange={handleUpdateTaskStatus}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMenuState({
+                      task: item,
+                      x: e.clientX,
+                      y: e.clientY,
+                      rowEl: e.currentTarget,
+                    });
+                  }}
                 />
               </MotionItem>
             );
@@ -128,11 +186,38 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
           return null;
         })}
       </MotionList>
-      {addPanelOpen && (
+      {addPanelOpen && !editingTask && (
         <AddTaskPanel
           anchorRef={addBtnRef}
           onClose={() => setAddPanelOpen(false)}
           onTaskAdded={(task) => handleAddTask(task)}
+        />
+      )}
+      {editingTask && (
+        <AddTaskPanel
+          anchorRef={editingTask.anchorRef}
+          editingTask={editingTask.task}
+          onClose={() => setEditingTask(null)}
+          onTaskUpdated={(task) => handleUpdateTask(task)}
+        />
+      )}
+      {menuState && (
+        <ContextMenu
+          x={menuState.x}
+          y={menuState.y}
+          onClose={() => setMenuState(null)}
+          items={buildTaskMenu(menuState.task, {
+            onEdit: () => {
+              const rowEl = menuState.rowEl;
+              setEditingTask({
+                task: menuState.task,
+                anchorRef: { current: rowEl },
+              });
+            },
+            onComplete: () => handleCompleteTask(menuState.task.id),
+            onStatusChange: (status) =>
+              handleUpdateTaskStatus(menuState.task.id, status),
+          })}
         />
       )}
     </Section>

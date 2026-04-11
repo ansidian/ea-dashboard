@@ -102,6 +102,29 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
     if (expandedTask === taskId) setExpandedTask(null);
   }, [expandedTask, setBriefing, removeCompletedTask]);
 
+  const handleUpdateTask = useCallback((updatedTask) => {
+    setBriefing(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      if (!updated.todoist?.upcoming) return updated;
+      const idx = updated.todoist.upcoming.findIndex(
+        t => String(t.id) === String(updatedTask.id),
+      );
+      if (idx >= 0) updated.todoist.upcoming[idx] = updatedTask;
+
+      // Recalculate stats — due_date may have changed
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+      const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+      let dueToday = 0, dueThisWeek = 0;
+      for (const d of updated.todoist.upcoming) {
+        if (d.due_date === today) dueToday++;
+        if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+      }
+      updated.todoist.stats = { incomplete: updated.todoist.upcoming.length, dueToday, dueThisWeek, totalPoints: 0 };
+
+      return updated;
+    });
+  }, [setBriefing]);
+
   const handleAddTask = useCallback((task) => {
     setBriefing(prev => {
       const updated = JSON.parse(JSON.stringify(prev));
@@ -193,6 +216,7 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
       handleDismiss,
       handleCompleteTask,
       handleAddTask,
+      handleUpdateTask,
       handleUpdateTaskStatus,
       markAccountEmailsRead,
       markEmailRead,

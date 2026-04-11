@@ -8,6 +8,24 @@ import useEmailReaderNav from "../../hooks/email/useEmailReaderNav";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { timeAgo } from "../../lib/dashboard-helpers";
 import { CheckCheck } from "lucide-react";
+import ContextMenu from "../ui/ContextMenu";
+
+function buildLiveEmailMenu(email, isRead, isPinned, {
+  onOpen, onMarkRead, onMarkUnread, onTogglePin, onAddBill, onDismiss,
+}) {
+  return [
+    { label: "Open", onSelect: onOpen },
+    isRead
+      ? { label: "Mark unread", onSelect: onMarkUnread }
+      : { label: "Mark read", onSelect: onMarkRead },
+    isPinned
+      ? { label: "Remove from next briefing", onSelect: onTogglePin }
+      : { label: "Include in next briefing", onSelect: onTogglePin },
+    { label: "Add bill", onSelect: onAddBill },
+    { type: "separator" },
+    { label: "Dismiss", onSelect: onDismiss },
+  ];
+}
 
 
 function getTimestampColor(dateStr) {
@@ -121,6 +139,7 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
   // Keyed by email uid so the bill form state auto-resets when the user
   // cycles to a different email via ↑/↓. Empty string = closed, uid = open.
   const [billFormForUid, setBillFormForUid] = useState("");
+  const [emailMenu, setEmailMenu] = useState(null); // { email, x, y }
   const emailRowRefs = useRef({});
 
   const showBillForm = billFormForUid && billFormForUid === openEmail?.uid;
@@ -261,6 +280,11 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                 email={email}
                 dimmed={rowIsRead && !pinned}
                 onOpen={openEmailInReader}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setEmailMenu({ email, x: e.clientX, y: e.clientY });
+                }}
                 rowRef={(el) => {
                   emailRowRefs.current[email.uid] = el;
                 }}
@@ -381,6 +405,33 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
           }
         }}
       />
+
+      {emailMenu && (
+        <ContextMenu
+          x={emailMenu.x}
+          y={emailMenu.y}
+          onClose={() => setEmailMenu(null)}
+          items={buildLiveEmailMenu(
+            emailMenu.email,
+            isRead(emailMenu.email),
+            isPinned(emailMenu.email),
+            {
+              onOpen: () => openEmailInReader(emailMenu.email),
+              onMarkRead: () => markRead(emailMenu.email.uid),
+              onMarkUnread: () => markUnread(emailMenu.email.uid),
+              onTogglePin: () =>
+                isPinned(emailMenu.email)
+                  ? unpin(emailMenu.email.uid)
+                  : pin(emailMenu.email.uid),
+              onAddBill: () => {
+                setBillFormForUid(emailMenu.email.uid);
+                setOpenEmail(emailMenu.email);
+              },
+              onDismiss: () => dismiss(emailMenu.email.uid),
+            },
+          )}
+        />
+      )}
     </>
   );
 

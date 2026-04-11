@@ -4,6 +4,7 @@ import {
   getTodoistProjects,
   getTodoistLabels,
   createTodoistTask,
+  updateTodoistTask,
 } from "../../api";
 
 // --- Token parsing (regex + guardrails) ---
@@ -551,33 +552,128 @@ function TokenAutocomplete({ cursorPos, input, items, type, onSelect }) {
 
 // --- Main panel ---
 
-export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
-  const [input, setInput] = useState("");
-  const [description, setDescription] = useState("");
+export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingTask, onTaskUpdated }) {
+  const isEdit = !!editingTask;
+  const [input, setInput] = useState(() => (editingTask?.title || ""));
+  const [description, setDescription] = useState(() => (editingTask?.description || ""));
   const [projects, setProjects] = useState([]);
   const [labels, setLabels] = useState([]);
   const [manualProject, setManualProject] = useState(null);
-  const [manualPriority, setManualPriority] = useState(null);
-  const [manualLabels, setManualLabels] = useState(null);
+  const [manualPriority, setManualPriority] = useState(
+    editingTask?.priority ?? null,
+  );
+  // Seeded with name-keyed placeholders; resolved against the real label
+  // list once it loads so ids match and LabelPicker dedupes correctly.
+  const [manualLabels, setManualLabels] = useState(
+    editingTask?.labels?.length
+      ? editingTask.labels.map((name) => ({ id: `name:${name}`, name, color: "#cba6da" }))
+      : null,
+  );
   const [manualDue, setManualDue] = useState("");
-  const [overrides, setOverrides] = useState({});
+  const [overrides, setOverrides] = useState(
+    editingTask
+      ? {
+          project: false, // set true once the project list loads and we resolve a match
+          priority: editingTask.priority != null,
+          labels: !!editingTask.labels?.length,
+          due: false, // seeded due is shown as an overlay, not as field text
+        }
+      : {},
+  );
+
+  // Format the editing task's current due date/time as a display string
+  // that matches parsed.dateFormatted's style ("Tomorrow, Apr 11 at 8:00 AM").
+  const seededDueDisplay = useMemo(() => {
+    if (!editingTask?.due_date) return null;
+    const [y, mo, d] = editingTask.due_date.split("-").map(Number);
+    if (!y || !mo || !d) return null;
+    const date = new Date(y, mo - 1, d);
+    let time = null;
+    if (editingTask.due_time) {
+      const tm = editingTask.due_time.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+      if (tm) {
+        let hour = parseInt(tm[1], 10);
+        const minute = tm[2] ? parseInt(tm[2], 10) : 0;
+        const ampm = tm[3].toLowerCase();
+        if (ampm === "pm" && hour < 12) hour += 12;
+        if (ampm === "am" && hour === 12) hour = 0;
+        time = { hour, minute };
+      }
+    }
+    return formatResolvedDate({ date, time });
+  }, [editingTask?.due_date, editingTask?.due_time]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [pos, setPos] = useState(null);
   const [autocompleteType, setAutocompleteType] = useState(null);
   const [cursorPos, setCursorPos] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const [closing, setClosing] = useState(false);
   const panelRef = useRef(null);
+  const closeTimerRef = useRef(null);
+
+  // Delayed close so the exit animation has time to play. Callers should
+  // use requestClose() instead of onClose() directly so click-outside /
+  // Escape / submit all go through the same 180ms fade.
+  const requestClose = useCallback(() => {
+    if (closeTimerRef.current) return;
+    setClosing(true);
+    closeTimerRef.current = setTimeout(() => {
+      onClose();
+    }, 180);
+  }, [onClose]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
   const inputRef = useRef(null);
 
   // Fetch projects and labels on mount
   useEffect(() => {
     getTodoistProjects()
-      .then(setProjects)
+      .then((list) => {
+        // Inbox first, then the rest in the server order.
+        const sorted = [...list].sort((a, b) => {
+          if (a.isInbox) return -1;
+          if (b.isInbox) return 1;
+          return 0;
+        });
+        setProjects(sorted);
+      })
       .catch(() => {});
     getTodoistLabels()
       .then(setLabels)
       .catch(() => {});
   }, []);
+
+  // In edit mode, resolve the editing task's project once the project list loads.
+  useEffect(() => {
+    if (!editingTask || !projects.length || manualProject) return;
+    const match = projects.find((p) => p.name === editingTask.class_name);
+    if (match) {
+      setManualProject(match);
+      setOverrides((o) => ({ ...o, project: true }));
+    }
+  }, [editingTask, projects, manualProject]);
+
+  // In edit mode, swap the name-keyed placeholder labels for real label
+  // objects once the label list loads. Without this, LabelPicker can't
+  // filter out labels the task already has.
+  useEffect(() => {
+    if (!editingTask || !labels.length) return;
+    setManualLabels((prev) => {
+      if (!prev?.length) return prev;
+      const needsResolve = prev.some((l) => String(l.id).startsWith("name:"));
+      if (!needsResolve) return prev;
+      return prev.map((l) => {
+        if (!String(l.id).startsWith("name:")) return l;
+        const real = labels.find((x) => x.name === l.name);
+        return real || l;
+      });
+    });
+  }, [editingTask, labels]);
 
   // Parse tokens (debounced via useMemo since input is the only dep)
   const parsed = useMemo(
@@ -628,6 +724,20 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
       const newInput = `${before}${trigger}${item.name}${after ? " " + after.trimStart() : " "}`;
       setInput(newInput);
       setAutocompleteType(null);
+      // Sync into manual state so resolved* picks it up even when overrides
+      // are already set (edit mode). In create mode this is redundant with
+      // token parsing but harmless.
+      if (trigger === "#") {
+        setManualProject(item);
+        setOverrides((prev) => ({ ...prev, project: true }));
+      } else if (trigger === "@") {
+        setManualLabels((prev) => {
+          const existing = prev || [];
+          if (existing.find((l) => l.id === item.id)) return existing;
+          return [...existing, item];
+        });
+        setOverrides((prev) => ({ ...prev, labels: true }));
+      }
       // Refocus and set cursor after the inserted token
       setTimeout(() => {
         const el = inputRef.current;
@@ -663,9 +773,15 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
     };
   }, [updatePos]);
 
-  // Focus input on mount
+  // Focus input on mount, flip visible on next frame so the enter
+  // animation has a starting state to transition from.
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 50);
+    const raf = requestAnimationFrame(() => setVisible(true));
+    const t = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
   }, []);
 
   // Click outside to close
@@ -676,20 +792,20 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
         panelRef.current?.contains(e.target)
       )
         return;
-      onClose();
+      requestClose();
     }
     document.addEventListener("pointerdown", handleClick);
     return () => document.removeEventListener("pointerdown", handleClick);
-  }, [anchorRef, onClose]);
+  }, [anchorRef, requestClose]);
 
   // Escape to close
   useEffect(() => {
     function handleKey(e) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") requestClose();
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [requestClose]);
 
   // Scroll trapping
   useEffect(() => {
@@ -718,13 +834,22 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
       if (description.trim()) payload.description = description.trim();
       if (resolvedProject) payload.project_id = resolvedProject.id;
       if (resolvedPriority) payload.priority = resolvedPriority;
-      if (resolvedLabels.length)
+      // On edit, always send labels so clearing them actually takes effect.
+      // On create, only send when non-empty.
+      if (isEdit || resolvedLabels.length) {
         payload.labels = resolvedLabels.map((l) => l.name);
+      }
       if (resolvedDue) payload.due_string = resolvedDue;
 
-      const task = await createTodoistTask(payload);
-      onTaskAdded(task);
-      onClose();
+      let task;
+      if (isEdit) {
+        task = await updateTodoistTask(editingTask.id, payload);
+        onTaskUpdated?.(task);
+      } else {
+        task = await createTodoistTask(payload);
+        onTaskAdded?.(task);
+      }
+      requestClose();
     } catch (err) {
       setError(err.message || "Failed to create task");
     } finally {
@@ -751,6 +876,8 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
 
   if (!pos) return null;
 
+  const active = visible && !closing;
+
   return createPortal(
     <div
       ref={panelRef}
@@ -768,6 +895,11 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
         isolation: "isolate",
         overscrollBehavior: "contain",
         fontFamily: "system-ui, -apple-system, sans-serif",
+        opacity: active ? 1 : 0,
+        transform: active ? "translateY(0)" : "translateY(-6px)",
+        transition:
+          "opacity 180ms ease, transform 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        transformOrigin: "top left",
       }}
     >
       {/* Task input */}
@@ -878,9 +1010,9 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
           label="Project"
           value={resolvedProject}
           color={resolvedProject ? "#cba6da" : null}
-          options={[{ id: null, name: "Inbox" }, ...projects]}
+          options={projects}
           onChange={(opt) => {
-            setManualProject(opt.id ? opt : null);
+            setManualProject(opt);
             setOverrides((prev) => ({ ...prev, project: true }));
           }}
           renderValue={(val) => val?.name || "Inbox"}
@@ -944,16 +1076,20 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
               setOverrides((prev) => ({ ...prev, due: true }));
             }}
             placeholder={
-              parsed.dateFormatted ? "" : "e.g. tomorrow, next monday at 8am"
+              parsed.dateFormatted || seededDueDisplay
+                ? ""
+                : "e.g. tomorrow, next monday at 8am"
             }
             style={{
               width: "100%",
-              background: resolvedDue
-                ? "rgba(249,226,175,0.06)"
-                : "rgba(205,214,244,0.04)",
-              border: resolvedDue
-                ? "1px solid rgba(249,226,175,0.15)"
-                : "1px solid rgba(205,214,244,0.08)",
+              background:
+                resolvedDue || seededDueDisplay
+                  ? "rgba(249,226,175,0.06)"
+                  : "rgba(205,214,244,0.04)",
+              border:
+                resolvedDue || seededDueDisplay
+                  ? "1px solid rgba(249,226,175,0.15)"
+                  : "1px solid rgba(205,214,244,0.08)",
               borderRadius: 8,
               padding: "8px 12px",
               color: resolvedDue ? "#f9e2af" : "rgba(205,214,244,0.35)",
@@ -963,7 +1099,7 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
               transition: "all 0.2s",
             }}
           />
-          {!manualDue && parsed.dateFormatted && (
+          {!manualDue && (parsed.dateFormatted || seededDueDisplay) && (
             <div
               style={{
                 position: "absolute",
@@ -995,7 +1131,7 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
                 <line x1="8" y1="2" x2="8" y2="6" />
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
-              {parsed.dateFormatted}
+              {parsed.dateFormatted || seededDueDisplay}
             </div>
           )}
         </div>
@@ -1131,7 +1267,9 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded }) {
             transition: "all 0.2s",
           }}
         >
-          {submitting ? "Adding..." : "Add task"}
+          {submitting
+            ? isEdit ? "Saving..." : "Adding..."
+            : isEdit ? "Save" : "Add task"}
         </button>
       </div>
     </div>,

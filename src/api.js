@@ -68,6 +68,7 @@ export const deleteBriefing = (id) => apiFetch(`/api/briefing/${id}`, { method: 
 export const getTodoistProjects = () => apiFetch("/api/briefing/todoist/projects");
 export const getTodoistLabels = () => apiFetch("/api/briefing/todoist/labels");
 export const createTodoistTask = (data) => apiFetch("/api/briefing/todoist/tasks", { method: "POST", body: JSON.stringify(data) });
+export const updateTodoistTask = (id, data) => apiFetch(`/api/briefing/todoist/tasks/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(data) });
 
 // Actual Budget
 export const sendToActualBudget = (bill) => apiFetch("/api/briefing/actual/send", { method: "POST", body: JSON.stringify(bill) });

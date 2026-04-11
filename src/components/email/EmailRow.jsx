@@ -84,6 +84,7 @@ export default function EmailRow({
   email,
   dimmed,
   onOpen,
+  onContextMenu,
   rowRef,
   accentBar,
   desktopMeta,
@@ -107,6 +108,7 @@ export default function EmailRow({
       role="button"
       tabIndex={0}
       onClick={handleClick}
+      onContextMenu={onContextMenu}
       className={cn(
         "group relative rounded-lg cursor-pointer transition-all duration-150 py-3.5 px-4",
         accentBar && "pl-5",

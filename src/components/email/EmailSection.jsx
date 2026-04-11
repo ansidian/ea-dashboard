@@ -7,14 +7,33 @@ import EmailReaderOverlay from "./EmailReaderOverlay";
 import useEmailReaderNav from "../../hooks/email/useEmailReaderNav";
 import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
-import { markAllEmailsAsRead, trashEmail } from "../../api";
+import { markAllEmailsAsRead, trashEmail, markEmailAsRead, markEmailAsUnread } from "../../api";
 import { CheckCheck } from "lucide-react";
 import useIsMobile from "../../hooks/useIsMobile";
 import SwipeToReveal from "../ui/SwipeToReveal";
+import ContextMenu from "../ui/ContextMenu";
 
 function MaybeSwipe({ isMobile, onAction, children }) {
   if (!isMobile) return children;
   return <SwipeToReveal onAction={onAction}>{children}</SwipeToReveal>;
+}
+
+function buildBriefingEmailMenu(email, { onOpen, onMarkRead, onMarkUnread, onDismiss, onTrash }) {
+  const isRead = !!email.read;
+  return [
+    { label: "Open", onSelect: onOpen },
+    isRead
+      ? { label: "Mark unread", onSelect: onMarkUnread }
+      : { label: "Mark read", onSelect: onMarkRead },
+    { type: "separator" },
+    {
+      label: "Remove",
+      children: [
+        { label: "Dismiss", onSelect: onDismiss },
+        { label: "Trash", danger: true, onSelect: onTrash },
+      ],
+    },
+  ];
 }
 
 // Reusable ghost button — eliminates duplicated inline hover handlers
@@ -121,6 +140,7 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
   const [noiseExpanded, setNoiseExpanded] = useState(false);
   const [openNoise, setOpenNoise] = useState(null);
   const [markingAllRead, setMarkingAllRead] = useState(false);
+  const [emailMenu, setEmailMenu] = useState(null); // { email, x, y }
 
   const hasUnread = currentAccount?.important?.some(e => !e.read);
 
@@ -346,6 +366,11 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
                 email={email}
                 dimmed={isCarriedOver || isRead}
                 onOpen={openEmailInReader}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setEmailMenu({ email, x: e.clientX, y: e.clientY });
+                }}
                 rowRef={(el) => { emailRowRefs.current[email.id] = el; }}
                 preview={email.preview}
                 accentBar={
@@ -539,6 +564,33 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
         onClose={closeNoise}
         navigation={noiseNav}
       />
+
+      {emailMenu && (
+        <ContextMenu
+          x={emailMenu.x}
+          y={emailMenu.y}
+          onClose={() => setEmailMenu(null)}
+          items={buildBriefingEmailMenu(emailMenu.email, {
+            onOpen: () => openEmailInReader(emailMenu.email),
+            onMarkRead: async () => {
+              const key = emailMenu.email.uid || emailMenu.email.id;
+              markEmailRead(key);
+              try { await markEmailAsRead(key); } catch { /* ignore */ }
+            },
+            onMarkUnread: async () => {
+              const key = emailMenu.email.uid || emailMenu.email.id;
+              markEmailUnread(key);
+              try { await markEmailAsUnread(key); } catch { /* ignore */ }
+            },
+            onDismiss: () => onDismiss(emailMenu.email.id),
+            onTrash: async () => {
+              const key = emailMenu.email.uid || emailMenu.email.id;
+              try { await trashEmail(key); } catch { /* ignore */ }
+              onDismiss(emailMenu.email.id);
+            },
+          })}
+        />
+      )}
     </>
   );
 

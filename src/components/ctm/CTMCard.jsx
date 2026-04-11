@@ -100,7 +100,7 @@ const ExternalLinkIcon = () => (
   </svg>
 );
 
-export default function CTMCard({ task, expanded, onToggle, onComplete, onStatusChange }) {
+export default function CTMCard({ task, expanded, onToggle, onComplete, onStatusChange, onContextMenu }) {
   const daysLabel = getDaysUntil(task.due_date);
   const urg = getDueUrgency(task.due_date);
   const isTodoist = task.source === "todoist";
@@ -125,6 +125,7 @@ export default function CTMCard({ task, expanded, onToggle, onComplete, onStatus
   return (
     <div
       onClick={onToggle}
+      onContextMenu={onContextMenu}
       role="button"
       tabIndex={0}
       className={`group relative rounded-lg p-3 px-4 pl-5 cursor-pointer transition-all duration-150${isCompleting ? " ctm-card-completing" : ""}`}
