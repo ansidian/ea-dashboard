@@ -3,6 +3,19 @@ import db from "../db/connection.js";
 
 const BASE_URL = "https://api.todoist.com/api/v1";
 
+// Todoist's REST API inverts our UI priority scale: API 4 = urgent, API 1 =
+// natural/no priority. Dashboard uses 1 = urgent, 4 = low, null = none.
+// Note: Todoist can't distinguish "user picked P4 Low" from "no priority" —
+// both come back as API 1, so a roundtrip collapses UI P4 → null.
+function toApiPriority(uiLevel) {
+  if (uiLevel == null) return undefined;
+  return 5 - uiLevel;
+}
+function toUiPriority(apiLevel) {
+  if (apiLevel == null || apiLevel === 1) return null;
+  return 5 - apiLevel;
+}
+
 // --- Caches: 10-minute TTL ---
 const CACHE_TTL_MS = 10 * 60 * 1000;
 let projectCache = { data: null, ts: 0 };
@@ -136,7 +149,7 @@ export async function fetchTodoistTasks(userId) {
         source: "todoist",
         description: t.description || "",
         url: todoistTaskUrl(t.content, t.id),
-        priority: t.priority,
+        priority: toUiPriority(t.priority),
         labels: t.labels || [],
       };
     });
@@ -180,7 +193,7 @@ export async function createTodoistTask(userId, { content, description, project_
   const body = { content: content.trim() };
   if (description) body.description = description;
   if (project_id) body.project_id = project_id;
-  if (priority) body.priority = priority;
+  if (priority) body.priority = toApiPriority(priority);
   if (labels?.length) body.labels = labels;
   if (due_string) body.due_string = due_string;
 
@@ -204,7 +217,7 @@ export async function createTodoistTask(userId, { content, description, project_
     source: "todoist",
     description: task.description || "",
     url: todoistTaskUrl(task.content, task.id),
-    priority: task.priority,
+    priority: toUiPriority(task.priority),
     labels: task.labels || [],
   };
 }
@@ -218,7 +231,7 @@ export async function updateTodoistTask(userId, taskId, { content, description, 
   if (content !== undefined) body.content = content.trim();
   if (description !== undefined) body.description = description;
   if (project_id !== undefined) body.project_id = project_id;
-  if (priority !== undefined) body.priority = priority;
+  if (priority !== undefined) body.priority = priority == null ? 1 : toApiPriority(priority);
   if (labels !== undefined) body.labels = labels;
   if (due_string !== undefined) body.due_string = due_string;
 
@@ -241,7 +254,7 @@ export async function updateTodoistTask(userId, taskId, { content, description, 
     source: "todoist",
     description: task.description || "",
     url: todoistTaskUrl(task.content, task.id),
-    priority: task.priority,
+    priority: toUiPriority(task.priority),
     labels: task.labels || [],
   };
 }
