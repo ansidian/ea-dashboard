@@ -466,21 +466,6 @@ export function mergeDeltaBriefing(prevBriefing, newBriefing, dismissedIds, allE
   return mergedAccounts;
 }
 
-// Inject read-but-untriaged emails as carried-over into briefing accounts
-function injectReadEmails(briefingJson, readNew) {
-  for (const e of readNew) {
-    const label = e.account_label;
-    let acct = (briefingJson.emails?.accounts || []).find(a => a.name === label);
-    if (!acct) {
-      acct = { name: label, icon: e.account_icon, color: e.account_color, important: [], noise: [], noise_count: 0, unread: 0 };
-      briefingJson.emails.accounts.push(acct);
-    }
-    if (!acct.important.some(ex => (ex.id || ex.uid) === (e.id || e.uid))) {
-      acct.important.push({ id: e.id || e.uid, uid: e.uid, from: e.from, subject: e.subject, body_preview: e.body_preview, date: e.date, read: true, seenCount: 1, account_label: e.account_label, account_icon: e.account_icon, account_color: e.account_color });
-    }
-  }
-}
-
 // Full generation: fetch data + Haiku AI analysis (with delta optimization)
 async function updateProgress(briefingId, progress) {
   await db.execute({
@@ -542,10 +527,9 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       return !triagedIds.has(eid) && !dismissedIds.has(eid);
     });
     const unreadNew = newEmails.filter(e => !e.read || pinnedIds.has(e.id || e.uid));
-    const readNew = newEmails.filter(e => e.read && !pinnedIds.has(e.id || e.uid));
     const calendarChanged = prevBriefing ? hasCalendarChanged(prevBriefing, calendar) : true;
 
-    await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${unreadNew.length} unread new, ${readNew.length} read · Analyzing...`);
+    await updateProgress(briefingId, `Fetched ${emails.length} email${emails.length !== 1 ? "s" : ""}, ${unreadNew.length} unread new · Analyzing...`);
 
     // Force AI if last call was >16h ago (prevents perpetual skips for clean-inbox users)
     const aiStale = !prevBriefing?.aiGeneratedAt ||
@@ -566,7 +550,6 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
           .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
         acct.unread = acct.important.length;
       }
-      injectReadEmails(cloned, readNew);
       fixEmailAccounts(cloned, emails, accounts);
       deduplicateBills(cloned);
       cloned.nextWeekCalendar = nextWeekCalendar;
@@ -619,25 +602,23 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     let briefingJson;
     if (unreadNew.length > 0 && unreadNew.length < emails.length && prevBriefing) {
       await updateProgress(briefingId, `Sending ${unreadNew.length} new email${unreadNew.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
-      console.log(`[EA] Delta generation: ${unreadNew.length} new unread emails (${readNew.length} read, ${emails.length - newEmails.length} previously triaged)`);
+      console.log(`[EA] Delta generation: ${unreadNew.length} new unread emails (${emails.length - newEmails.length} previously triaged)`);
       briefingJson = await callClaude({ emails: unreadNew, calendar, ctmDeadlines, todoistTasks, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar });
 
       // Merge previous triage with new triage using pure function
       const allEmailIds = new Set(emails.map(e => e.id || e.uid));
       const mergedAccounts = mergeDeltaBriefing(prevBriefing, briefingJson, dismissedIds, allEmailIds);
       briefingJson.emails.accounts = mergedAccounts;
-      injectReadEmails(briefingJson, readNew);
     } else {
       // Full generation: all emails are new or no previous triage
       const emailsForClaude = unreadNew.length > 0 ? unreadNew : emails;
       await updateProgress(briefingId, `Sending ${emailsForClaude.length} email${emailsForClaude.length !== 1 ? "s" : ""} to ${model || "Claude"}...`);
-      console.log(`[EA] Full generation: ${emailsForClaude.length} emails (${readNew.length} read skipped)`);
+      console.log(`[EA] Full generation: ${emailsForClaude.length} emails`);
       briefingJson = await callClaude({ emails: emailsForClaude, calendar, ctmDeadlines, todoistTasks, model, emailInterests, categories, historicalContext, upcomingBills, nextWeekCalendar });
       // Tag all emails with seenCount 1
       for (const acct of briefingJson.emails?.accounts || []) {
         acct.important = acct.important.map(e => ({ ...e, seenCount: 1 }));
       }
-      injectReadEmails(briefingJson, readNew);
     }
 
     // Reattach fields from original emails — Claude only sees/returns `id`, but the
