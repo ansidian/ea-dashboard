@@ -313,7 +313,7 @@ async function upsertTransferSchedule(billData) {
     return { success: true, message: `Transfer created as transaction (date is today or past)` };
   }
 
-  const name = billData.payee;
+  const name = billData.schedule_name;
   const extraConditions = [
     { op: "is", field: "payee", value: transferPayee.id },
     { op: "is", field: "account", value: billData.to_account_id },

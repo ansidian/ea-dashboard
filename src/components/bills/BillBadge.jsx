@@ -61,11 +61,28 @@ export default function BillBadge({ bill, model }) {
   const [editCategory, setEditCategory] = useState(bill.category_id || "");
   const [editFromAccount, setEditFromAccount] = useState("");
   const [editToAccount, setEditToAccount] = useState("");
+  const [editScheduleName, setEditScheduleName] = useState("");
   const [actualReady, setActualReady] = useState(!!_metadataCache);
   const [feeOverride, setFeeOverride] = useState(null); // null = auto, true/false = manual
   const [customFee, setCustomFee] = useState("");
 
   const isTransfer = editType === "transfer";
+
+  // auto-select From Account (savings preferred) and schedule name when in transfer mode
+  useEffect(() => {
+    if (!isTransfer || !accounts.length) return;
+    if (!editFromAccount) {
+      const savings = accounts.find(a => a.name.toLowerCase().includes("savings"))
+        || accounts.find(a => a.type === "checking" || a.name.toLowerCase().includes("checking"));
+      if (savings) setEditFromAccount(savings.id);
+    }
+    if (editToAccount) {
+      const acct = accounts.find(a => a.id === editToAccount);
+      if (acct && /\(\d{4}\)/.test(acct.name)) {
+        setEditScheduleName(`${acct.name} Payment`);
+      }
+    }
+  }, [editToAccount, isTransfer, accounts]);
 
   // detect CC fee from Actual payee name or original email payee
   const resolvedPayeeName = useMemo(() => {
@@ -94,17 +111,13 @@ export default function BillBadge({ bill, model }) {
       setCategories(data.categories);
       setActualReady(true);
 
-      // Auto-select accounts for transfers
-      if (bill.type === "transfer" && data.accounts.length) {
-        const checking = data.accounts.find(a => a.type === "checking" || a.name.toLowerCase().includes("checking"));
-        if (checking) setEditFromAccount(checking.id);
-        if (bill.payee) {
-          const match = data.accounts.find(a =>
-            a.name.toLowerCase().includes(bill.payee.toLowerCase()) ||
-            bill.payee.toLowerCase().includes(a.name.toLowerCase())
-          );
-          if (match) setEditToAccount(match.id);
-        }
+      // Auto-select To Account for transfers by matching email payee to account name
+      if (bill.type === "transfer" && bill.payee && data.accounts.length) {
+        const match = data.accounts.find(a =>
+          a.name.toLowerCase().includes(bill.payee.toLowerCase()) ||
+          bill.payee.toLowerCase().includes(a.name.toLowerCase())
+        );
+        if (match) setEditToAccount(match.id);
       }
 
       // Pre-select existing payee by name match
@@ -131,6 +144,7 @@ export default function BillBadge({ bill, model }) {
     if (isTransfer) {
       edited.from_account_id = editFromAccount;
       edited.to_account_id = editToAccount;
+      edited.schedule_name = editScheduleName.trim();
     } else {
       edited.account_id = editAccount || undefined;
       if (editCategory) edited.category_id = editCategory;
@@ -141,7 +155,7 @@ export default function BillBadge({ bill, model }) {
   };
 
   const canSend = editAmount.trim() && editDue &&
-    (isTransfer ? (editFromAccount && editToAccount) : (editPayee.trim() && editAccount));
+    (isTransfer ? (editFromAccount && editToAccount && editScheduleName.trim()) : (editPayee.trim() && editAccount));
 
   // formatRelativeDate is available for future date display needs in this component
   void formatRelativeDate;
@@ -240,6 +254,20 @@ export default function BillBadge({ bill, model }) {
               )}
             </div>
           </div>
+          {/* Schedule name for transfers */}
+          {isTransfer && (
+            <div className="flex gap-3 mt-2">
+              <div className="flex-1">
+                <div className="text-[10px] text-muted-foreground/50 mb-1">Schedule Name</div>
+                <Input
+                  value={editScheduleName}
+                  onChange={e => setEditScheduleName(e.target.value)}
+                  placeholder={bill.payee || "e.g. SoFi Credit Card"}
+                  className="bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium"
+                />
+              </div>
+            </div>
+          )}
           {/* CC fee row */}
           <div className="flex items-center gap-2 mt-3 animate-[fadeIn_0.15s_ease]">
             <div className="flex items-center gap-2 flex-1 min-w-0">
