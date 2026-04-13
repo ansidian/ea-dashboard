@@ -6,7 +6,7 @@ import { fetchEmails as fetchGmailEmails } from "../briefing/gmail.js";
 import { fetchEmails as fetchIcloudEmails } from "../briefing/icloud.js";
 import { fetchCalendar, getNextWeekRange, getTomorrowRange } from "../briefing/calendar.js";
 import { fetchWeather } from "../briefing/weather.js";
-import { getUpcomingBills, getRecentTransactions } from "../briefing/actual.js";
+import { getUpcomingBills, getRecentTransactions, getMetadata as getActualMetadata } from "../briefing/actual.js";
 import { decrypt } from "../briefing/encryption.js";
 
 const router = Router();
@@ -151,7 +151,7 @@ router.get("/all", async (req, res) => {
       }),
     ];
 
-    const [emailArrays, calendar, nextWeekCalendar, tomorrowCalendar, weather, bills, recentTransactions] = await Promise.all([
+    const [emailArrays, calendar, nextWeekCalendar, tomorrowCalendar, weather, bills, recentTransactions, actualMeta] = await Promise.all([
       Promise.all(emailPromises).then(arrays => arrays.flat()),
       fetchCalendar(calendarAccounts).catch(err => {
         console.error("[Live] Calendar fetch failed:", err.message);
@@ -184,6 +184,12 @@ router.get("/all", async (req, res) => {
             return [];
           })
         : Promise.resolve([]),
+      settings.actual_budget_url
+        ? getActualMetadata(userId).then(m => ({ schedules: m.schedules, payeeMap: m.payeeMap })).catch(err => {
+            console.error("[Live] Actual Budget metadata fetch failed:", err.message);
+            return { schedules: [], payeeMap: {} };
+          })
+        : Promise.resolve({ schedules: [], payeeMap: {} }),
     ]);
 
     // Capture read status for briefing emails before filtering them out
@@ -261,7 +267,10 @@ router.get("/all", async (req, res) => {
       weather: weatherWithLocation,
       bills,
       recentTransactions,
+      allSchedules: actualMeta.schedules,
+      payeeMap: actualMeta.payeeMap,
       actualConfigured: !!settings.actual_budget_url,
+      actualBudgetUrl: settings.actual_budget_url || null,
       importantSenders: Array.from(importantSendersMap.values()),
       briefingGeneratedAt,
       briefingReadStatus,

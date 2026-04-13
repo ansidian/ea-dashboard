@@ -5,6 +5,8 @@ import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { markBillPaid } from "../../api";
+import { formatAmount, formatDate, daysUntil, daysLabel, urgencyColor } from "../../lib/bill-utils";
+import BillsCalendarModal from "./BillsCalendarModal";
 
 const LOADING_MESSAGES = [
   "Pulling in bills from Actual...",
@@ -28,41 +30,8 @@ function shuffleArray(arr) {
   return shuffled;
 }
 
-function formatAmount(amount) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
-}
 
-function formatDate(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function daysUntil(dateStr) {
-  if (!dateStr) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr + "T00:00:00");
-  return Math.round((target - today) / 86400000);
-}
-
-function daysLabel(days) {
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days < 0) return `${Math.abs(days)}d overdue`;
-  return `in ${days}d`;
-}
-
-function urgencyColor(days) {
-  if (days === null) return { accent: "#6c7086", text: "rgba(205,214,244,0.5)", bg: "rgba(205,214,244,0.04)" };
-  if (days < 0) return { accent: "#f38ba8", text: "#f38ba8", bg: "rgba(243,139,168,0.1)" };
-  if (days === 0) return { accent: "#f97316", text: "#f97316", bg: "rgba(249,115,22,0.1)" };
-  if (days === 1) return { accent: "#fab387", text: "#fab387", bg: "rgba(250,179,135,0.1)" };
-  if (days <= 3) return { accent: "#f9e2af", text: "#f9e2afcc", bg: "rgba(249,226,175,0.08)" };
-  return { accent: "#a6e3a1", text: "rgba(205,214,244,0.5)", bg: "rgba(205,214,244,0.04)" };
-}
-
-export default function BillsPaymentsSection({ bills, recentTransactions, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, isMock, loaded, delay, className }) {
+export default function BillsPaymentsSection({ bills, recentTransactions, allSchedules, payeeMap, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, actualBudgetUrl, isMock, loaded, delay, className }) {
   // in mock mode, simulate loading for 8s then stop
   const [mockLoading, setMockLoading] = useState(true);
   useEffect(() => {
@@ -154,6 +123,8 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
   const scheduledTotal = scheduledBills.reduce((sum, b) => sum + (b.amount || 0), 0);
   const combinedTotal = totalBills + scheduledTotal;
 
+  const [showCalendar, setShowCalendar] = useState(false);
+
   const showLoading = billsLoading && actualConfigured && !scheduledBills.length;
   const doneEmpty = !billsLoading && !scheduledBills.length && actualConfigured;
 
@@ -224,6 +195,27 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
             </span>
             <span className="text-[11px] max-sm:text-xs text-muted-foreground/40">total</span>
           </div>
+        )}
+        {actualConfigured && !showLoading && (
+          <button
+            onClick={() => setShowCalendar(true)}
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 ml-auto"
+            style={{
+              background: "rgba(203,166,218,0.06)",
+              border: "1px solid rgba(203,166,218,0.12)",
+              fontFamily: "inherit",
+            }}
+            title="Calendar view"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ opacity: 0.8 }}>
+              <rect x="1" y="3" width="14" height="12" rx="2" stroke="#cba6da" strokeWidth="1.5" fill="none" />
+              <path d="M1 7h14" stroke="#cba6da" strokeWidth="1.5" />
+              <path d="M5 1v4M11 1v4" stroke="#cba6da" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <span className="text-[11px] max-sm:text-xs font-medium" style={{ color: "rgba(203,166,218,0.8)" }}>
+              Calendar
+            </span>
+          </button>
         )}
       </div>
 
@@ -492,6 +484,13 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
         Email detection · Actual Budget
       </div>
     </Section>
+    <BillsCalendarModal
+      open={showCalendar}
+      onClose={() => setShowCalendar(false)}
+      schedules={allSchedules}
+      payeeMap={payeeMap}
+      actualBudgetUrl={actualBudgetUrl}
+    />
     </div>
   );
 }

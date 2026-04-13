@@ -1,0 +1,526 @@
+import { createPortal } from "react-dom";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { formatAmount, daysUntil, daysLabel, urgencyColor } from "../../lib/bill-utils";
+import Tooltip from "../shared/Tooltip";
+
+const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const MAX_PILLS = 2;
+const GRID_ROWS = 6;
+const CELL_HEIGHT = 88;
+const DETAIL_HEIGHT = 340;
+
+function getMonthData(year, month) {
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  return { firstDay, daysInMonth };
+}
+
+function formatFullDate(year, month, day) {
+  const d = new Date(year, month, day);
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
+
+function scheduleToBill(schedule, payeeMap) {
+  const amtCond = schedule.conditions?.find(c => c.field === "amount");
+  const payeeCond = schedule.conditions?.find(c => c.field === "payee");
+  const amountCents = amtCond?.value ?? 0;
+  const payeeName = payeeCond ? payeeMap[payeeCond.value] : schedule.name;
+  return {
+    id: schedule.id,
+    name: schedule.name || payeeName || "Unknown",
+    payee: payeeName || schedule.name || "Unknown",
+    amount: Math.abs(amountCents) / 100,
+    next_date: schedule.next_date,
+  };
+}
+
+export default function BillsCalendarModal({ open, onClose, schedules, payeeMap, actualBudgetUrl }) {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const [view, setView] = useState({ month: currentMonth, year: currentYear });
+  const [selectedDay, setSelectedDay] = useState(null);
+  const panelRef = useRef(null);
+  const scrollRef = useRef(null);
+
+  const viewMonth = view.month;
+  const viewYear = view.year;
+
+  const navigateMonth = useCallback((dir) => {
+    setSelectedDay(null);
+    setView(prev => {
+      const next = prev.month + dir;
+      if (next > 11) return { month: 0, year: prev.year + 1 };
+      if (next < 0) return { month: 11, year: prev.year - 1 };
+      return { month: next, year: prev.year };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setView({ month: currentMonth, year: currentYear });
+      setSelectedDay(null);
+    }
+  }, [open, currentMonth, currentYear]);
+
+  // Keyboard shortcuts (capture phase to intercept before dashboard handlers)
+  useEffect(() => {
+    if (!open) return;
+    function handleKey(e) {
+      // Block cmd/ctrl+F (email search) while modal is open
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // Let other modified keys pass through (cmd+r, ctrl+c, etc.)
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      switch (e.key) {
+        case "Escape":
+          onClose();
+          e.stopPropagation();
+          break;
+        case "ArrowLeft":
+        case "p":
+          if (viewYear !== currentYear || viewMonth !== currentMonth) {
+            navigateMonth(-1);
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        case "ArrowRight":
+        case "n":
+          navigateMonth(1);
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        case "t":
+        case "T":
+          setView({ month: currentMonth, year: currentYear });
+          setSelectedDay(null);
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        default:
+          // Let R through for quick refresh, swallow other single-key presses
+          if (e.key.length === 1 && e.key !== "r" && e.key !== "R") {
+            e.stopPropagation();
+          }
+          break;
+      }
+    }
+    document.addEventListener("keydown", handleKey, true);
+    return () => document.removeEventListener("keydown", handleKey, true);
+  }, [open, onClose, navigateMonth, viewMonth, viewYear, currentMonth, currentYear]);
+
+  // Click outside
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) {
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        onClose();
+      }
+    }
+    document.addEventListener("pointerdown", handleClick);
+    return () => document.removeEventListener("pointerdown", handleClick);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !open) return;
+    function onWheel(e) {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const maxScroll = scrollHeight - clientHeight;
+      if (maxScroll <= 0) { e.preventDefault(); return; }
+      const atTop = scrollTop <= 0 && e.deltaY < 0;
+      const atBottom = scrollTop >= maxScroll && e.deltaY > 0;
+      if (atTop || atBottom) e.preventDefault();
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [open]);
+
+  const billsByDay = useMemo(() => {
+    const map = {};
+    if (!schedules?.length) return map;
+    for (const s of schedules) {
+      if (!s.next_date) continue;
+      const d = new Date(s.next_date + "T00:00:00");
+      if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) continue;
+      const day = d.getDate();
+      if (!map[day]) map[day] = [];
+      map[day].push(scheduleToBill(s, payeeMap));
+    }
+    return map;
+  }, [schedules, payeeMap, viewMonth, viewYear]);
+
+  const monthTotal = useMemo(() => {
+    let total = 0;
+    for (const bills of Object.values(billsByDay)) {
+      for (const b of bills) total += b.amount;
+    }
+    return total;
+  }, [billsByDay]);
+
+  const { firstDay, daysInMonth } = getMonthData(viewYear, viewMonth);
+  const isCurrentMonth = viewYear === currentYear && viewMonth === currentMonth;
+  const todayDate = now.getDate();
+  const totalCells = firstDay + daysInMonth;
+  const trailingEmpty = GRID_ROWS * 7 - totalCells;
+
+  const canGoPrev = !isCurrentMonth;
+  const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  if (!open) return null;
+
+  const selectedBills = selectedDay ? billsByDay[selectedDay] || [] : [];
+  const showDetail = selectedDay && selectedBills.length > 0;
+
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 49,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.5)",
+      }}
+    >
+      <div
+        ref={panelRef}
+        className="isolate flex flex-col animate-in fade-in zoom-in-95 duration-200"
+        style={{
+          width: "min(1100px, calc(100vw - 96px))",
+          maxHeight: "calc(100vh - 96px)",
+          background: "#16161e",
+          borderRadius: 12,
+          border: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+        }}
+      >
+        <div
+          ref={scrollRef}
+          className="overflow-y-auto overscroll-contain flex-1"
+          style={{ padding: "32px 40px" }}
+        >
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                onClick={() => canGoPrev && navigateMonth(-1)}
+                style={{
+                  color: canGoPrev ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.15)",
+                  cursor: canGoPrev ? "pointer" : "default",
+                  fontSize: 22,
+                  width: 40,
+                  height: 40,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "none",
+                  fontFamily: "inherit",
+                  lineHeight: 1,
+                  flexShrink: 0,
+                }}
+              >
+                &#8249;
+              </button>
+              <span style={{
+                fontSize: 24,
+                fontWeight: 600,
+                color: "#cdd6f4",
+                minWidth: 240,
+                textAlign: "center",
+              }}>
+                {monthLabel}
+              </span>
+              <button
+                onClick={() => navigateMonth(1)}
+                style={{
+                  color: "rgba(255,255,255,0.5)",
+                  cursor: "pointer",
+                  fontSize: 22,
+                  width: 40,
+                  height: 40,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "none",
+                  fontFamily: "inherit",
+                  lineHeight: 1,
+                  flexShrink: 0,
+                }}
+              >
+                &#8250;
+              </button>
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                color: "rgba(255,255,255,0.3)",
+                cursor: "pointer",
+                fontSize: 14,
+                width: 40,
+                height: 40,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 8,
+                background: "rgba(255,255,255,0.04)",
+                border: "none",
+                fontFamily: "inherit",
+              }}
+            >
+              &#10005;
+            </button>
+          </div>
+
+          {/* Day headers */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 6 }}>
+            {DAYS.map(d => (
+              <div key={d} style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.35)", padding: 6, fontWeight: 500, letterSpacing: 0.5 }}>
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* Calendar grid — keyed by month to prevent stale CSS transitions */}
+          <div
+            key={`${viewYear}-${viewMonth}`}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(7, 1fr)",
+              gridTemplateRows: `repeat(${GRID_ROWS}, ${CELL_HEIGHT}px)`,
+              gap: 4,
+            }}
+          >
+            {Array.from({ length: firstDay }, (_, i) => (
+              <div key={`empty-${i}`} />
+            ))}
+
+            {Array.from({ length: daysInMonth }, (_, i) => {
+              const day = i + 1;
+              const bills = billsByDay[day] || [];
+              const hasBills = bills.length > 0;
+              const isToday = isCurrentMonth && day === todayDate;
+              const isSelected = selectedDay === day;
+              const hasOverdue = bills.some(b => daysUntil(b.next_date) < 0);
+
+              let cellBg = "rgba(255,255,255,0.02)";
+              let cellBorder = "1px solid rgba(255,255,255,0.04)";
+              let cellShadow = "none";
+              let dateColor = "rgba(255,255,255,0.5)";
+              let dateWeight = 400;
+
+              if (isSelected) {
+                cellBg = "rgba(203,166,218,0.08)";
+                cellBorder = "1px solid rgba(203,166,218,0.3)";
+                cellShadow = "0 0 8px rgba(203,166,218,0.12)";
+                dateColor = "#cba6da";
+                dateWeight = 600;
+              } else if (isToday) {
+                cellBg = "rgba(249,115,22,0.08)";
+                cellBorder = "1px solid rgba(249,115,22,0.25)";
+                cellShadow = "0 0 8px rgba(249,115,22,0.08)";
+                dateColor = "#f97316";
+                dateWeight = 600;
+              } else if (hasOverdue) {
+                cellBg = "rgba(243,139,168,0.06)";
+                cellBorder = "1px solid rgba(243,139,168,0.15)";
+              }
+
+              return (
+                <div
+                  key={day}
+                  onClick={() => hasBills && setSelectedDay(isSelected ? null : day)}
+                  style={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    borderRadius: 8,
+                    padding: "6px 8px",
+                    background: cellBg,
+                    border: cellBorder,
+                    boxShadow: cellShadow,
+                    cursor: hasBills ? "pointer" : "default",
+                    transition: "box-shadow 150ms, border-color 150ms",
+                  }}
+                >
+                  <div style={{ fontSize: 13, color: dateColor, fontWeight: dateWeight }}>
+                    {day}
+                  </div>
+                  {isToday && !hasBills && (
+                    <div style={{ fontSize: 9, fontWeight: 600, color: "#f97316", marginTop: 2, letterSpacing: 0.5 }}>TODAY</div>
+                  )}
+                  {bills.slice(0, MAX_PILLS).map(b => {
+                    const d = daysUntil(b.next_date);
+                    const uc = urgencyColor(d);
+                    const amountColor = hasOverdue && d < 0 ? "#f38ba8" : uc.text === "rgba(205,214,244,0.5)" ? "#a6e3a1" : uc.text;
+                    return (
+                      <div
+                        key={b.id}
+                        style={{
+                          display: "flex",
+                          gap: 4,
+                          fontSize: 11,
+                          marginTop: 3,
+                        }}
+                      >
+                        <span style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          minWidth: 0,
+                          color: "rgba(205,214,244,0.45)",
+                        }}>
+                          {b.name}
+                        </span>
+                        <span style={{ flexShrink: 0, color: amountColor, fontWeight: 500 }}>
+                          {formatAmount(b.amount).replace(".00", "")}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {bills.length > MAX_PILLS && (
+                    <div style={{ fontSize: 10, color: "rgba(203,166,218,0.6)", marginTop: 2 }}>
+                      +{bills.length - MAX_PILLS} more
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {Array.from({ length: trailingEmpty }, (_, i) => (
+              <div key={`trail-${i}`} />
+            ))}
+          </div>
+
+          {/* Detail area — fixed height, always present */}
+          <div
+            style={{
+              height: DETAIL_HEIGHT,
+              marginTop: 12,
+              borderRadius: 8,
+              background: showDetail ? "rgba(203,166,218,0.04)" : "transparent",
+              border: showDetail ? "1px solid rgba(203,166,218,0.12)" : "1px solid transparent",
+              transition: "background 200ms, border-color 200ms",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {showDetail ? (
+              <div style={{ padding: "16px 20px", overflow: "auto", flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, color: "#cba6da", fontWeight: 500 }}>
+                    {formatFullDate(viewYear, viewMonth, selectedDay)}
+                  </div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+                    {selectedBills.length} payment{selectedBills.length !== 1 ? "s" : ""}
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {selectedBills.map(b => {
+                    const days = daysUntil(b.next_date);
+                    const uc = urgencyColor(days);
+                    const scheduleUrl = actualBudgetUrl
+                      ? `${actualBudgetUrl.replace(/\/+$/, "")}/schedules?highlight=${b.id}`
+                      : null;
+                    return (
+                      <div
+                        key={b.id}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "10px 14px",
+                          background: uc.bg,
+                          border: `1px solid ${uc.accent}18`,
+                          borderRadius: 8,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 14, color: "#cdd6f4" }}>{b.name}</div>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
+                            {daysLabel(days)}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: uc.text }}>
+                            {formatAmount(b.amount)}
+                          </div>
+                          {scheduleUrl && (
+                            <Tooltip text="Edit Schedule in Actual">
+                              <a
+                                href={scheduleUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  color: "rgba(203,166,218,0.5)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  padding: 4,
+                                  borderRadius: 4,
+                                  transition: "color 150ms",
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = "#cba6da"}
+                                onMouseLeave={(e) => e.currentTarget.style.color = "rgba(203,166,218,0.5)"}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                                  <path d="M6 3H3.5A1.5 1.5 0 002 4.5v8A1.5 1.5 0 003.5 14h8a1.5 1.5 0 001.5-1.5V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                  <path d="M9 2h5v5M14 2L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </a>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 10, textAlign: "right", fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
+                  Day total: <span style={{ color: "#cdd6f4", fontWeight: 600 }}>
+                    {formatAmount(selectedBills.reduce((sum, b) => sum + b.amount, 0))}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.15)" }}>Click a day to see details</span>
+              </div>
+            )}
+          </div>
+
+          {/* Month total footer — always pinned */}
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "14px 20px",
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.04)",
+              borderRadius: 8,
+            }}
+          >
+            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
+              {new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long" })} total
+            </span>
+            <span style={{ fontSize: 16, fontWeight: 600, color: "#cdd6f4" }}>
+              {formatAmount(monthTotal)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

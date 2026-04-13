@@ -307,8 +307,11 @@ function DashboardMain({
         <BillsPaymentsSection
           bills={liveData.liveBills}
           recentTransactions={liveData.recentTransactions}
+          allSchedules={liveData.allSchedules}
+          payeeMap={liveData.payeeMap}
           billsLoading={liveData.billsLoading}
           actualConfigured={liveData.actualConfigured}
+          actualBudgetUrl={liveData.actualBudgetUrl}
           isMock={isMock}
           loaded={loaded}
           delay={400}

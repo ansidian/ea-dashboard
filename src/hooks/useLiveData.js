@@ -9,6 +9,8 @@ export default function useLiveData({ disabled = false } = {}) {
   const [liveWeather, setLiveWeather] = useState(null);
   const [liveBills, setLiveBills] = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
+  const [allSchedules, setAllSchedules] = useState([]);
+  const [payeeMap, setPayeeMap] = useState({});
   const [importantSenders, setImportantSenders] = useState([]);
   const [briefingGeneratedAt, setBriefingGeneratedAt] = useState(null);
   const [briefingReadStatus, setBriefingReadStatus] = useState({});
@@ -16,6 +18,7 @@ export default function useLiveData({ disabled = false } = {}) {
   const [isPolling, setIsPolling] = useState(false);
   const [billsLoading, setBillsLoading] = useState(true);
   const [actualConfigured, setActualConfigured] = useState(true);
+  const [actualBudgetUrl, setActualBudgetUrl] = useState(null);
   const [pinnedIds, setPinnedIds] = useState([]);
   const mountedRef = useRef(true);
   const fetchingRef = useRef(false);
@@ -34,11 +37,14 @@ export default function useLiveData({ disabled = false } = {}) {
       setLiveWeather(data.weather || null);
       setLiveBills(data.bills || []);
       setRecentTransactions(data.recentTransactions || []);
+      setAllSchedules(data.allSchedules || []);
+      setPayeeMap(data.payeeMap || {});
       setImportantSenders(data.importantSenders || []);
       setBriefingGeneratedAt(data.briefingGeneratedAt || null);
       setBriefingReadStatus(data.briefingReadStatus || {});
       setLastFetched(data.fetchedAt || new Date().toISOString());
       setActualConfigured(data.actualConfigured || false);
+      setActualBudgetUrl(data.actualBudgetUrl || null);
       setPinnedIds(data.pinnedIds || []);
       setBillsLoading(false);
     } catch (err) {
@@ -78,6 +84,8 @@ export default function useLiveData({ disabled = false } = {}) {
     liveWeather,
     liveBills,
     recentTransactions,
+    allSchedules,
+    payeeMap,
     importantSenders,
     briefingGeneratedAt,
     briefingReadStatus,
@@ -85,6 +93,7 @@ export default function useLiveData({ disabled = false } = {}) {
     isPolling,
     billsLoading,
     actualConfigured,
+    actualBudgetUrl,
     pinnedIds,
     refreshNow,
   };
