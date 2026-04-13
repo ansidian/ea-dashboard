@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import useIsMobile from "../../hooks/useIsMobile";
 import useSearch from "../../hooks/briefing/useSearch";
@@ -53,6 +54,7 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   } = search;
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
+  const [showBillForm, setShowBillForm] = useState(false);
   const closeSearch = useCallback(() => setOpen(false), []);
   const analysisState = useSearchAnalysis({
     query,
@@ -147,6 +149,9 @@ export default function BriefingSearch({ onNavigateToEmail }) {
     if (isMobile && openEmail) inputRef.current?.blur();
   }, [isMobile, openEmail]);
 
+  // Reset bill form when the open email changes.
+  useEffect(() => { setShowBillForm(false); }, [openEmail?.uid]);
+
   // Scroll trapping on the SCROLL CONTAINER (not the outer panel)
   useEffect(() => {
     const el = scrollRef.current;
@@ -165,6 +170,9 @@ export default function BriefingSearch({ onNavigateToEmail }) {
 
   function handleKeyDown(e) {
     if (!open) return;
+    // Don't let the search input consume Enter while the bill form is active —
+    // the user is filling in form fields and Enter should stay in that context.
+    if (showBillForm && e.key === "Enter") return;
     // Mobile: Enter submits the current query and dismisses the keyboard.
     // Live search is disabled on mobile (see input onChange), so Enter is
     // the only trigger. Runs before the arrow-key nav branch so it fires
@@ -467,6 +475,25 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                       email={emailNav.openEmail}
                       onMarkedRead={emailNav.handleMarkedRead}
                       onMarkedUnread={emailNav.handleMarkedUnread}
+                      showManualBillForm={showBillForm}
+                      headerActions={
+                        <button
+                          type="button"
+                          onClick={() => setShowBillForm((v) => !v)}
+                          className={cn(
+                            "flex items-center gap-1 text-[10px] transition-colors px-2 py-1 cursor-pointer font-[inherit]",
+                            showBillForm
+                              ? "text-[#a6e3a1] bg-[#a6e3a1]/[0.08] hover:bg-[#a6e3a1]/[0.12]"
+                              : "text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.04]",
+                          )}
+                          style={{ borderRadius: 8 }}
+                          aria-label={showBillForm ? "Hide bill form" : "Add bill"}
+                          title={showBillForm ? "Hide bill form" : "Add bill"}
+                        >
+                          <DollarSign size={11} />
+                          <span className="hidden md:inline">{showBillForm ? "Hide bill" : "Add bill"}</span>
+                        </button>
+                      }
                     />
                   </div>
                 ) : (
@@ -553,6 +580,25 @@ export default function BriefingSearch({ onNavigateToEmail }) {
                     onMarkedRead={emailNav.handleMarkedRead}
                     onMarkedUnread={emailNav.handleMarkedUnread}
                     onClose={() => emailNav.setOpenEmail(null)}
+                    showManualBillForm={showBillForm}
+                    headerActions={
+                      <button
+                        type="button"
+                        onClick={() => setShowBillForm((v) => !v)}
+                        className={cn(
+                          "flex items-center gap-1 text-[10px] transition-colors px-2 py-1 cursor-pointer font-[inherit]",
+                          showBillForm
+                            ? "text-[#a6e3a1] bg-[#a6e3a1]/[0.08] hover:bg-[#a6e3a1]/[0.12]"
+                            : "text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.04]",
+                        )}
+                        style={{ borderRadius: 8 }}
+                        aria-label={showBillForm ? "Hide bill form" : "Add bill"}
+                        title={showBillForm ? "Hide bill form" : "Add bill"}
+                      >
+                        <DollarSign size={11} />
+                        <span className="hidden md:inline">{showBillForm ? "Hide bill" : "Add bill"}</span>
+                      </button>
+                    }
                   />
                 </div>
               )}

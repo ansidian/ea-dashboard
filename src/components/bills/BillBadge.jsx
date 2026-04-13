@@ -163,6 +163,7 @@ export default function BillBadge({ bill, model }) {
   return (
     <div
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => { if (e.key === "Enter") e.stopPropagation(); }}
       className="rounded-lg p-4 px-5 mt-3"
       style={{
         background: "rgba(203,166,218,0.06)",
