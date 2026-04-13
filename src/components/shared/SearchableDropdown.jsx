@@ -65,6 +65,7 @@ export default function SearchableDropdown({ options, value, onChange, placehold
           sideOffset={4}
           collisionPadding={16}
           sticky
+          onPointerDown={(e) => e.stopPropagation()}
           className="w-[var(--anchor-width)] rounded bg-elevated border border-white/10 p-0 shadow-modal"
         >
           <Command
@@ -78,6 +79,7 @@ export default function SearchableDropdown({ options, value, onChange, placehold
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
+                  e.stopPropagation();
                   if (filtered.length > 0) {
                     onChange(filtered[0].id);
                     setOpen(false);
