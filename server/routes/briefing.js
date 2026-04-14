@@ -7,6 +7,7 @@ import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, markAs
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, markAsUnread as icloudMarkAsUnread, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
+import { trimBillBody } from "../briefing/bill-extract.js";
 import { completeTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask, updateTodoistTask } from "../briefing/todoist.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
@@ -833,6 +834,82 @@ router.post("/actual/send", async (req, res) => {
     res.json(await sendBill(billData, userId));
   } catch (err) {
     console.error("Error sending to Actual Budget:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/bills/extract", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { subject, from, body } = req.body || {};
+  if (!body || typeof body !== "string") {
+    return res.status(400).json({ message: "body is required" });
+  }
+  try {
+    const categories = await getActualCategories(userId).catch(() => []);
+    const categoriesList = Array.isArray(categories)
+      ? categories.flatMap(g => (g.categories || []).map(c => `${c.id}:${c.name}`)).join(", ")
+      : "";
+
+    const trimmed = trimBillBody({ subject, from, body });
+    const systemPrompt = `You extract bill data from a single email. Return the submit_bill tool with:
+- payee (short merchant name)
+- amount (number — look in subject AND body; use 0 if truly missing)
+- due_date (YYYY-MM-DD)
+- type: "transfer" for credit card payments, "bill" for recurring services, "expense" for one-off purchases, "income" for refunds/deposits
+- category_id and category_name: match to the closest budget category only if confident, else null.${categoriesList ? `\n\nBudget categories (id:name): ${categoriesList}` : ""}`;
+
+    const tool = {
+      name: "submit_bill",
+      description: "Submit extracted bill fields.",
+      input_schema: {
+        type: "object",
+        properties: {
+          payee: { type: "string" },
+          amount: { type: "number" },
+          due_date: { type: "string" },
+          type: { type: "string", enum: ["transfer", "bill", "expense", "income"] },
+          category_id: { type: ["string", "null"] },
+          category_name: { type: ["string", "null"] },
+        },
+        required: ["payee", "amount", "due_date", "type"],
+      },
+    };
+
+    const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5",
+        max_tokens: 300,
+        system: systemPrompt,
+        tools: [tool],
+        tool_choice: { type: "tool", name: "submit_bill" },
+        messages: [{ role: "user", content: trimmed }],
+      }),
+    });
+
+    if (!apiRes.ok) {
+      const text = await apiRes.text();
+      console.error(`[EA] Bill extract Haiku error (${apiRes.status}):`, text);
+      return res.status(502).json({ message: `Haiku API error (${apiRes.status})` });
+    }
+
+    const data = await apiRes.json();
+    const toolBlock = (data.content || []).find(c => c.type === "tool_use" && c.name === "submit_bill");
+    if (!toolBlock?.input) {
+      console.error("[EA] Bill extract: no tool_use in Haiku response", data);
+      return res.status(502).json({ message: "Extraction failed" });
+    }
+
+    const usage = data.usage || {};
+    console.log(`[EA] Bill extract: in=${usage.input_tokens} out=${usage.output_tokens} trimmed_chars=${trimmed.length}`);
+    res.json(toolBlock.input);
+  } catch (err) {
+    console.error("Error extracting bill:", err);
     res.status(500).json({ message: err.message });
   }
 });

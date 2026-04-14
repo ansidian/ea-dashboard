@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { sendToActualBudget } from "../../api";
+import { sendToActualBudget, extractBillFromEmail } from "../../api";
 import { ensureMetadataLoaded, _metadataCache } from "../../lib/actualMetadata.js";
 import { formatRelativeDate } from "../../lib/dashboard-helpers";
 import SearchableDropdown from "../shared/SearchableDropdown";
@@ -46,8 +46,12 @@ function formatModelName(model) {
   return "Claude";
 }
 
-export default function BillBadge({ bill, model }) {
-  const modelDisplayName = formatModelName(model);
+export default function BillBadge({ bill, model, emailSubject, emailFrom, emailBody }) {
+  const [extractModel, setExtractModel] = useState(null);
+  const effectiveModel = model || extractModel;
+  const modelDisplayName = formatModelName(effectiveModel);
+  const canExtract = !model && !!emailBody && !!emailSubject;
+  const [extractState, setExtractState] = useState("idle"); // idle | extracting | done | error
   const [state, setState] = useState("idle"); // idle | sending | sent | error
   const [successMessage, setSuccessMessage] = useState("");
   const [editPayee, setEditPayee] = useState(bill.payee || "");
@@ -68,21 +72,35 @@ export default function BillBadge({ bill, model }) {
 
   const isTransfer = editType === "transfer";
 
-  // auto-select From Account (savings preferred) and schedule name when in transfer mode
-  useEffect(() => {
-    if (!isTransfer || !accounts.length) return;
-    if (!editFromAccount) {
-      const savings = accounts.find(a => a.name.toLowerCase().includes("savings"))
-        || accounts.find(a => a.type === "checking" || a.name.toLowerCase().includes("checking"));
-      if (savings) setEditFromAccount(savings.id);
-    }
-    if (editToAccount) {
-      const acct = accounts.find(a => a.id === editToAccount);
-      if (acct && /\(\d{4}\)/.test(acct.name)) {
-        setEditScheduleName(`${acct.name} Payment`);
+  const pickDefaultFromAccount = (accts) =>
+    accts.find(a => a.name.toLowerCase().includes("savings"))
+    || accts.find(a => a.type === "checking" || a.name.toLowerCase().includes("checking"))
+    || null;
+
+  const scheduleNameFor = (accts, toAccountId) => {
+    const acct = accts.find(a => a.id === toAccountId);
+    return acct && /\(\d{4}\)/.test(acct.name) ? `${acct.name} Payment` : null;
+  };
+
+  const handleTypeChange = (key) => {
+    setEditType(key);
+    if (key === "transfer" && accounts.length) {
+      if (!editFromAccount) {
+        const from = pickDefaultFromAccount(accounts);
+        if (from) setEditFromAccount(from.id);
       }
+      const name = scheduleNameFor(accounts, editToAccount);
+      if (name) setEditScheduleName(name);
     }
-  }, [editToAccount, isTransfer, accounts]);
+  };
+
+  const handleToAccountChange = (id) => {
+    setEditToAccount(id);
+    if (isTransfer) {
+      const name = scheduleNameFor(accounts, id);
+      if (name) setEditScheduleName(name);
+    }
+  };
 
   // detect CC fee from Actual payee name or original email payee
   const resolvedPayeeName = useMemo(() => {
@@ -112,12 +130,24 @@ export default function BillBadge({ bill, model }) {
       setActualReady(true);
 
       // Auto-select To Account for transfers by matching email payee to account name
+      let matchedToId = "";
       if (bill.type === "transfer" && bill.payee && data.accounts.length) {
         const match = data.accounts.find(a =>
           a.name.toLowerCase().includes(bill.payee.toLowerCase()) ||
           bill.payee.toLowerCase().includes(a.name.toLowerCase())
         );
-        if (match) setEditToAccount(match.id);
+        if (match) {
+          setEditToAccount(match.id);
+          matchedToId = match.id;
+        }
+      }
+
+      // Auto-select From Account + schedule name when starting in transfer mode
+      if (bill.type === "transfer" && data.accounts.length) {
+        const from = pickDefaultFromAccount(data.accounts);
+        if (from) setEditFromAccount(from.id);
+        const name = scheduleNameFor(data.accounts, matchedToId);
+        if (name) setEditScheduleName(name);
       }
 
       // Pre-select existing payee by name match
@@ -127,6 +157,33 @@ export default function BillBadge({ bill, model }) {
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- bill props are stable
+
+  const handleExtract = async (e) => {
+    e.stopPropagation();
+    setExtractState("extracting");
+    try {
+      const result = await extractBillFromEmail({
+        subject: emailSubject,
+        from: emailFrom,
+        body: emailBody,
+      });
+      if (result.payee) {
+        const match = payees.find(p => p.name.toLowerCase() === String(result.payee).toLowerCase());
+        setEditPayee(match ? match.id : result.payee);
+      }
+      if (result.amount != null) setEditAmount(String(result.amount));
+      if (result.due_date) setEditDue(result.due_date);
+      if (result.type) setEditType(result.type);
+      if (result.category_id && categories.some(c => c.id === result.category_id)) {
+        setEditCategory(result.category_id);
+      }
+      setExtractModel("claude-haiku-4-5");
+      setExtractState("done");
+    } catch (err) {
+      console.error("Bill extract failed:", err);
+      setExtractState("error");
+    }
+  };
 
   const handleSend = (e) => {
     e.stopPropagation();
@@ -175,7 +232,7 @@ export default function BillBadge({ bill, model }) {
         {Object.entries(typeLabels).map(([key, info]) => (
           <button
             key={key}
-            onClick={(e) => { e.stopPropagation(); setEditType(key); }}
+            onClick={(e) => { e.stopPropagation(); handleTypeChange(key); }}
             className="text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded-md cursor-pointer transition-all duration-200"
             style={{
               color: editType === key ? info.color : "rgba(205,214,244,0.3)",
@@ -184,7 +241,58 @@ export default function BillBadge({ bill, model }) {
             }}
           >{info.icon} {info.label}</button>
         ))}
-        <span className="text-[10px] text-muted-foreground/40 ml-auto">detected by {modelDisplayName}</span>
+        {effectiveModel ? (
+          <span className="text-[10px] text-muted-foreground/40 ml-auto">detected by {modelDisplayName}</span>
+        ) : canExtract ? (
+          <button
+            onClick={handleExtract}
+            disabled={extractState === "extracting"}
+            className={cn(
+              "group ml-auto text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-md cursor-pointer",
+              "transition-all duration-200 ease-out",
+              "hover:-translate-y-px active:translate-y-0 active:scale-[0.98]",
+              "disabled:cursor-wait disabled:hover:translate-y-0",
+            )}
+            style={
+              extractState === "error"
+                ? {
+                    color: "#f38ba8",
+                    background: "rgba(243,139,168,0.1)",
+                    border: "1px solid rgba(243,139,168,0.3)",
+                  }
+                : {
+                    color: "#ffffff",
+                    background: "linear-gradient(120deg, #c88fa0 0%, #c89b85 25%, #8fb8c8 55%, #a89bc4 80%, #c88fa0 100%)",
+                    backgroundSize: "240% 100%",
+                    animation: `aiGradientShift ${extractState === "extracting" ? "2.5s" : "7s"} ease-in-out infinite`,
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    boxShadow: extractState === "extracting"
+                      ? "0 0 10px rgba(168,155,196,0.35), 0 0 18px rgba(143,184,200,0.15)"
+                      : "0 1px 6px rgba(168,155,196,0.2)",
+                    textShadow: "0 1px 1px rgba(0,0,0,0.2)",
+                  }
+            }
+            onMouseEnter={(e) => {
+              if (extractState === "extracting" || extractState === "error") return;
+              e.currentTarget.style.boxShadow = "0 2px 12px rgba(168,155,196,0.4), 0 0 20px rgba(143,184,200,0.2)";
+              e.currentTarget.style.animationDuration = "4s";
+            }}
+            onMouseLeave={(e) => {
+              if (extractState === "extracting" || extractState === "error") return;
+              e.currentTarget.style.boxShadow = "0 1px 6px rgba(168,155,196,0.2)";
+              e.currentTarget.style.animationDuration = "7s";
+            }}
+          >
+            <span className="inline-flex items-center gap-1">
+              <span className={cn("transition-transform duration-300", extractState !== "extracting" && "group-hover:rotate-12 group-hover:scale-110")}>
+                {"\u2728"}
+              </span>
+              <span>
+                {extractState === "extracting" ? "Extracting…" : extractState === "error" ? "Retry extract" : "Extract with Haiku"}
+              </span>
+            </span>
+          </button>
+        ) : null}
       </div>
       {/* Behavior hint */}
       <div className="text-[10px] text-muted-foreground/40 mt-1.5 italic">
@@ -209,7 +317,7 @@ export default function BillBadge({ bill, model }) {
                     options={payees}
                     value={editPayee}
                     onChange={setEditPayee}
-                    placeholder="Select or create payee..."
+                    placeholder="Select payee..."
                     allowCreate
                     onCreateNew={(name) => setEditPayee(name)}
                   />
@@ -245,7 +353,7 @@ export default function BillBadge({ bill, model }) {
               {isTransfer ? (
                 <>
                   <div className="text-[10px] text-muted-foreground/50 mb-1">To Account</div>
-                  <SearchableDropdown options={accounts} value={editToAccount} onChange={setEditToAccount} placeholder="Credit card..." />
+                  <SearchableDropdown options={accounts} value={editToAccount} onChange={handleToAccountChange} placeholder="Credit card..." />
                 </>
               ) : (
                 <>

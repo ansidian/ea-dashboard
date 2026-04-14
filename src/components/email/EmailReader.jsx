@@ -384,10 +384,10 @@ export default function EmailReader({
           style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
         >
           <BillBadge
-            bill={{
-              payee: email.from_name || email.from || "",
-              type: "expense",
-            }}
+            bill={{ type: "expense" }}
+            emailSubject={email.subject}
+            emailFrom={email.from_name || email.from}
+            emailBody={body}
           />
         </div>
       )}
