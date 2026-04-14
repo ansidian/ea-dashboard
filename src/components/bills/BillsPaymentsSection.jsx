@@ -31,7 +31,7 @@ function shuffleArray(arr) {
 }
 
 
-export default function BillsPaymentsSection({ bills, recentTransactions, allSchedules, payeeMap, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, actualBudgetUrl, isMock, loaded, delay, className }) {
+export default function BillsPaymentsSection({ bills, recentTransactions, allSchedules, payeeMap, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, actualBudgetUrl, onMarkedPaid, isMock, loaded, delay, className }) {
   // in mock mode, simulate loading for 8s then stop
   const [mockLoading, setMockLoading] = useState(true);
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
   const [payingId, setPayingId] = useState(null);
   const [payError, setPayError] = useState(null);
   const scheduledBills = useMemo(
-    () => (bills || []).filter((b) => !paidLocal.has(b.id)),
+    () => (bills || []).map((b) => paidLocal.has(b.id) ? { ...b, paid: true } : b),
     [bills, paidLocal],
   );
 
@@ -85,6 +85,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
         next.add(billId);
         return next;
       });
+      onMarkedPaid?.();
     } catch (err) {
       setPayError(err.message || "Failed to mark paid");
     } finally {
@@ -425,18 +426,20 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
             {scheduledBills.map((bill) => {
               const days = daysUntil(bill.next_date);
               const uc = urgencyColor(days);
+              const accent = bill.paid ? "#a6e3a1" : uc.accent;
+              const highlight = bill.paid || (days !== null && days <= 1);
               return (
                 <MotionItem key={bill.id}>
                   <div
                     className="group relative rounded-md py-2 px-3 pl-4 transition-all duration-150"
                     style={{
-                      background: days !== null && days <= 1 ? `${uc.accent}0a` : "rgba(36,36,58,0.4)",
-                      border: days !== null && days <= 1 ? `1px solid ${uc.accent}20` : "1px solid rgba(255,255,255,0.04)",
+                      background: highlight ? `${accent}0a` : "rgba(36,36,58,0.4)",
+                      border: highlight ? `1px solid ${accent}20` : "1px solid rgba(255,255,255,0.04)",
                     }}
                   >
                     <div
                       className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
-                      style={{ background: uc.accent, opacity: 0.7, boxShadow: `0 0 6px ${uc.accent}30` }}
+                      style={{ background: accent, opacity: 0.7, boxShadow: `0 0 6px ${accent}30` }}
                     />
                     <div className="flex justify-between items-center gap-3">
                       <div className="flex-1 min-w-0">
@@ -451,7 +454,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        {days !== null && days <= 0 && (
+                        {!bill.paid && days !== null && days <= 0 && (
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); handleMarkPaid(bill.id); }}
@@ -469,9 +472,12 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
                         )}
                         <span
                           className="text-[10px] max-sm:text-xs font-semibold tabular-nums px-2 py-0.5 rounded"
-                          style={{ color: uc.text, background: uc.bg }}
+                          style={{
+                            color: bill.paid ? "#a6e3a1" : uc.text,
+                            background: bill.paid ? "rgba(166,227,161,0.12)" : uc.bg,
+                          }}
                         >
-                          {days !== null ? daysLabel(days) : ""}
+                          {bill.paid ? "Paid" : (days !== null ? daysLabel(days) : "")}
                         </span>
                         <span className="text-[12px] font-semibold tabular-nums text-foreground/80">
                           {formatAmount(bill.amount)}

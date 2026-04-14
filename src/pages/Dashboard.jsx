@@ -312,6 +312,7 @@ function DashboardMain({
           billsLoading={liveData.billsLoading}
           actualConfigured={liveData.actualConfigured}
           actualBudgetUrl={liveData.actualBudgetUrl}
+          onMarkedPaid={liveData.refreshNow}
           isMock={isMock}
           loaded={loaded}
           delay={400}

@@ -55,6 +55,7 @@ function scheduleToBill(schedule, payeeMap) {
     payee: payeeName || schedule.name || "Unknown",
     amount: Math.abs(amountCents) / 100,
     next_date: schedule.next_date,
+    paid: !!schedule.paid,
   };
 }
 
@@ -582,7 +583,7 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
                   {bills.slice(0, MAX_PILLS).map(b => {
                     const d = daysUntil(b.next_date);
                     const uc = urgencyColor(d);
-                    const amountColor = hasOverdue && d < 0 ? "#f38ba8" : uc.text === "rgba(205,214,244,0.5)" ? "#a6e3a1" : uc.text;
+                    const amountColor = b.paid ? "#a6e3a1" : hasOverdue && d < 0 ? "#f38ba8" : uc.text === "rgba(205,214,244,0.5)" ? "#a6e3a1" : uc.text;
                     return (
                       <div
                         key={b.id}
@@ -649,6 +650,9 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
                   {selectedBills.map(b => {
                     const days = daysUntil(b.next_date);
                     const uc = urgencyColor(days);
+                    const accent = b.paid ? "#a6e3a1" : uc.accent;
+                    const rowBg = b.paid ? "rgba(166,227,161,0.06)" : uc.bg;
+                    const amountColor = b.paid ? "#a6e3a1" : uc.text;
                     const scheduleUrl = actualBudgetUrl
                       ? `${actualBudgetUrl.replace(/\/+$/, "")}/schedules?highlight=${b.id}`
                       : null;
@@ -660,19 +664,19 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
                           justifyContent: "space-between",
                           alignItems: "center",
                           padding: "10px 14px",
-                          background: uc.bg,
-                          border: `1px solid ${uc.accent}18`,
+                          background: rowBg,
+                          border: `1px solid ${accent}18`,
                           borderRadius: 8,
                         }}
                       >
                         <div>
                           <div style={{ fontSize: 14, color: "#cdd6f4" }}>{b.name}</div>
                           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
-                            {daysLabel(days)}
+                            {b.paid ? "Paid" : daysLabel(days)}
                           </div>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ fontSize: 16, fontWeight: 600, color: uc.text }}>
+                          <div style={{ fontSize: 16, fontWeight: 600, color: amountColor }}>
                             {formatAmount(b.amount)}
                           </div>
                           {scheduleUrl && (
