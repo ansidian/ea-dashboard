@@ -161,12 +161,19 @@ function findScheduleByPayee(schedules, payeeId, accountId, amountCents) {
   const matches = schedules.filter(s =>
     s.conditions.some(c => c.field === 'payee' && c.value === payeeId)
   );
-  if (matches.length <= 1) return matches[0] || null;
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
 
-  for (const s of matches) {
-    const acctMatch = !accountId || s.conditions.some(c => c.field === 'account' && c.value === accountId);
-    if (!acctMatch) continue;
+  // Transfers share a single payee (the transfer-payee of from_account), so
+  // matches can include schedules for every card. Account must dominate —
+  // falling back to matches[0] on amount mismatch corrupts the wrong schedule.
+  const acctMatches = accountId
+    ? matches.filter(s => s.conditions.some(c => c.field === 'account' && c.value === accountId))
+    : matches;
+  if (acctMatches.length === 0) return null;
+  if (acctMatches.length === 1) return acctMatches[0];
 
+  for (const s of acctMatches) {
     const amtCond = s.conditions.find(c => c.field === 'amount');
     if (!amtCond || !amountCents) return s;
 
@@ -179,7 +186,7 @@ function findScheduleByPayee(schedules, payeeId, accountId, amountCents) {
       if (amt >= lo * 0.7 && amt <= hi * 1.3) return s;
     }
   }
-  return matches[0];
+  return acctMatches[0];
 }
 
 async function resolvePayee(payeeName) {
