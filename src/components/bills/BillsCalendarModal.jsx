@@ -624,10 +624,11 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                           whiteSpace: "nowrap",
                           minWidth: 0,
                           color: "rgba(205,214,244,0.45)",
+                          textDecoration: b.paid ? "line-through" : "none",
                         }}>
                           {b.name}
                         </span>
-                        <span style={{ flexShrink: 0, color: amountColor, fontWeight: 500 }}>
+                        <span style={{ flexShrink: 0, color: amountColor, fontWeight: 500, textDecoration: b.paid ? "line-through" : "none" }}>
                           {formatAmount(b.amount).replace(".00", "")}
                         </span>
                       </div>
@@ -695,7 +696,8 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                       >
                         <div>
                           <div style={{ fontSize: 14, color: "#cdd6f4" }}>{b.name}</div>
-                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                            {b.paid && <Check size={11} style={{ color: "#a6e3a1" }} />}
                             {b.paid ? "Paid" : daysLabel(days)}
                           </div>
                         </div>
