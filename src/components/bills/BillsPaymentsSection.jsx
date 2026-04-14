@@ -502,6 +502,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
       open={showCalendar}
       onClose={() => setShowCalendar(false)}
       schedules={allSchedules}
+      recentTransactions={recentTransactions}
       payeeMap={payeeMap}
       actualBudgetUrl={actualBudgetUrl}
     />

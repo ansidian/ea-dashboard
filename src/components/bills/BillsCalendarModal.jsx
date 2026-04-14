@@ -59,7 +59,7 @@ function scheduleToBill(schedule, payeeMap) {
   };
 }
 
-export default function BillsCalendarModal({ open, onClose, schedules, payeeMap, actualBudgetUrl }) {
+export default function BillsCalendarModal({ open, onClose, schedules, recentTransactions, payeeMap, actualBudgetUrl }) {
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
@@ -183,17 +183,41 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
 
   const billsByDay = useMemo(() => {
     const map = {};
-    if (!schedules?.length) return map;
-    for (const s of schedules) {
-      if (!s.next_date) continue;
-      const d = new Date(s.next_date + "T00:00:00");
-      if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) continue;
-      const day = d.getDate();
-      if (!map[day]) map[day] = [];
-      map[day].push(scheduleToBill(s, payeeMap));
+    const seen = new Set();
+    if (schedules?.length) {
+      for (const s of schedules) {
+        if (!s.next_date) continue;
+        const d = new Date(s.next_date + "T00:00:00");
+        if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) continue;
+        const day = d.getDate();
+        if (!map[day]) map[day] = [];
+        map[day].push(scheduleToBill(s, payeeMap));
+        seen.add(`${s.id}:${day}`);
+      }
+    }
+    if (recentTransactions?.length && schedules?.length) {
+      const scheduleById = new Map(schedules.map(s => [s.id, s]));
+      for (const t of recentTransactions) {
+        if (!t.scheduleId || !t.date) continue;
+        const sched = scheduleById.get(t.scheduleId);
+        if (!sched) continue;
+        const d = new Date(t.date + "T00:00:00");
+        if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) continue;
+        const day = d.getDate();
+        const key = `${t.scheduleId}:${day}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (!map[day]) map[day] = [];
+        map[day].push({
+          ...scheduleToBill(sched, payeeMap),
+          next_date: t.date,
+          amount: t.amount,
+          paid: true,
+        });
+      }
     }
     return map;
-  }, [schedules, payeeMap, viewMonth, viewYear]);
+  }, [schedules, recentTransactions, payeeMap, viewMonth, viewYear]);
 
   const utilityStatus = useMemo(() => {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
