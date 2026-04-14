@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { Zap, Droplet, Wifi, Flame, Trash2, Check } from "lucide-react";
 import { formatAmount, daysUntil, daysLabel, urgencyColor } from "../../lib/bill-utils";
 import Tooltip from "../shared/Tooltip";
 
@@ -10,17 +11,26 @@ const CELL_HEIGHT = 88;
 const DETAIL_HEIGHT = 340;
 
 const TRACKED_UTILITIES = [
-  { key: "sce", label: "Electricity", match: "sce" },
-  { key: "water", label: "Water", match: "sgv water" },
-  { key: "spectrum", label: "Internet", match: "spectrum" },
-  { key: "socalgas", label: "Gas", match: "socalgas" },
-  { key: "trash", label: "Trash", match: "valley vista" },
+  { key: "sce", label: "Electricity", match: "sce", icon: Zap },
+  { key: "water", label: "Water", match: "sgv water", icon: Droplet },
+  { key: "spectrum", label: "Internet", match: "spectrum", icon: Wifi },
+  { key: "socalgas", label: "Gas", match: "socalgas", icon: Flame },
+  { key: "trash", label: "Trash", match: "valley vista", icon: Trash2 },
 ];
 
 function formatShortDate(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function relativeDateLabel(days) {
+  if (days === null || days === undefined) return "";
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days === -1) return "1 day ago";
+  if (days < 0) return `${Math.abs(days)} days ago`;
+  return `in ${days} days`;
 }
 
 function getMonthData(year, month) {
@@ -186,7 +196,7 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
 
   const utilityStatus = useMemo(() => {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
-    return TRACKED_UTILITIES.map(u => {
+    const rows = TRACKED_UTILITIES.map(u => {
       const sched = schedules?.find(s => {
         const payeeCond = s.conditions?.find(c => c.field === "payee");
         const payeeName = payeeCond ? payeeMap?.[payeeCond.value] : null;
@@ -201,9 +211,17 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
         isStale: !sched || !nextDate || nextDate < today,
       };
     });
+    // Sort ascending by next_date; not-found entries sink to the bottom
+    return rows.sort((a, b) => {
+      if (!a.next_date && !b.next_date) return 0;
+      if (!a.next_date) return 1;
+      if (!b.next_date) return -1;
+      return a.next_date.localeCompare(b.next_date);
+    });
   }, [schedules, payeeMap]);
 
   const anyStale = utilityStatus.some(u => u.isStale && u.found);
+  const allFresh = utilityStatus.length > 0 && utilityStatus.every(u => u.found && !u.isStale);
 
   const updateStatusPos = useCallback(() => {
     if (!statusBtnRef.current) return;
@@ -263,7 +281,7 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
         position: "fixed",
         top: statusPos.top,
         right: statusPos.right,
-        zIndex: 60,
+        zIndex: 50,
         width: 280,
         background: "#16161e",
         border: "1px solid rgba(255,255,255,0.08)",
@@ -279,12 +297,19 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
         {utilityStatus.map(u => {
+          const Icon = u.icon;
           const color = !u.found ? "rgba(255,255,255,0.25)"
             : u.isStale ? "#f97316"
             : "#a6e3a1";
+          const days = u.next_date ? daysUntil(u.next_date) : null;
+          const rel = relativeDateLabel(days);
           const dateText = !u.found ? "not found"
-            : u.isStale ? `pending — last ${formatShortDate(u.next_date)}`
-            : `next ${formatShortDate(u.next_date)}`;
+            : u.isStale
+              ? `last ${formatShortDate(u.next_date)}`
+              : `next ${formatShortDate(u.next_date)}`;
+          const tooltipText = u.found && rel
+            ? (u.isStale ? `${rel} — statement pending` : rel)
+            : null;
           return (
             <div key={u.key} style={{
               display: "flex",
@@ -295,14 +320,14 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
               gap: 12,
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                <span style={{ color, fontSize: 14, width: 14, display: "inline-flex", justifyContent: "center", flexShrink: 0 }}>
-                  {!u.found ? "·" : u.isStale ? "⏳" : "✓"}
-                </span>
+                <Icon size={14} color={color} strokeWidth={2} style={{ flexShrink: 0 }} />
                 <span style={{ fontSize: 13, color: "#cdd6f4", fontWeight: 500 }}>{u.label}</span>
               </div>
-              <span style={{ fontSize: 12, color: u.isStale && u.found ? "#f97316" : "rgba(255,255,255,0.4)", whiteSpace: "nowrap" }}>
-                {dateText}
-              </span>
+              <Tooltip text={tooltipText} side="right" sideOffset={14} delay={200}>
+                <span style={{ fontSize: 12, color: u.isStale && u.found ? "#f97316" : "rgba(255,255,255,0.4)", whiteSpace: "nowrap", cursor: tooltipText ? "help" : "default" }}>
+                  {dateText}
+                </span>
+              </Tooltip>
             </div>
           );
         })}
@@ -430,6 +455,23 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
                       background: "#f97316",
                       boxShadow: "0 0 4px rgba(249,115,22,0.6)",
                     }} />
+                  )}
+                  {allFresh && (
+                    <span style={{
+                      position: "absolute",
+                      top: 5,
+                      right: 5,
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: "#a6e3a1",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: "0 0 4px rgba(166,227,161,0.6)",
+                    }}>
+                      <Check size={8} color="#16161e" strokeWidth={3.5} />
+                    </span>
                   )}
                 </button>
               </Tooltip>
