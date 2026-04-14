@@ -9,6 +9,20 @@ const GRID_ROWS = 6;
 const CELL_HEIGHT = 88;
 const DETAIL_HEIGHT = 340;
 
+const TRACKED_UTILITIES = [
+  { key: "sce", label: "Electricity", match: "sce" },
+  { key: "water", label: "Water", match: "sgv water" },
+  { key: "spectrum", label: "Internet", match: "spectrum" },
+  { key: "socalgas", label: "Gas", match: "socalgas" },
+  { key: "trash", label: "Trash", match: "valley vista" },
+];
+
+function formatShortDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function getMonthData(year, month) {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -41,28 +55,41 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
 
   const [view, setView] = useState({ month: currentMonth, year: currentYear });
   const [selectedDay, setSelectedDay] = useState(null);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [statusPos, setStatusPos] = useState({ top: 0, right: 0 });
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
+  const statusBtnRef = useRef(null);
+  const statusPopoverRef = useRef(null);
 
   const viewMonth = view.month;
   const viewYear = view.year;
 
-  const navigateMonth = useCallback((dir) => {
-    setSelectedDay(null);
-    setView(prev => {
-      const next = prev.month + dir;
-      if (next > 11) return { month: 0, year: prev.year + 1 };
-      if (next < 0) return { month: 11, year: prev.year - 1 };
-      return { month: next, year: prev.year };
-    });
-  }, []);
-
+  const navigateMonthRef = useRef(null);
   useEffect(() => {
+    navigateMonthRef.current = (dir) => {
+      setSelectedDay(null);
+      setView(prev => {
+        const next = prev.month + dir;
+        if (next > 11) return { month: 0, year: prev.year + 1 };
+        if (next < 0) return { month: 11, year: prev.year - 1 };
+        return { month: next, year: prev.year };
+      });
+    };
+  });
+  const navigateMonth = (dir) => navigateMonthRef.current?.(dir);
+
+  // Reset modal state when `open` transitions — render-time sync avoids effect cascade
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
     if (open) {
       setView({ month: currentMonth, year: currentYear });
       setSelectedDay(null);
+    } else {
+      setStatusOpen(false);
     }
-  }, [open, currentMonth, currentYear]);
+  }
 
   // Keyboard shortcuts (capture phase to intercept before dashboard handlers)
   useEffect(() => {
@@ -85,14 +112,14 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
         case "ArrowLeft":
         case "p":
           if (viewYear !== currentYear || viewMonth !== currentMonth) {
-            navigateMonth(-1);
+            navigateMonthRef.current(-1);
           }
           e.preventDefault();
           e.stopPropagation();
           break;
         case "ArrowRight":
         case "n":
-          navigateMonth(1);
+          navigateMonthRef.current(1);
           e.preventDefault();
           e.stopPropagation();
           break;
@@ -113,12 +140,13 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
     }
     document.addEventListener("keydown", handleKey, true);
     return () => document.removeEventListener("keydown", handleKey, true);
-  }, [open, onClose, navigateMonth, viewMonth, viewYear, currentMonth, currentYear]);
+  }, [open, onClose, viewMonth, viewYear, currentMonth, currentYear]);
 
   // Click outside
   useEffect(() => {
     if (!open) return;
     function handleClick(e) {
+      if (statusPopoverRef.current?.contains(e.target)) return;
       if (panelRef.current && !panelRef.current.contains(e.target)) {
         onClose();
       }
@@ -156,6 +184,55 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
     return map;
   }, [schedules, payeeMap, viewMonth, viewYear]);
 
+  const utilityStatus = useMemo(() => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+    return TRACKED_UTILITIES.map(u => {
+      const sched = schedules?.find(s => {
+        const payeeCond = s.conditions?.find(c => c.field === "payee");
+        const payeeName = payeeCond ? payeeMap?.[payeeCond.value] : null;
+        const haystack = `${payeeName || ""} ${s.name || ""}`.toLowerCase();
+        return haystack.includes(u.match);
+      });
+      const nextDate = sched?.next_date || null;
+      return {
+        ...u,
+        found: !!sched,
+        next_date: nextDate,
+        isStale: !sched || !nextDate || nextDate < today,
+      };
+    });
+  }, [schedules, payeeMap]);
+
+  const anyStale = utilityStatus.some(u => u.isStale && u.found);
+
+  const updateStatusPos = useCallback(() => {
+    if (!statusBtnRef.current) return;
+    const r = statusBtnRef.current.getBoundingClientRect();
+    setStatusPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+  }, []);
+
+  useEffect(() => {
+    if (!statusOpen) return;
+    updateStatusPos();
+    window.addEventListener("scroll", updateStatusPos, true);
+    window.addEventListener("resize", updateStatusPos);
+    return () => {
+      window.removeEventListener("scroll", updateStatusPos, true);
+      window.removeEventListener("resize", updateStatusPos);
+    };
+  }, [statusOpen, updateStatusPos]);
+
+  useEffect(() => {
+    if (!statusOpen) return;
+    function handle(e) {
+      if (statusBtnRef.current?.contains(e.target)) return;
+      if (statusPopoverRef.current?.contains(e.target)) return;
+      setStatusOpen(false);
+    }
+    document.addEventListener("pointerdown", handle);
+    return () => document.removeEventListener("pointerdown", handle);
+  }, [statusOpen]);
+
   const monthTotal = useMemo(() => {
     let total = 0;
     for (const bills of Object.values(billsByDay)) {
@@ -178,7 +255,64 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
   const selectedBills = selectedDay ? billsByDay[selectedDay] || [] : [];
   const showDetail = selectedDay && selectedBills.length > 0;
 
+  const statusPopover = statusOpen ? createPortal(
+    <div
+      ref={statusPopoverRef}
+      className="isolate"
+      style={{
+        position: "fixed",
+        top: statusPos.top,
+        right: statusPos.right,
+        zIndex: 60,
+        width: 280,
+        background: "#16161e",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 12,
+        boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+        padding: "12px 14px",
+        isolation: "isolate",
+        overscrollBehavior: "contain",
+      }}
+    >
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 500, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 10, padding: "0 2px" }}>
+        Statement Status
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {utilityStatus.map(u => {
+          const color = !u.found ? "rgba(255,255,255,0.25)"
+            : u.isStale ? "#f97316"
+            : "#a6e3a1";
+          const dateText = !u.found ? "not found"
+            : u.isStale ? `pending — last ${formatShortDate(u.next_date)}`
+            : `next ${formatShortDate(u.next_date)}`;
+          return (
+            <div key={u.key} style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "6px 8px",
+              borderRadius: 6,
+              gap: 12,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span style={{ color, fontSize: 14, width: 14, display: "inline-flex", justifyContent: "center", flexShrink: 0 }}>
+                  {!u.found ? "·" : u.isStale ? "⏳" : "✓"}
+                </span>
+                <span style={{ fontSize: 13, color: "#cdd6f4", fontWeight: 500 }}>{u.label}</span>
+              </div>
+              <span style={{ fontSize: 12, color: u.isStale && u.found ? "#f97316" : "rgba(255,255,255,0.4)", whiteSpace: "nowrap" }}>
+                {dateText}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   return createPortal(
+    <>
     <div
       style={{
         position: "fixed",
@@ -262,25 +396,63 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
                 &#8250;
               </button>
             </div>
-            <button
-              onClick={onClose}
-              style={{
-                color: "rgba(255,255,255,0.3)",
-                cursor: "pointer",
-                fontSize: 14,
-                width: 40,
-                height: 40,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 8,
-                background: "rgba(255,255,255,0.04)",
-                border: "none",
-                fontFamily: "inherit",
-              }}
-            >
-              &#10005;
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Tooltip text="Utility statement status">
+                <button
+                  ref={statusBtnRef}
+                  onClick={() => setStatusOpen(v => !v)}
+                  style={{
+                    position: "relative",
+                    color: statusOpen ? "#cba6da" : "rgba(255,255,255,0.5)",
+                    cursor: "pointer",
+                    width: 40,
+                    height: 40,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 8,
+                    background: statusOpen ? "rgba(203,166,218,0.08)" : "rgba(255,255,255,0.04)",
+                    border: "none",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </svg>
+                  {anyStale && (
+                    <span style={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: "#f97316",
+                      boxShadow: "0 0 4px rgba(249,115,22,0.6)",
+                    }} />
+                  )}
+                </button>
+              </Tooltip>
+              <button
+                onClick={onClose}
+                style={{
+                  color: "rgba(255,255,255,0.3)",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  width: 40,
+                  height: 40,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "none",
+                  fontFamily: "inherit",
+                }}
+              >
+                &#10005;
+              </button>
+            </div>
           </div>
 
           {/* Day headers */}
@@ -520,7 +692,9 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
           </div>
         </div>
       </div>
-    </div>,
+    </div>
+    {statusPopover}
+    </>,
     document.body,
   );
 }
