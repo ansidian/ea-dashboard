@@ -15,8 +15,9 @@ export default function EmailIframe({ html }) {
     FORBID_TAGS: ["script"],
     WHOLE_DOCUMENT: true,
   })
-    // Strip tracking pixels (1x1 or 0x0 images, common tracker domains)
-    .replace(/<img[^>]*(?:width\s*=\s*["']?[01]|height\s*=\s*["']?[01]|\.gif\?[^"']*["'])[^>]*\/?>/gi, "");
+    // Strip tracking pixels (1x1 or 0x0 images). The digit must be the whole
+    // value — not a prefix — otherwise width="100" / height="150" get eaten.
+    .replace(/<img[^>]*(?:width\s*=\s*["']?[01]["'\s\/>]|height\s*=\s*["']?[01]["'\s\/>])[^>]*\/?>/gi, "");
 
   // Force every link to open in a new tab. Without this, anchors (especially
   // those with author-set target="_self"/"_top") navigate the iframe itself
