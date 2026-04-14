@@ -204,10 +204,13 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
         return haystack.includes(u.match);
       });
       const nextDate = sched?.next_date || null;
+      const amtCond = sched?.conditions?.find(c => c.field === "amount");
+      const amount = amtCond?.value ? Math.abs(amtCond.value) / 100 : null;
       return {
         ...u,
         found: !!sched,
         next_date: nextDate,
+        amount,
         isStale: !sched || !nextDate || nextDate < today,
       };
     });
@@ -307,9 +310,12 @@ export default function BillsCalendarModal({ open, onClose, schedules, payeeMap,
             : u.isStale
               ? `last ${formatShortDate(u.next_date)}`
               : `next ${formatShortDate(u.next_date)}`;
-          const tooltipText = u.found && rel
-            ? (u.isStale ? `${rel} — statement pending` : rel)
-            : null;
+          const tooltipText = u.found && rel ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, lineHeight: 1.3 }}>
+              {u.amount != null && <span style={{ fontWeight: 600 }}>{formatAmount(u.amount)}</span>}
+              <span>{u.isStale ? `${rel} — statement pending` : rel}</span>
+            </div>
+          ) : null;
           return (
             <div key={u.key} style={{
               display: "flex",
