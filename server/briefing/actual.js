@@ -33,9 +33,22 @@ function withLock(fn) {
 const METADATA_TTL_MS = 5 * 60 * 1000;
 let metadataCache = { data: null, ts: 0 };
 
-export function testConnection(userId) {
+export function testConnection(userId, overrides = null) {
   return withLock(async () => {
-    const { serverURL, password, syncId } = await getActualConfig(userId);
+    let serverURL, password, syncId;
+    if (overrides && overrides.serverURL && overrides.syncId) {
+      serverURL = overrides.serverURL.replace(/\/+$/, "");
+      syncId = overrides.syncId;
+      if (overrides.password) {
+        password = overrides.password;
+      } else {
+        // Dirty URL/sync-id but password unchanged — fall back to stored password
+        const stored = await getActualConfig(userId).catch(() => null);
+        password = stored?.password || null;
+      }
+    } else {
+      ({ serverURL, password, syncId } = await getActualConfig(userId));
+    }
 
     try {
       await actualApi.init({ serverURL, password });

@@ -1003,11 +1003,13 @@ router.get("/actual/categories", async (req, res) => {
 
 router.post("/actual/test", async (req, res) => {
   const userId = process.env.EA_USER_ID;
+  const { serverURL, password, syncId } = req.body || {};
+  const overrides = serverURL && syncId ? { serverURL, password, syncId } : null;
   try {
-    res.json(await testActual(userId));
+    res.json(await testActual(userId, overrides));
   } catch (err) {
     console.error("Actual Budget test failed:", err.message);
-    res.status(400).json({ message: err.message || "Connection failed" });
+    res.status(400).json({ message: err.message || "Connection failed", success: false });
   }
 });
 

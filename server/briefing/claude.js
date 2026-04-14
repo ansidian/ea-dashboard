@@ -673,8 +673,15 @@ ${nextWeekSummary || "No events"}${interestsNote}${categoriesNote}${scheduledNot
   return result;
 }
 
+const MODELS_CACHE_TTL_MS = 60 * 60 * 1000;
+let modelsCache = null;
+
 export async function listModels() {
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+
+  if (modelsCache && Date.now() - modelsCache.at < MODELS_CACHE_TTL_MS) {
+    return modelsCache.data;
+  }
 
   const res = await fetch("https://api.anthropic.com/v1/models?limit=100", {
     headers: {
@@ -689,7 +696,10 @@ export async function listModels() {
   }
 
   const data = await res.json();
-  return (data.data || [])
+  const models = (data.data || [])
     .map(m => ({ id: m.id, name: m.display_name || m.id, created: m.created_at }))
     .sort((a, b) => (b.created || "").localeCompare(a.created || ""));
+
+  modelsCache = { at: Date.now(), data: models };
+  return models;
 }
