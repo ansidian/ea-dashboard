@@ -199,6 +199,14 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
         {actualConfigured && !showLoading && (
           <button
             onClick={() => setShowCalendar(true)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(203,166,218,0.14)";
+              e.currentTarget.style.borderColor = "rgba(203,166,218,0.35)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(203,166,218,0.06)";
+              e.currentTarget.style.borderColor = "rgba(203,166,218,0.12)";
+            }}
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 ml-auto"
             style={{
               background: "rgba(203,166,218,0.06)",
