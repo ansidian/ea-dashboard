@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { SECTION_META } from "./constants";
 import { formatBriefingDate } from "./formatDate";
 import { ChevronRightIcon } from "./Icons";
+import { Icon } from "@/lib/icons.jsx";
 import ContextCard from "./ContextCard";
 
 function BriefingResultRow({
@@ -19,7 +20,7 @@ function BriefingResultRow({
   const isExpanded = expandedId === key;
   const isFocused = relevantIdx === focusedIdx;
   const meta = SECTION_META[r.section_type] || {
-    icon: "📋",
+    icon: "ClipboardList",
     color: "#b4befe",
     label: r.section_type,
   };
@@ -53,7 +54,9 @@ function BriefingResultRow({
         )}
 
         {/* Section icon */}
-        <span className="relative text-sm shrink-0 mt-px">{meta.icon}</span>
+        <span className="relative shrink-0 mt-px flex items-center" style={{ color: meta.color }}>
+          <Icon name={meta.icon} size={14} />
+        </span>
 
         <div className="relative flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { Icon } from "@/lib/icons.jsx";
 
 const BAR_COLOR = "#cba6da";
 const BAR_COLOR_FADED = "rgba(203,166,218,0.25)";
@@ -105,7 +106,9 @@ export default function WeatherTooltip({ weather, triggerRef, onMouseEnter, onMo
                 />
 
                 {/* Icon */}
-                <div className="text-sm leading-none mt-0.5">{h.icon}</div>
+                <div className="leading-none mt-0.5 flex items-center justify-center" style={{ color: "rgba(205,214,244,0.7)" }}>
+                  <Icon name={h.icon} size={14} />
+                </div>
 
                 {/* Time */}
                 <div

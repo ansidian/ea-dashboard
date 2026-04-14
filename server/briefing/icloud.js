@@ -101,7 +101,7 @@ export async function fetchEmails(account, password, hoursBack) {
         account_label: account.label,
         account_email: account.email,
         account_color: account.color,
-        account_icon: account.icon || "🍎",
+        account_icon: account.icon || "Apple",
         from: fromName,
         from_email: fromAddress,
         subject: msg.envelope?.subject || "(no subject)",

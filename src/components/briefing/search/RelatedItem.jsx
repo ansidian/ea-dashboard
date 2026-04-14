@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { ArrowRight } from "lucide-react";
+import { Icon } from "@/lib/icons.jsx";
 
 export default function RelatedItem({ item, onEmailClick }) {
   const isEmail = item.type === "email" && item.emailData;
@@ -21,11 +23,11 @@ export default function RelatedItem({ item, onEmailClick }) {
         isEmail && "cursor-pointer hover:bg-white/[0.04]",
       )}
     >
-      <span className="shrink-0">{item.icon}</span>
+      <span className="shrink-0 mt-px"><Icon name={item.icon} size={12} /></span>
       <span className="leading-relaxed flex-1">{item.text}</span>
       {isEmail && (
-        <span className="text-primary text-[10px] shrink-0 mt-px opacity-60">
-          view →
+        <span className="text-primary text-[10px] shrink-0 mt-px opacity-60 inline-flex items-center gap-1">
+          view <ArrowRight size={10} />
         </span>
       )}
     </div>

@@ -206,7 +206,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
       if (!label || grouped.has(label)) continue;
       grouped.set(label, {
         name: label,
-        icon: a.icon || (a.type === "icloud" ? "🍎" : "📧"),
+        icon: a.icon || (a.type === "icloud" ? "Apple" : "Mail"),
         color: a.color || "#6366f1",
         important: [],
         noise: [],
@@ -255,7 +255,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
       const original = inputEmails.find((e) => e.account_label === accountLabel);
       grouped.set(accountLabel, {
         name: accountLabel,
-        icon: original?.account_icon || "📧",
+        icon: original?.account_icon || "Mail",
         color: original?.account_color || "#6366f1",
         important: [],
         noise: [],

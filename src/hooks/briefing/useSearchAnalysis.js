@@ -35,7 +35,7 @@ export default function useSearchAnalysis({ query, results, onNavigateToEmail, o
     } catch {
       setExpandedCtx({
         primary: [],
-        related: [{ type: "error", icon: "⚠️", text: "Failed to load briefing context" }],
+        related: [{ type: "error", icon: "AlertTriangle", text: "Failed to load briefing context" }],
       });
     } finally {
       setLoadingCtx(null);

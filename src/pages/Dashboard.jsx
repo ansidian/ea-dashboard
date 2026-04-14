@@ -10,6 +10,7 @@ import DeadlinesSection from "../components/deadlines/DeadlinesSection";
 import BillsPaymentsSection from "../components/bills/BillsPaymentsSection";
 import EmailTabSection from "../components/email/EmailTabSection";
 import SummaryBar from "../components/layout/SummaryBar";
+import { Sun } from "lucide-react";
 
 import { DashboardProvider, useDashboard } from "../context/DashboardContext";
 import { Button } from "@/components/ui/button";
@@ -139,7 +140,7 @@ export default function Dashboard() {
   if (!bd.briefing)
     return (
       <div className="min-h-screen text-foreground font-sans flex flex-col items-center justify-center gap-4 p-6">
-        <div className="text-5xl">☀️</div>
+        <Sun size={48} className="text-[#f9e2af]" />
         <h1 className="font-serif text-[28px] font-normal text-[#f8fafc] m-0">
           No briefings yet
         </h1>

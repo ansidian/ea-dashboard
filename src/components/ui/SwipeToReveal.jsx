@@ -1,4 +1,5 @@
 import { useRef, useCallback } from "react";
+import { X } from "lucide-react";
 
 const REVEAL_THRESHOLD = 80;
 const DISMISS_THRESHOLD = 160;
@@ -71,8 +72,8 @@ export default function SwipeToReveal({ onAction, actionLabel = "Dismiss", actio
         className="absolute right-0 top-0 bottom-0 flex items-center justify-center"
         style={{ width: REVEAL_THRESHOLD, background: actionColor }}
       >
-        <div className="text-white text-center">
-          <div className="text-base font-bold">✕</div>
+        <div className="text-white text-center flex flex-col items-center">
+          <X size={18} strokeWidth={2.5} />
           <div className="text-[11px] font-semibold mt-0.5">{actionLabel}</div>
         </div>
       </div>

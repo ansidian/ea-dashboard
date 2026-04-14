@@ -43,7 +43,7 @@ export async function indexEmails(userId, emails) {
     const args = [
       uid, userId, email.account_id, email.account_label,
       email.account_email, email.account_color || "#818cf8",
-      email.account_icon || "📧", fromName, fromAddress,
+      email.account_icon || "Mail", fromName, fromAddress,
       subject, bodySnippet, bodyText,
       email.date || "", email.read ? 1 : 0,
     ];

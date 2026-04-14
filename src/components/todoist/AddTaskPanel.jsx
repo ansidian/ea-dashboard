@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { ChevronDown, X, CornerDownLeft } from "lucide-react";
 import {
   getTodoistProjects,
   getTodoistLabels,
@@ -370,7 +371,7 @@ function Dropdown({
         }}
       >
         <span>{renderValue ? renderValue(value) : value || "None"}</span>
-        <span style={{ fontSize: 10, opacity: 0.5 }}>&#9662;</span>
+        <ChevronDown size={12} style={{ opacity: 0.5 }} />
       </div>
       {open && (
         <div
@@ -1200,9 +1201,9 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
                     setOverrides((prev) => ({ ...prev, labels: true }));
                   }
                 }}
-                style={{ cursor: "pointer", opacity: 0.6, fontSize: 10 }}
+                style={{ cursor: "pointer", opacity: 0.6, display: "inline-flex", alignItems: "center" }}
               >
-                &times;
+                <X size={12} />
               </span>
             </span>
           ))}
@@ -1250,8 +1251,8 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
           alignItems: "center",
         }}
       >
-        <div style={{ color: "rgba(205,214,244,0.25)", fontSize: 11 }}>
-          &#8629; Enter to add &middot; Esc to cancel
+        <div style={{ color: "rgba(205,214,244,0.25)", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
+          <CornerDownLeft size={11} /> Enter to add &middot; Esc to cancel
         </div>
         <button
           onClick={handleSubmit}

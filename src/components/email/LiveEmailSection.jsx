@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { Pin } from "lucide-react";
+import { Pin, Star } from "lucide-react";
 import Section from "../layout/Section";
 import EmailRow from "./EmailRow";
 import EmailReaderOverlay from "./EmailReaderOverlay";
@@ -8,6 +8,7 @@ import useEmailReaderNav from "../../hooks/email/useEmailReaderNav";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { timeAgo } from "../../lib/dashboard-helpers";
 import { CheckCheck } from "lucide-react";
+import { Icon } from "@/lib/icons.jsx";
 import ContextMenu from "../ui/ContextMenu";
 
 function buildLiveEmailMenu(email, isRead, isPinned, {
@@ -313,7 +314,9 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                 desktopMeta={
                   <>
                     {email.account_icon && (
-                      <span className="text-[10px]">{email.account_icon}</span>
+                      <span className="inline-flex items-center" style={{ color: email.account_color }}>
+                        <Icon name={email.account_icon} size={10} />
+                      </span>
                     )}
                     {email.account_label && (
                       <span className="text-[10px] text-muted-foreground/35">
@@ -328,14 +331,14 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                 }
                 desktopAfterFrom={
                   email.isImportantSender ? (
-                    <span className="text-[9px] text-orange-400/80 font-semibold tracking-wide">
-                      ★
-                    </span>
+                    <Star size={10} className="text-orange-400/80" fill="currentColor" />
                   ) : null
                 }
                 mobileBeforeFrom={
                   email.account_icon ? (
-                    <span className="text-xs">{email.account_icon}</span>
+                    <span className="inline-flex items-center" style={{ color: email.account_color }}>
+                      <Icon name={email.account_icon} size={12} />
+                    </span>
                   ) : null
                 }
                 mobileMeta={
@@ -348,9 +351,7 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                       />
                     )}
                     {email.isImportantSender && (
-                      <span className="text-xs text-orange-400/80 font-semibold">
-                        ★
-                      </span>
+                      <Star size={12} className="text-orange-400/80" fill="currentColor" />
                     )}
                     <span
                       className="text-xs text-muted-foreground/30 tabular-nums"

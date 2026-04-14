@@ -8,7 +8,8 @@ import useEmailReaderNav from "../../hooks/email/useEmailReaderNav";
 import { MotionExpand, MotionChevron, MotionList, MotionItem } from "../ui/motion-wrappers";
 import { useDashboard } from "../../context/DashboardContext";
 import { markAllEmailsAsRead, trashEmail, markEmailAsRead, markEmailAsUnread } from "../../api";
-import { CheckCheck } from "lucide-react";
+import { CheckCheck, CreditCard, History } from "lucide-react";
+import { Icon } from "@/lib/icons.jsx";
 import useIsMobile from "../../hooks/useIsMobile";
 import SwipeToReveal from "../ui/SwipeToReveal";
 import ContextMenu from "../ui/ContextMenu";
@@ -325,7 +326,7 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
                 border: isActive ? `1px solid ${acc.color}30` : "1px solid rgba(255,255,255,0.04)",
               }}
             >
-              <span className="text-sm">{acc.icon}</span>
+              <span className="flex items-center" style={{ color: isActive ? acc.color : "rgba(205,214,244,0.5)" }}><Icon name={acc.icon} size={14} /></span>
               <span
                 className="text-[11px] max-sm:text-xs font-medium"
                 style={{ color: isActive ? `${acc.color}dd` : "rgba(205,214,244,0.5)" }}
@@ -397,16 +398,16 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
                 desktopAfterFrom={
                   <>
                     {isCarriedOver && (
-                      <span className="text-[10px] text-muted-foreground/40">
-                        ↩ previous
+                      <span className="text-[10px] text-muted-foreground/40 inline-flex items-center gap-1">
+                        <History size={10} /> previous
                       </span>
                     )}
                     {email.hasBill && (
                       <span
-                        className="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded uppercase"
+                        className="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded uppercase inline-flex items-center gap-1"
                         style={{ color: "#a6e3a1cc", background: "rgba(166,227,161,0.08)" }}
                       >
-                        💳 Bill
+                        <CreditCard size={10} /> Bill
                       </span>
                     )}
                   </>
@@ -414,10 +415,10 @@ export default function EmailSection({ summary, model: _model, loaded, delay, st
                 mobileMeta={
                   <>
                     {isCarriedOver && (
-                      <span className="text-xs text-muted-foreground/40">↩</span>
+                      <span className="inline-flex items-center text-muted-foreground/40"><History size={12} /></span>
                     )}
                     {email.hasBill && (
-                      <span className="text-xs font-bold" style={{ color: "#a6e3a1cc" }}>💳</span>
+                      <span className="inline-flex items-center" style={{ color: "#a6e3a1cc" }}><CreditCard size={12} /></span>
                     )}
                     {email.action && (
                       <span

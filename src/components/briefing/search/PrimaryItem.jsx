@@ -1,4 +1,6 @@
 import { cn } from "@/lib/utils";
+import { ArrowRight } from "lucide-react";
+import { Icon } from "@/lib/icons.jsx";
 
 function clickableProps(enabled, onActivate) {
   if (!enabled) return {};
@@ -54,8 +56,8 @@ export default function PrimaryItem({ item, sectionType, onEmailClick }) {
           </span>
         )}
         {isClickableEmail && (
-          <span className="text-primary/50 text-[10px] ml-auto shrink-0">
-            view →
+          <span className="text-primary/50 text-[10px] ml-auto shrink-0 inline-flex items-center gap-1">
+            view <ArrowRight size={10} />
           </span>
         )}
       </div>
@@ -129,7 +131,7 @@ export default function PrimaryItem({ item, sectionType, onEmailClick }) {
   if (item.text) {
     return (
       <div className="flex gap-1.5 items-start py-1 text-[11px] text-foreground/75">
-        <span className="shrink-0">{item.icon}</span>
+        <span className="shrink-0 mt-px"><Icon name={item.icon} size={12} /></span>
         <span className="leading-relaxed">{item.text}</span>
       </div>
     );

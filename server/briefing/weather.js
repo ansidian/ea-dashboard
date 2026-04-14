@@ -1,24 +1,25 @@
 const PIRATE_WEATHER_API_KEY = process.env.PIRATE_WEATHER_API_KEY;
 
-// Pirate Weather (Dark Sky-compatible) icon → emoji mapping
+// Pirate Weather (Dark Sky-compatible) condition → lucide icon name.
+// Frontend resolves the name to a component via src/lib/icons.jsx.
 const ICON_MAP = {
-  "clear-day": "☀️",
-  "clear-night": "🌙",
-  "rain": "🌧️",
-  "snow": "🌨️",
-  "sleet": "🌨️",
-  "wind": "💨",
-  "fog": "🌫️",
-  "cloudy": "☁️",
-  "partly-cloudy-day": "⛅",
-  "partly-cloudy-night": "☁️",
-  "hail": "🌨️",
-  "thunderstorm": "⛈️",
-  "tornado": "🌪️",
+  "clear-day": "Sun",
+  "clear-night": "Moon",
+  "rain": "CloudRain",
+  "snow": "CloudSnow",
+  "sleet": "CloudSnow",
+  "wind": "Wind",
+  "fog": "CloudFog",
+  "cloudy": "Cloud",
+  "partly-cloudy-day": "CloudSun",
+  "partly-cloudy-night": "Cloud",
+  "hail": "CloudSnow",
+  "thunderstorm": "CloudLightning",
+  "tornado": "Tornado",
 };
 
 function getIcon(iconStr) {
-  return ICON_MAP[iconStr] || "☀️";
+  return ICON_MAP[iconStr] || "Sun";
 }
 
 function formatHour(unixTime, timezone) {

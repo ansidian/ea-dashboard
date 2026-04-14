@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
+import { X } from "lucide-react";
+import { Icon } from "@/lib/icons.jsx";
+import { ACCOUNT_ICON_OPTIONS } from "@/lib/icons.js";
 import {
   getAccounts, getSettings, updateSettings,
   getGmailAuthUrl, addICloudAccount, removeAccount, updateAccount, reorderAccounts,
@@ -22,14 +25,13 @@ function SettingsCard({ title, children }) {
   );
 }
 
-const EMOJI_OPTIONS = ["📧", "🍎", "💼", "🏫", "🎓", "🏠", "💰", "🛒", "🔔", "🎮", "🎵", "📱", "🖥️", "🔧", "⭐", "🚀"];
 const COLOR_OPTIONS = ["#cba6da", "#b4befe", "#f38ba8", "#f5c2e7", "#fab387", "#f9e2af", "#a6e3a1", "#89dceb", "#89b4fa", "#6c7086"];
 
 function AccountRow({ acc, accounts, setAccounts, onRemove }) {
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(acc.label || acc.email);
   const [color, setColor] = useState(acc.color || "#cba6da");
-  const [icon, setIcon] = useState(acc.icon || (acc.type === "icloud" ? "🍎" : "📧"));
+  const [icon, setIcon] = useState(acc.icon || (acc.type === "icloud" ? "Apple" : "Mail"));
   const [saving, setSaving] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: acc.id, disabled: editing });
 
@@ -54,7 +56,7 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="bg-surface rounded-lg border border-border overflow-hidden">
       <div className="flex flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center sm:gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-base cursor-pointer shrink-0" onClick={() => setEditing(!editing)} title="Edit">{icon}</span>
+          <span className="cursor-pointer shrink-0 flex items-center" style={{ color: color }} onClick={() => setEditing(!editing)} title="Edit"><Icon name={icon} size={16} /></span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
@@ -99,13 +101,13 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
           <div>
             <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">Icon</label>
             <div className="flex gap-1 flex-wrap">
-              {EMOJI_OPTIONS.map(e => (
+              {ACCOUNT_ICON_OPTIONS.map(e => (
                 <button key={e} onClick={() => setIcon(e)} className={cn(
-                  "text-lg px-1.5 py-1 rounded-md cursor-pointer border transition-all",
+                  "px-2 py-2 rounded-md cursor-pointer border transition-all flex items-center justify-center",
                   icon === e
                     ? "bg-primary/[0.12] border-primary/30"
                     : "bg-white/[0.03] border-border hover:bg-white/[0.06]"
-                )} aria-label={`Select icon ${e}`}>{e}</button>
+                )} aria-label={`Select icon ${e}`}><Icon name={e} size={16} /></button>
               ))}
             </div>
           </div>
@@ -472,7 +474,7 @@ export default function Settings() {
                 const next = settings.email_interests.filter((_, j) => j !== i);
                 setSettings(s => ({ ...s, email_interests: next }));
                 await updateSettings({ email_interests_json: next });
-              }} className="bg-transparent border-none text-primary/60 cursor-pointer p-0 text-sm leading-none ml-0.5 hover:text-primary" aria-label={`Remove ${tag}`}>×</button>
+              }} className="bg-transparent border-none text-primary/60 cursor-pointer p-0 leading-none ml-0.5 hover:text-primary inline-flex items-center" aria-label={`Remove ${tag}`}><X size={12} /></button>
             </span>
           ))}
         </div>
@@ -671,7 +673,7 @@ export default function Settings() {
                   const updated = settings.schedules.filter((_, j) => j !== oi);
                   setSettings(s => ({ ...s, schedules: updated }));
                   await updateSettings({ schedules_json: updated });
-                }} className="bg-transparent border-none cursor-pointer text-muted-foreground text-base px-1 opacity-60 hover:opacity-100 transition-opacity" aria-label="Remove schedule">×</button>
+                }} className="bg-transparent border-none cursor-pointer text-muted-foreground px-1 opacity-60 hover:opacity-100 transition-opacity inline-flex items-center" aria-label="Remove schedule"><X size={14} /></button>
               </div>
             </div>
             );

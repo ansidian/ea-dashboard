@@ -1,7 +1,9 @@
+// Legacy condition-word fallback for briefings that stored weather-icon slugs
+// instead of names. Newer weather data already comes through as lucide names.
 const WEATHER_ICONS = {
-  sunny: "☀️", clear: "☀️", partly_cloudy: "⛅", cloudy: "☁️",
-  rain: "🌧️", thunderstorm: "⛈️", snow: "❄️", fog: "🌫️",
-  night: "🌙", clear_night: "🌙",
+  sunny: "Sun", clear: "Sun", partly_cloudy: "CloudSun", cloudy: "Cloud",
+  rain: "CloudRain", thunderstorm: "CloudLightning", snow: "Snowflake", fog: "CloudFog",
+  night: "Moon", clear_night: "Moon",
 };
 
 export function transformBriefing(raw) {

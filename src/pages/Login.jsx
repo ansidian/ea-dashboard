@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { login } from "../api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Sun, Lock } from "lucide-react";
 
 export default function Login({ onLogin }) {
   const [password, setPassword] = useState("");
@@ -47,7 +48,7 @@ export default function Login({ onLogin }) {
         className="w-full max-w-[360px] rounded-xl border border-white/[0.04] bg-card p-8 text-center"
         onSubmit={handleSubmit}
       >
-        <div className="text-5xl mb-6">☀️</div>
+        <div className="mb-6 flex justify-center text-[#f9e2af]"><Sun size={40} /></div>
         <h1 className="font-serif text-[28px] font-normal text-white/95 mb-1">EA Dashboard</h1>
         <p className="text-sm text-muted-foreground mb-8">Enter your password to continue</p>
 
@@ -75,7 +76,7 @@ export default function Login({ onLogin }) {
             }`}
           >
             {locked && (
-              <span className="inline-block mr-1.5">🔒</span>
+              <Lock size={12} className="inline-block mr-1.5 -mt-0.5" />
             )}
             {error}
           </div>

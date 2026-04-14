@@ -4,6 +4,8 @@ import EmailIframe from "./EmailIframe";
 import BillBadge from "../bills/BillBadge";
 import { urgencyStyles } from "../../lib/dashboard-helpers";
 import { getGmailUrl } from "../../lib/email-links";
+import { Icon } from "@/lib/icons.jsx";
+import { CreditCard } from "lucide-react";
 
 const AUTO_MARK_DELAY_MS = 1500;
 
@@ -192,7 +194,7 @@ export default function EmailReader({
         style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
       >
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm shrink-0">{email.account_icon || "📧"}</span>
+          <span className="shrink-0 flex items-center" style={{ color: email.account_color }}><Icon name={email.account_icon || "Mail"} size={14} /></span>
           <span className="text-[11px] font-semibold text-foreground/80">
             {email.account_label}
           </span>
@@ -479,14 +481,14 @@ function TriageStrip({ triage }) {
           )}
           {hasBill && (
             <span
-              className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+              className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded inline-flex items-center gap-1"
               style={{
                 color: "#a6e3a1",
                 background: "rgba(166,227,161,0.08)",
                 border: "1px solid rgba(166,227,161,0.25)",
               }}
             >
-              💳 Bill
+              <CreditCard size={10} /> Bill
             </span>
           )}
         </div>

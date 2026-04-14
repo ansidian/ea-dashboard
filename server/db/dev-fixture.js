@@ -29,7 +29,7 @@ export function generateMockBriefing() {
     hourly.push({
       time: `${h12} ${ampm}`,
       temp: Math.max(55, Math.min(90, baseTemp + Math.round(Math.random() * 4 - 2))),
-      icon: h >= 6 && h < 18 ? "☀️" : "🌙",
+      icon: h >= 6 && h < 18 ? "Sun" : "Moon",
     });
   }
 
@@ -41,8 +41,8 @@ export function generateMockBriefing() {
       location: "El Monte, CA",
     },
     aiInsights: [
-      { icon: "📅", text: "Your 3 PM meeting overlaps with the Canvas assignment deadline at 4 PM. Complete the submission before lunch." },
-      { icon: "📧", text: "2 emails need your attention today — check the briefing tab for details." },
+      { icon: "Calendar", text: "Your 3 PM meeting overlaps with the Canvas assignment deadline at 4 PM. Complete the submission before lunch." },
+      { icon: "Mail", text: "2 emails need your attention today — check the briefing tab for details." },
     ],
     calendar: (() => {
       const today = new Date();
@@ -82,7 +82,7 @@ export function generateMockBriefing() {
       summary: "4 emails across 2 accounts. 2 need attention, 2 FYI, 0 noise.",
       accounts: [
         {
-          name: "Work Gmail", icon: "📧", color: "#818cf8", unread: 2,
+          name: "Work Gmail", icon: "Mail", color: "#818cf8", unread: 2,
           important: [
             {
               id: "mock-work-001", message_id: "<mock-001@company.com>",
@@ -104,7 +104,7 @@ export function generateMockBriefing() {
           noise: [], noise_count: 0,
         },
         {
-          name: "Personal iCloud", icon: "🍎", color: "#a259ff", unread: 2,
+          name: "Personal iCloud", icon: "Apple", color: "#a259ff", unread: 2,
           important: [
             {
               id: "mock-personal-001", message_id: "<mock-003@venmo.com>",

@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Zap, Droplet, Wifi, Flame, Trash2, Check } from "lucide-react";
+import { Zap, Droplet, Wifi, Flame, Trash2, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { formatAmount, daysUntil, daysLabel, urgencyColor } from "../../lib/bill-utils";
 import Tooltip from "../shared/Tooltip";
 
@@ -405,7 +405,6 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                 style={{
                   color: canGoPrev ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.15)",
                   cursor: canGoPrev ? "pointer" : "default",
-                  fontSize: 22,
                   width: 40,
                   height: 40,
                   display: "flex",
@@ -415,11 +414,10 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                   background: "rgba(255,255,255,0.04)",
                   border: "none",
                   fontFamily: "inherit",
-                  lineHeight: 1,
                   flexShrink: 0,
                 }}
               >
-                &#8249;
+                <ChevronLeft size={20} />
               </button>
               <span style={{
                 fontSize: 24,
@@ -435,7 +433,6 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                 style={{
                   color: "rgba(255,255,255,0.5)",
                   cursor: "pointer",
-                  fontSize: 22,
                   width: 40,
                   height: 40,
                   display: "flex",
@@ -445,11 +442,10 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                   background: "rgba(255,255,255,0.04)",
                   border: "none",
                   fontFamily: "inherit",
-                  lineHeight: 1,
                   flexShrink: 0,
                 }}
               >
-                &#8250;
+                <ChevronRight size={20} />
               </button>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -472,9 +468,7 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                     fontFamily: "inherit",
                   }}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                  </svg>
+                  <Zap size={18} strokeWidth={1.8} />
                   {anyStale && (
                     <span style={{
                       position: "absolute",
@@ -511,7 +505,6 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                 style={{
                   color: "rgba(255,255,255,0.3)",
                   cursor: "pointer",
-                  fontSize: 14,
                   width: 40,
                   height: 40,
                   display: "flex",
@@ -523,7 +516,7 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                   fontFamily: "inherit",
                 }}
               >
-                &#10005;
+                <X size={16} />
               </button>
             </div>
           </div>

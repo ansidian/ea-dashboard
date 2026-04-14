@@ -2,6 +2,7 @@ import { useEffect, useReducer } from "react";
 import Section from "../layout/Section";
 import { MotionList, MotionItem } from "../ui/motion-wrappers";
 import { resolveInsight } from "../../lib/insight-resolver";
+import { Icon } from "@/lib/icons.jsx";
 
 function formatStaleLabel(aiGeneratedAt) {
   if (!aiGeneratedAt) return null;
@@ -84,12 +85,15 @@ export default function InsightsSection({
               }
             />
 
-            {/* Emoji well */}
+            {/* Icon well */}
             <span
-              className="text-sm shrink-0 w-7 h-7 flex items-center justify-center rounded-md"
-              style={{ background: `rgba(255,255,255,${isStale ? "0.02" : "0.03"})` }}
+              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md"
+              style={{
+                background: `rgba(255,255,255,${isStale ? "0.02" : "0.03"})`,
+                color: isStale ? "rgba(205,214,244,0.45)" : "#cba6da",
+              }}
             >
-              {insight.icon}
+              <Icon name={insight.icon} size={14} />
             </span>
 
             <span

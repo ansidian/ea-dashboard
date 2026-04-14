@@ -26,7 +26,7 @@ export default function extractRelatedContext(briefing, sectionType, chunkText) 
     // Related emails from same senders (navigable)
     ctx.related.push(...allEmails
       .filter(e => !e.hasBill && payees.some(p => (e.from || "").toLowerCase().includes(p)))
-      .map(e => ({ type: "email", icon: "📧", text: `${e.from}: "${e.subject}"`, emailData: e })));
+      .map(e => ({ type: "email", icon: "Mail", text: `${e.from}: "${e.subject}"`, emailData: e })));
   } else if (sectionType === "emails") {
     ctx.primary = allEmails.filter(e => {
       const from = (e.from || "").toLowerCase();
@@ -39,7 +39,7 @@ export default function extractRelatedContext(briefing, sectionType, chunkText) 
       .map(i => ({ type: "insight", icon: i.icon, text: i.text })));
     ctx.related.push(...allBills
       .filter(e => senders.some(s => (e.from || "").toLowerCase().includes(s)) && !ctx.primary.includes(e))
-      .map(e => ({ type: "bill", icon: "💰", text: `${e.extractedBill.payee}: $${e.extractedBill.amount}` })));
+      .map(e => ({ type: "bill", icon: "DollarSign", text: `${e.extractedBill.payee}: $${e.extractedBill.amount}` })));
   } else if (sectionType === "deadlines") {
     ctx.primary = deadlines.filter(d => {
       const title = (d.title || "").toLowerCase();
@@ -51,7 +51,7 @@ export default function extractRelatedContext(briefing, sectionType, chunkText) 
       .map(i => ({ type: "insight", icon: i.icon, text: i.text })));
     ctx.related.push(...calendar
       .filter(e => !e.passed).slice(0, 3)
-      .map(e => ({ type: "calendar", icon: "📅", text: `${e.time} — ${e.title}` })));
+      .map(e => ({ type: "calendar", icon: "Calendar", text: `${e.time} — ${e.title}` })));
   } else if (sectionType === "insights") {
     ctx.primary = insights.filter(i => {
       const text = i.text.toLowerCase();
@@ -62,12 +62,12 @@ export default function extractRelatedContext(briefing, sectionType, chunkText) 
       const iText = insight.text.toLowerCase();
       for (const e of allEmails) {
         if (iText.includes((e.from || "").toLowerCase().split(" ")[0]) && (e.from || "").length > 2) {
-          ctx.related.push({ type: "email", icon: "📧", text: `${e.from}: "${e.subject}"`, urgency: e.urgency, emailData: e });
+          ctx.related.push({ type: "email", icon: "Mail", text: `${e.from}: "${e.subject}"`, urgency: e.urgency, emailData: e });
         }
       }
       for (const d of deadlines) {
         if (iText.includes((d.title || "").toLowerCase().slice(0, 15))) {
-          ctx.related.push({ type: "deadline", icon: "⏰", text: `${d.title} — due ${d.due_date}` });
+          ctx.related.push({ type: "deadline", icon: "Clock", text: `${d.title} — due ${d.due_date}` });
         }
       }
     }

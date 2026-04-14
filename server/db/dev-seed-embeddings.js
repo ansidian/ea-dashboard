@@ -146,10 +146,10 @@ export async function seedEmbeddings() {
 export function generateRAGMockBriefing() {
   return {
     aiInsights: [
-      { icon: "💡", text: "Your electricity bill is $142, up from $118 last month and $95 the month before — 49% increase over 3 months. Consider checking for unusual usage." },
-      { icon: "📧", text: "3 emails from Dr. Smith this week — last briefing flagged 2 unread from him about research revisions. This thread has been active for 7 days." },
-      { icon: "⏰", text: "CS301 midterm due Friday — your last two assignments were submitted within 1 hour of deadline (58 min and 45 min). Start early this time." },
-      { icon: "💳", text: "SoFi autopay scheduled for $210 — up from $197.50 last statement. Your credit spend has been increasing over the last 3 cycles." },
+      { icon: "Lightbulb", text: "Your electricity bill is $142, up from $118 last month and $95 the month before — 49% increase over 3 months. Consider checking for unusual usage." },
+      { icon: "Mail", text: "3 emails from Dr. Smith this week — last briefing flagged 2 unread from him about research revisions. This thread has been active for 7 days." },
+      { icon: "Clock", text: "CS301 midterm due Friday — your last two assignments were submitted within 1 hour of deadline (58 min and 45 min). Start early this time." },
+      { icon: "CreditCard", text: "SoFi autopay scheduled for $210 — up from $197.50 last statement. Your credit spend has been increasing over the last 3 cycles." },
     ],
     ragContext: true,
   };

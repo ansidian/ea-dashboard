@@ -211,7 +211,7 @@ export async function fetchEmails(account, hoursBack) {
       account_label: account.label,
       account_email: account.email,
       account_color: account.color,
-      account_icon: account.icon || "📧",
+      account_icon: account.icon || "Mail",
       from: getHeader("From"),
       subject: getHeader("Subject"),
       body_preview: snippet + amounts,

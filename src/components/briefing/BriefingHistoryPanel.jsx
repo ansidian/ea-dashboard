@@ -6,6 +6,7 @@ import { transformBriefing } from "../../transform";
 import { timeAgo } from "../../lib/dashboard-helpers";
 import useIsMobile from "../../hooks/useIsMobile";
 import BottomSheet from "../ui/BottomSheet";
+import { ClipboardList } from "lucide-react";
 
 const TZ = "America/Los_Angeles";
 const dateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
@@ -176,7 +177,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
         {/* Empty state */}
         {history && groups.length === 0 && (
           <div className="py-10 px-5 text-center">
-            <div className="text-2xl mb-2 opacity-60">📋</div>
+            <div className="mb-2 opacity-60 flex justify-center"><ClipboardList size={24} /></div>
             <div className="text-[11px] max-sm:text-xs text-muted-foreground">No past briefings yet</div>
           </div>
         )}

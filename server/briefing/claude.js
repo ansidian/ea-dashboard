@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { validateInsight, SLOT_REF_REGEX } from "./insight-validator.js";
+import { ALLOWED_INSIGHT_ICONS, normalizeInsightIcon } from "./insight-icons.js";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 // Preferred defaults in order — first available one is used if no model is configured
@@ -61,6 +62,8 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
    - Only MINT a new slot in the insight's "slots" object when referencing a date not present in the pre-minted list (e.g., a computed date like "three days before your flight"). New slot IDs must start with "new_" and contain only lowercase letters, digits, and underscores.
    - A slot has shape { "iso": "YYYY-MM-DD", "time": "HH:MM" }. Time is optional (24-hour format). iso must be a valid calendar date derived from the "Now" block — NEVER from training data.
 
+   ICON: "icon" MUST be one of these exact strings (case-sensitive, no emojis): ${ALLOWED_INSIGHT_ICONS.join(", ")}. Pick the most semantically appropriate one. When unsure, use "Sparkles" or "Lightbulb".
+
    EXAMPLES:
    Pre-minted slots available:
      tk_abc = 2026-04-09 (Poo-Pourri task)
@@ -68,10 +71,10 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
      bill_123 = 2026-04-10 (Electric $95.99)
 
    ✅ CORRECT:
-     { "icon": "🎬", "template": "The Boys viewing is {cal_xyz}.", "slots": {} }
-     { "icon": "📋", "template": "Your Poo-Pourri task is due {tk_abc}.", "slots": {} }
-     { "icon": "💡", "template": "Your electric bill {bill_123} is $12 higher than last month — worth a look.", "slots": {} }
-     { "icon": "🛫", "template": "Start packing {new_prep} — three days before your flight.", "slots": { "new_prep": { "iso": "2026-04-18" } } }
+     { "icon": "Film", "template": "The Boys viewing is {cal_xyz}.", "slots": {} }
+     { "icon": "Sparkles", "template": "Your Poo-Pourri task is due {tk_abc}.", "slots": {} }
+     { "icon": "Lightbulb", "template": "Your electric bill {bill_123} is $12 higher than last month — worth a look.", "slots": {} }
+     { "icon": "Plane", "template": "Start packing {new_prep} — three days before your flight.", "slots": { "new_prep": { "iso": "2026-04-18" } } }
 
    ❌ WRONG — contains forbidden relative word:
      { "template": "Your task is due tomorrow." }  ← use {tk_abc}
@@ -122,7 +125,8 @@ const SUBMIT_BRIEFING_TOOL = {
           properties: {
             icon: {
               type: "string",
-              description: "Single emoji character.",
+              enum: ALLOWED_INSIGHT_ICONS,
+              description: "One of the allowed lucide-react icon names.",
             },
             template: {
               type: "string",
@@ -663,7 +667,9 @@ ${nextWeekSummary || "No events"}${interestsNote}${categoriesNote}${scheduledNot
     // we don't have a reliable `text` to synthesize here.
   }
 
-  result.aiInsights = finalInsights;
+  // Coerce every insight's icon into the allowed lucide-name set. Covers
+  // schema-escapees and any other emoji leakage from the model.
+  result.aiInsights = finalInsights.map(i => ({ ...i, icon: normalizeInsightIcon(i.icon) }));
   return result;
 }
 

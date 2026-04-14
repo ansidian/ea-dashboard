@@ -1,4 +1,5 @@
 import EmailResultCard from "./EmailResultCard";
+import { Icon } from "@/lib/icons.jsx";
 
 function AccountHeader({ acct, unreadCount }) {
   return (
@@ -11,7 +12,7 @@ function AccountHeader({ acct, unreadCount }) {
         borderBottom: "1px solid rgba(255,255,255,0.04)",
       }}
     >
-      <span className="text-[12px] shrink-0">{acct.account_icon}</span>
+      <span className="shrink-0 flex items-center"><Icon name={acct.account_icon} size={12} /></span>
       <span className="text-[10px] font-semibold tracking-[1.5px] uppercase text-foreground/75 truncate">
         {acct.account_label}
       </span>

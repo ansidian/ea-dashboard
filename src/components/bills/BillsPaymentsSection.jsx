@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { markBillPaid } from "../../api";
 import { formatAmount, formatDate, daysUntil, daysLabel, urgencyColor } from "../../lib/bill-utils";
 import BillsCalendarModal from "./BillsCalendarModal";
+import { Check, AlertTriangle, History } from "lucide-react";
 
 const LOADING_MESSAGES = [
   "Pulling in bills from Actual...",
@@ -171,8 +172,8 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
             style={{ background: "rgba(243,139,168,0.06)", border: "1px solid rgba(243,139,168,0.12)" }}
           >
-            <span className="text-[11px] max-sm:text-xs font-semibold" style={{ color: "rgba(243,139,168,0.8)" }}>
-              ⚠ {emailBills.length} need{emailBills.length === 1 ? "s" : ""} action
+            <span className="text-[11px] max-sm:text-xs font-semibold inline-flex items-center gap-1" style={{ color: "rgba(243,139,168,0.8)" }}>
+              <AlertTriangle size={12} /> {emailBills.length} need{emailBills.length === 1 ? "s" : ""} action
             </span>
           </div>
         )}
@@ -181,8 +182,8 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
             style={{ background: "rgba(166,227,161,0.06)", border: "1px solid rgba(166,227,161,0.12)" }}
           >
-            <span className="text-[11px] max-sm:text-xs font-semibold" style={{ color: "rgba(166,227,161,0.8)" }}>
-              ✓ {scheduledBills.length} scheduled
+            <span className="text-[11px] max-sm:text-xs font-semibold inline-flex items-center gap-1" style={{ color: "rgba(166,227,161,0.8)" }}>
+              <Check size={12} /> {scheduledBills.length} scheduled
             </span>
           </div>
         )}
@@ -279,7 +280,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
                     <div className="text-[12px] font-medium text-foreground/90 truncate">
                       {email.extractedBill.payee}
                       {billCarriedOver && (
-                        <span className="text-[10px] max-sm:text-xs text-muted-foreground/40 ml-2">↩ previous</span>
+                        <span className="text-[10px] max-sm:text-xs text-muted-foreground/40 ml-2 inline-flex items-center gap-1"><History size={10} /> previous</span>
                       )}
                     </div>
                     <div className="text-[11px] max-sm:text-xs text-muted-foreground/35 mt-0.5">
@@ -408,7 +409,7 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
                 animation: "glowPulse 2s ease-in-out infinite",
               }}
             >
-              <div style={{ fontSize: 20, marginBottom: 4, animation: "scaleIn 0.3s ease-out" }}>✓</div>
+              <div style={{ marginBottom: 4, animation: "scaleIn 0.3s ease-out", display: "flex", justifyContent: "center" }}><Check size={20} color="rgba(166,227,161,0.8)" /></div>
               <div style={{ color: "rgba(166,227,161,0.7)", fontSize: 12, fontWeight: 500 }}>
                 You're all clear — no upcoming bills
               </div>

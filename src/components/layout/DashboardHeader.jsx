@@ -8,6 +8,8 @@ import useIsMobile from "../../hooks/useIsMobile";
 import Tooltip from "../shared/Tooltip";
 import BriefingHistoryPanel from "../briefing/BriefingHistoryPanel";
 import BriefingSearch from "../briefing/BriefingSearch";
+import { Icon } from "@/lib/icons.jsx";
+import { Brain } from "lucide-react";
 import WeatherTooltip from "../shared/WeatherTooltip";
 
 const btnHeader = "bg-input-bg border border-white/[0.08] rounded-md px-2.5 py-1 text-[11px] text-muted-foreground font-medium transition-all flex items-center gap-1 cursor-pointer font-[inherit] select-none hover:bg-white/[0.06] hover:border-white/15 hover:text-foreground/80 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed max-sm:min-h-[44px] max-sm:text-xs max-sm:shrink-0";
@@ -143,7 +145,7 @@ export default function DashboardHeader({
                 borderColor: "rgba(203,166,218,0.15)",
               }}
             >
-              <span className="text-base">🧠</span>
+              <Brain size={18} className="text-[#cba6da]" />
               <div className="flex-1">
                 <div className="text-[13px] font-semibold text-foreground/90">
                   Generate fresh AI briefing?
@@ -282,7 +284,9 @@ export default function DashboardHeader({
               }}
               className="bg-input-bg border border-border rounded-xl p-4 px-5 max-sm:p-2 max-sm:px-3 text-center min-w-[100px] max-sm:min-w-0 cursor-default transition-all hover:bg-surface-hover hover:border-white/10 shrink-0"
             >
-              <div className="text-4xl max-sm:text-xl leading-none">☀️</div>
+              <div className="leading-none flex items-center justify-center text-[#f9e2af] max-sm:[&_svg]:w-5 max-sm:[&_svg]:h-5">
+                <Icon name={d.weather?.hourly?.[0]?.icon || "Sun"} size={32} />
+              </div>
               <div className="text-[28px] max-sm:text-lg font-light text-white mt-1">
                 {d.weather.temp}°
               </div>

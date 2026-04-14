@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 // walk up from el to find the nearest scrollable ancestor inside boundary
 function findScrollableParent(el, boundary) {
@@ -131,10 +132,10 @@ export default function BottomSheet({ open, onClose, title, children, maxHeight 
             <div className="text-sm font-semibold text-foreground">{title}</div>
             <button
               onClick={onClose}
-              className="text-muted-foreground/60 text-xs p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="text-muted-foreground/60 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Close"
             >
-              ✕
+              <X size={16} />
             </button>
           </div>
         )}
