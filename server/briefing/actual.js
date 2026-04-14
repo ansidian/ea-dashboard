@@ -80,7 +80,7 @@ export function getMetadata(userId) {
         actualApi.runQuery(
           actualApi.q("transactions")
             .filter({ date: { $gte: monthAgo } })
-            .select(["id", "date", "amount", "payee"])
+            .select(["id", "date", "amount", "payee", "schedule"])
         ).then(r => r.data).catch(() => []),
       ]);
 
@@ -108,8 +108,10 @@ export function getMetadata(userId) {
         .filter(t => t.payee && t.amount)
         .map(t => ({
           payee: payeeMap[t.payee] || "",
+          payeeId: t.payee,
           amount: Math.abs(t.amount) / 100,
           date: t.date,
+          scheduleId: t.schedule || null,
         }));
 
       const result = { accounts, payees, payeeMap, categories, schedules, recentTransactions };
@@ -336,8 +338,28 @@ async function upsertTransferSchedule(billData) {
   return { success: true, message: result.reused ? `Updated existing transfer schedule "${name}"` : `Transfer schedule "${name}" created` };
 }
 
+function daysBetweenYmd(a, b) {
+  const ms = new Date(`${a}T00:00:00Z`) - new Date(`${b}T00:00:00Z`);
+  return Math.round(ms / 86400000);
+}
+
+export function isSchedulePaid(schedule, recentTransactions) {
+  if (!schedule.next_date) return false;
+  const amtCond = schedule.conditions?.find(c => c.field === "amount");
+  const payeeCond = schedule.conditions?.find(c => c.field === "payee");
+  const payeeId = payeeCond?.value;
+  const amount = Math.abs(amtCond?.value ?? 0) / 100;
+  return recentTransactions.some(t => {
+    const dayDiff = Math.abs(daysBetweenYmd(t.date, schedule.next_date));
+    if (t.scheduleId && t.scheduleId === schedule.id) return dayDiff <= 14;
+    if (!payeeId || t.payeeId !== payeeId) return false;
+    if (Math.abs(t.amount - amount) > 0.01) return false;
+    return dayDiff <= 3;
+  });
+}
+
 export async function getUpcomingBills(userId) {
-  const { schedules, payeeMap } = await getMetadata(userId);
+  const { schedules, payeeMap, recentTransactions } = await getMetadata(userId);
 
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
   const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -359,6 +381,7 @@ export async function getUpcomingBills(userId) {
         next_date: s.next_date,
         isDueToday: s.next_date === today,
         isOverdue: s.next_date < today,
+        paid: isSchedulePaid(s, recentTransactions),
       };
     })
     .sort((a, b) => a.next_date.localeCompare(b.next_date));
@@ -372,6 +395,7 @@ export function markBillPaid(scheduleId, userId) {
       await actualApi.downloadBudget(syncId);
       await actualApi.internal.send("schedule/post-transaction", { id: scheduleId });
       await actualApi.sync();
+      metadataCache = { data: null, ts: 0 };
       return { success: true };
     } finally {
       await actualApi.shutdown().catch(() => {});

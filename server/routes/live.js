@@ -6,7 +6,7 @@ import { fetchEmails as fetchGmailEmails } from "../briefing/gmail.js";
 import { fetchEmails as fetchIcloudEmails } from "../briefing/icloud.js";
 import { fetchCalendar, getNextWeekRange, getTomorrowRange } from "../briefing/calendar.js";
 import { fetchWeather } from "../briefing/weather.js";
-import { getUpcomingBills, getRecentTransactions, getMetadata as getActualMetadata } from "../briefing/actual.js";
+import { getUpcomingBills, getRecentTransactions, getMetadata as getActualMetadata, isSchedulePaid } from "../briefing/actual.js";
 import { decrypt } from "../briefing/encryption.js";
 
 const router = Router();
@@ -185,7 +185,10 @@ router.get("/all", async (req, res) => {
           })
         : Promise.resolve([]),
       settings.actual_budget_url
-        ? getActualMetadata(userId).then(m => ({ schedules: m.schedules, payeeMap: m.payeeMap })).catch(err => {
+        ? getActualMetadata(userId).then(m => ({
+            schedules: m.schedules.map(s => ({ ...s, paid: isSchedulePaid(s, m.recentTransactions) })),
+            payeeMap: m.payeeMap,
+          })).catch(err => {
             console.error("[Live] Actual Budget metadata fetch failed:", err.message);
             return { schedules: [], payeeMap: {} };
           })
