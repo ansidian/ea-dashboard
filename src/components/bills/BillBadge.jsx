@@ -173,9 +173,23 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
       }
       if (result.amount != null) setEditAmount(String(result.amount));
       if (result.due_date) setEditDue(result.due_date);
-      if (result.type) setEditType(result.type);
       if (result.category_id && categories.some(c => c.id === result.category_id)) {
         setEditCategory(result.category_id);
+      }
+      if (result.type === "transfer") {
+        const toId = result.to_account_id && accounts.some(a => a.id === result.to_account_id)
+          ? result.to_account_id
+          : editToAccount;
+        if (toId !== editToAccount) setEditToAccount(toId);
+        if (!editFromAccount) {
+          const from = pickDefaultFromAccount(accounts);
+          if (from) setEditFromAccount(from.id);
+        }
+        const name = scheduleNameFor(accounts, toId);
+        if (name) setEditScheduleName(name);
+        setEditType("transfer");
+      } else if (result.type) {
+        setEditType(result.type);
       }
       setExtractModel("claude-haiku-4-5");
       setExtractState("done");

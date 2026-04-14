@@ -845,18 +845,43 @@ router.post("/bills/extract", async (req, res) => {
     return res.status(400).json({ message: "body is required" });
   }
   try {
-    const categories = await getActualCategories(userId).catch(() => []);
-    const categoriesList = Array.isArray(categories)
-      ? categories.flatMap(g => (g.categories || []).map(c => `${c.id}:${c.name}`)).join(", ")
-      : "";
+    const [categories, accounts] = await Promise.all([
+      getActualCategories(userId).catch(() => []),
+      getActualAccounts(userId).catch(() => []),
+    ]);
+
+    // Build ephemeral code → real id maps. Haiku sees short codes (c1, a1) instead
+    // of full UUIDs to slash prompt tokens; server translates codes back before reply.
+    const catCodeToId = new Map();
+    const catList = [];
+    if (Array.isArray(categories)) {
+      let i = 1;
+      for (const group of categories) {
+        for (const c of group.categories || []) {
+          const code = `c${i++}`;
+          catCodeToId.set(code, c.id);
+          catList.push(`${code}:${c.name}`);
+        }
+      }
+    }
+    const acctCodeToId = new Map();
+    const acctList = [];
+    if (Array.isArray(accounts)) {
+      let i = 1;
+      for (const a of accounts) {
+        const code = `a${i++}`;
+        acctCodeToId.set(code, a.id);
+        acctList.push(`${code}:${a.name}`);
+      }
+    }
 
     const trimmed = trimBillBody({ subject, from, body });
-    const systemPrompt = `You extract bill data from a single email. Return the submit_bill tool with:
-- payee (short merchant name)
-- amount (number — look in subject AND body; use 0 if truly missing)
-- due_date (YYYY-MM-DD)
-- type: "transfer" for credit card payments, "bill" for recurring services, "expense" for one-off purchases, "income" for refunds/deposits
-- category_id and category_name: match to the closest budget category only if confident, else null.${categoriesList ? `\n\nBudget categories (id:name): ${categoriesList}` : ""}`;
+    const systemPrompt = `Extract bill fields from an email. Return submit_bill with:
+- payee, amount (0 if missing), due_date (YYYY-MM-DD)
+- type: "transfer" (credit card payment), "bill" (recurring), "expense" (one-off), "income"
+- category_code: closest category's code (c1, c2, ...) if confident, else null
+- category_name: the category's display name (copied from the list)
+- to_account_code: ONLY for type=transfer, code (a1, a2, ...) of the credit card being paid. Match on Visa/MC/Amex or last-4 digits. Null if unsure.${catList.length ? `\n\nCategories: ${catList.join(", ")}` : ""}${acctList.length ? `\n\nAccounts: ${acctList.join(", ")}` : ""}`;
 
     const tool = {
       name: "submit_bill",
@@ -868,8 +893,9 @@ router.post("/bills/extract", async (req, res) => {
           amount: { type: "number" },
           due_date: { type: "string" },
           type: { type: "string", enum: ["transfer", "bill", "expense", "income"] },
-          category_id: { type: ["string", "null"] },
+          category_code: { type: ["string", "null"] },
           category_name: { type: ["string", "null"] },
+          to_account_code: { type: ["string", "null"] },
         },
         required: ["payee", "amount", "due_date", "type"],
       },
@@ -907,7 +933,18 @@ router.post("/bills/extract", async (req, res) => {
 
     const usage = data.usage || {};
     console.log(`[EA] Bill extract: in=${usage.input_tokens} out=${usage.output_tokens} trimmed_chars=${trimmed.length}`);
-    res.json(toolBlock.input);
+
+    const input = toolBlock.input;
+    const resolved = {
+      payee: input.payee,
+      amount: input.amount,
+      due_date: input.due_date,
+      type: input.type,
+      category_id: input.category_code ? catCodeToId.get(input.category_code) || null : null,
+      category_name: input.category_name || null,
+      to_account_id: input.to_account_code ? acctCodeToId.get(input.to_account_code) || null : null,
+    };
+    res.json(resolved);
   } catch (err) {
     console.error("Error extracting bill:", err);
     res.status(500).json({ message: err.message });
