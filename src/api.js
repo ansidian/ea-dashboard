@@ -78,7 +78,7 @@ export const getActualAccounts = () => apiFetch("/api/briefing/actual/accounts")
 export const getActualPayees = () => apiFetch("/api/briefing/actual/payees");
 export const getActualCategories = () => apiFetch("/api/briefing/actual/categories");
 export const getActualMetadata = () => apiFetch("/api/briefing/actual/metadata");
-export const testActualBudget = () => apiFetch("/api/briefing/actual/test", { method: "POST" });
+export const testActualBudget = (overrides) => apiFetch("/api/briefing/actual/test", { method: "POST", body: JSON.stringify(overrides || {}) });
 
 // Accounts & Settings
 export const getAccounts = () => apiFetch("/api/ea/accounts");
