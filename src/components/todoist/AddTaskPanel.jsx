@@ -294,7 +294,7 @@ function PriorityIndicator({ level }) {
           style={{
             width: 3,
             height: 10,
-            borderRadius: 1,
+            borderRadius: 2,
             background: color,
             opacity: i <= litCount ? 1 : 0.22,
           }}
@@ -387,7 +387,7 @@ function Dropdown({
             maxHeight: 160,
             overflowY: "auto",
             zIndex: 10,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
           }}
         >
           {options.map((opt, i) => (
@@ -500,7 +500,7 @@ function TokenAutocomplete({ cursorPos, input, items, type, onSelect }) {
         maxHeight: 160,
         overflowY: "auto",
         zIndex: 20,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
       }}
     >
       <div
@@ -1330,7 +1330,7 @@ function LabelPicker({ available, onAdd }) {
             maxHeight: 120,
             overflowY: "auto",
             zIndex: 10,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
             minWidth: 120,
           }}
         >

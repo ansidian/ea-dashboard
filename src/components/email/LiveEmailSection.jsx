@@ -32,7 +32,7 @@ function buildLiveEmailMenu(email, isRead, isPinned, {
 function getTimestampColor(dateStr) {
   if (!dateStr) return undefined;
   const mins = (Date.now() - new Date(dateStr).getTime()) / 60000;
-  if (mins < 30) return "rgba(99,102,241,0.6)";
+  if (mins < 30) return "rgba(203,166,218,0.6)";
   if (mins < 120) return undefined;
   return "rgba(245,158,11,0.6)";
 }
@@ -103,7 +103,7 @@ function PinAction({ pinned, onToggle }) {
       className={cn(
         "flex items-center gap-1 text-[10px] transition-colors px-2 py-1 cursor-pointer font-[inherit]",
         pinned
-          ? "text-[#6366f1] bg-[#6366f1]/[0.08] hover:bg-[#6366f1]/[0.12]"
+          ? "text-[#cba6da] bg-[#cba6da]/[0.08] hover:bg-[#cba6da]/[0.12]"
           : "text-muted-foreground/60 hover:text-foreground hover:bg-white/[0.04]",
       )}
       style={{ borderRadius: 8 }}
@@ -226,8 +226,8 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
         <span
           className="text-[10px] max-sm:text-xs font-bold px-2 py-0.5 rounded-full tabular-nums"
           style={{
-            background: "rgba(99,102,241,0.1)",
-            color: "rgba(99,102,241,0.8)",
+            background: "rgba(203,166,218,0.1)",
+            color: "rgba(203,166,218,0.8)",
           }}
         >
           {visibleEmails.length}
@@ -241,7 +241,7 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
         </span>
         <span
           className="inline-block w-1.5 h-1.5 rounded-full animate-pulse ml-1"
-          style={{ background: "rgba(99,102,241,0.6)" }}
+          style={{ background: "rgba(203,166,218,0.6)" }}
         />
       </div>
 
@@ -295,9 +295,9 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                     <div
                       className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
                       style={{
-                        background: "#6366f1",
+                        background: "#cba6da",
                         opacity: 0.7,
-                        boxShadow: "0 0 6px rgba(99,102,241,0.3)",
+                        boxShadow: "0 0 6px rgba(203,166,218,0.3)",
                       }}
                     />
                   ) : email.isImportantSender ? (
@@ -325,7 +325,7 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                     )}
                     <span
                       className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{ background: email.account_color || "#6366f1" }}
+                      style={{ background: email.account_color || "#cba6da" }}
                     />
                   </>
                 }
@@ -346,7 +346,7 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                     {isPinned(email) && (
                       <Pin
                         size={10}
-                        className="text-[#6366f1]/80"
+                        className="text-[#cba6da]/80"
                         fill="currentColor"
                       />
                     )}
@@ -366,7 +366,7 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
                     {isPinned(email) && (
                       <Pin
                         size={10}
-                        className="text-[#6366f1]/80"
+                        className="text-[#cba6da]/80"
                         fill="currentColor"
                       />
                     )}

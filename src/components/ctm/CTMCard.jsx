@@ -57,7 +57,7 @@ function StatusSpine({ status, statuses, expanded, onStatusChange }) {
               <motion.div
                 animate={{ height: lineHeight, width: lineWidth }}
                 transition={{ ...dotSpring, delay: expanded ? i * 0.06 : (count - 1 - i) * 0.04 }}
-                style={{ background: lineGradient(i - 1), borderRadius: 1 }}
+                style={{ background: lineGradient(i - 1), borderRadius: 2 }}
               />
             )}
             <div
@@ -196,9 +196,9 @@ export default function CTMCard({ task, expanded, onToggle, onComplete, onStatus
                 rel="noopener noreferrer"
                 className="ctm-icon-btn"
                 style={{
-                  color: "#6366f1aa",
-                  background: "rgba(99,102,241,0.05)",
-                  border: "1px solid rgba(99,102,241,0.1)",
+                  color: "#b4befeaa",
+                  background: "rgba(180,190,254,0.05)",
+                  border: "1px solid rgba(180,190,254,0.1)",
                 }}
               >
                 <ExternalLinkIcon />

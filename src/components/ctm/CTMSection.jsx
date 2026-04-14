@@ -10,7 +10,7 @@ export default function CTMSection({ ctm, expandedTask, setExpandedTask, ctmSect
         <div className="bg-surface border border-border rounded-lg p-4 px-5 mb-3">
           <div className="flex gap-4 items-baseline flex-wrap">
             <div>
-              <span className="text-[24px] font-semibold text-[#f8fafc]">
+              <span className="text-[24px] font-semibold text-foreground">
                 {ctm.stats.incomplete}
               </span>
               <span className="text-[12px] text-text-muted ml-1.5">

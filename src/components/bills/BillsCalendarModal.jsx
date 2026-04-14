@@ -478,7 +478,7 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                       height: 6,
                       borderRadius: "50%",
                       background: "#f97316",
-                      boxShadow: "0 0 4px rgba(249,115,22,0.6)",
+                      boxShadow: "0 0 6px rgba(249,115,22,0.5)",
                     }} />
                   )}
                   {allFresh && (
@@ -493,7 +493,7 @@ export default function BillsCalendarModal({ open, onClose, schedules, recentTra
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      boxShadow: "0 0 4px rgba(166,227,161,0.6)",
+                      boxShadow: "0 0 6px rgba(166,227,161,0.5)",
                     }}>
                       <Check size={8} color="#16161e" strokeWidth={3.5} />
                     </span>
