@@ -8,6 +8,7 @@ import useIsMobile from "../../hooks/useIsMobile";
 import Tooltip from "../shared/Tooltip";
 import BriefingHistoryPanel from "../briefing/BriefingHistoryPanel";
 import BriefingSearch from "../briefing/BriefingSearch";
+import { Link } from "react-router-dom";
 import { Icon } from "@/lib/icons.jsx";
 import { Brain } from "lucide-react";
 import WeatherTooltip from "../shared/WeatherTooltip";
@@ -432,7 +433,7 @@ export default function DashboardHeader({
                   </button>
                 </Tooltip>
               )}
-              <a href="/settings" className={cn(btnHeader, "no-underline")} aria-label="Settings">
+              <Link to="/settings" className={cn(btnHeader, "no-underline")} aria-label="Settings">
                 <svg
                   width="12"
                   height="12"
@@ -447,7 +448,7 @@ export default function DashboardHeader({
                   <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
                 </svg>
                 <span className="max-sm:hidden">Settings</span>
-              </a>
+              </Link>
               {renderConfigured && !isMobile && (
                 <Tooltip
                   text={

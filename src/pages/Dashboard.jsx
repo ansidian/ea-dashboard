@@ -12,6 +12,7 @@ import EmailTabSection from "../components/email/EmailTabSection";
 import SummaryBar from "../components/layout/SummaryBar";
 import { Sun } from "lucide-react";
 
+import { Link } from "react-router-dom";
 import { DashboardProvider, useDashboard } from "../context/DashboardContext";
 import { Button } from "@/components/ui/button";
 import useLiveData from "../hooks/useLiveData";
@@ -153,7 +154,7 @@ export default function Dashboard() {
             Generate First Briefing
           </Button>
           <Button variant="outline" asChild>
-            <a href="/settings">Settings</a>
+            <Link to="/settings">Settings</Link>
           </Button>
         </div>
         {bd.generating && (

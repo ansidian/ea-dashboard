@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { checkAuth } from "./api";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Settings from "./pages/Settings";
+import SettingsChrome from "./components/settings/SettingsChrome";
+const Settings = lazy(() => import("./pages/Settings"));
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(null); // null = loading
@@ -43,7 +44,11 @@ export default function App() {
             authenticated ? <Dashboard /> : <Navigate to="/login" />
           } />
           <Route path="/settings" element={
-            authenticated ? <Settings /> : <Navigate to="/login" />
+            authenticated ? (
+              <Suspense fallback={<SettingsChrome />}>
+                <Settings />
+              </Suspense>
+            ) : <Navigate to="/login" />
           } />
         </Routes>
       </BrowserRouter>

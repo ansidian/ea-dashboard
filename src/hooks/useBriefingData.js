@@ -9,20 +9,26 @@ import {
 } from "../api";
 import { transformBriefing } from "../transform";
 
+// Module-level cache: survives route changes within a session, resets on full
+// page reload. Lets Dashboard paint instantly on remount while it revalidates
+// in the background.
+let cache = null;
+
 export default function useBriefingData({ liveData, isMock }) {
-  const [briefing, setBriefing] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const hasCache = !isMock && cache !== null && cache.briefing != null;
+  const [briefing, setBriefing] = useState(hasCache ? cache.briefing : null);
+  const [loading, setLoading] = useState(!hasCache);
   const [refreshing, setRefreshing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const [loaded, setLoaded] = useState(false);
-  const [modelLabel, setModelLabel] = useState("Claude");
+  const [loaded, setLoaded] = useState(hasCache);
+  const [modelLabel, setModelLabel] = useState(hasCache ? cache.modelLabel : "Claude");
   const [genProgress, setGenProgress] = useState(null);
   const [viewingPast, setViewingPast] = useState(null);
-  const [latestBriefing, setLatestBriefing] = useState(null);
-  const [latestId, setLatestId] = useState(null);
-  const [schedules, setSchedules] = useState([]);
-  const [renderConfigured, setRenderConfigured] = useState(false);
+  const [latestBriefing, setLatestBriefing] = useState(hasCache ? cache.briefing : null);
+  const [latestId, setLatestId] = useState(hasCache ? cache.latestId : null);
+  const [schedules, setSchedules] = useState(hasCache ? cache.schedules : []);
+  const [renderConfigured, setRenderConfigured] = useState(hasCache ? cache.renderConfigured : false);
   const [lastQuickRefreshAt, setLastQuickRefreshAt] = useState(null);
 
   // --- Polling ---
@@ -43,6 +49,7 @@ export default function useBriefingData({ liveData, isMock }) {
           setLatestId(res.id);
           setViewingPast(null);
           setGenerating(false);
+          cache = { ...(cache || {}), briefing: transformed, latestId: res.id };
         } else if (status === "error") {
           clearInterval(poll);
           setGenProgress(null);
@@ -73,9 +80,18 @@ export default function useBriefingData({ liveData, isMock }) {
               `${n.charAt(0).toUpperCase() + n.slice(1)} ${maj}.${min}`,
           )
           .replace(/(\w+)$/, (m) => m.charAt(0).toUpperCase() + m.slice(1));
-        setModelLabel(`Claude ${name}`);
-        if (s?.schedules) setSchedules(s.schedules);
+        const nextLabel = `Claude ${name}`;
+        setModelLabel(nextLabel);
+        const nextSchedules = s?.schedules || [];
+        if (s?.schedules) setSchedules(nextSchedules);
+        const nextRenderConfigured = !!s?.render_configured;
         if (s?.render_configured) setRenderConfigured(true);
+        cache = {
+          ...(cache || {}),
+          modelLabel: nextLabel,
+          schedules: nextSchedules,
+          renderConfigured: nextRenderConfigured,
+        };
       })
       .catch(() => {});
 
@@ -96,6 +112,7 @@ export default function useBriefingData({ liveData, isMock }) {
         setBriefing(transformed);
         setLatestBriefing(transformed);
         setLatestId(res.id);
+        cache = { ...(cache || {}), briefing: transformed, latestId: res.id };
 
         if (isMock) return;
         sessionStorage.removeItem("ea_settings_changed");
@@ -107,6 +124,7 @@ export default function useBriefingData({ liveData, isMock }) {
             setLatestBriefing(updated);
             setLatestId(result.id);
             setLastQuickRefreshAt(Date.now());
+            cache = { ...(cache || {}), briefing: updated, latestId: result.id };
           })
           .catch(() => {})
           .finally(() => setRefreshing(false));
@@ -157,6 +175,7 @@ export default function useBriefingData({ liveData, isMock }) {
       setLatestId(result.id);
       setViewingPast(null);
       setLastQuickRefreshAt(Date.now());
+      cache = { ...(cache || {}), briefing: transformed, latestId: result.id };
     } catch (err) {
       setError(err.message);
     } finally {
