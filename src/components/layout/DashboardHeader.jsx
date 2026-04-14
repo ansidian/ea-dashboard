@@ -8,6 +8,7 @@ import useIsMobile from "../../hooks/useIsMobile";
 import Tooltip from "../shared/Tooltip";
 import BriefingHistoryPanel from "../briefing/BriefingHistoryPanel";
 import BriefingSearch from "../briefing/BriefingSearch";
+import CalendarHeaderButton from "./CalendarHeaderButton";
 import { Link } from "react-router-dom";
 import { Icon } from "@/lib/icons.jsx";
 import { Brain } from "lucide-react";
@@ -45,6 +46,9 @@ export default function DashboardHeader({
   onSuspend,
   suspending,
   suspended,
+  calendarLastView,
+  calendarShowBills,
+  onOpenCalendar,
 }) {
   const isMobile = useIsMobile();
   const greeting = useMemo(
@@ -562,14 +566,23 @@ export default function DashboardHeader({
         )}
       </AnimatePresence>
 
-      {/* Search */}
+      {/* Search + Calendar */}
       <div
         className={cn(
           "transition-all duration-600 ease-[cubic-bezier(0.16,1,0.3,1)] delay-100",
           loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
         )}
       >
-        <BriefingSearch onNavigateToEmail={onNavigateToEmail} />
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <BriefingSearch onNavigateToEmail={onNavigateToEmail} />
+          </div>
+          <CalendarHeaderButton
+            lastView={calendarLastView}
+            showBills={calendarShowBills}
+            onOpen={onOpenCalendar}
+          />
+        </div>
       </div>
 
       {/* RAG unavailable warning */}

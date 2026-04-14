@@ -10,6 +10,7 @@ import DeadlinesSection from "../components/deadlines/DeadlinesSection";
 import BillsPaymentsSection from "../components/bills/BillsPaymentsSection";
 import EmailTabSection from "../components/email/EmailTabSection";
 import SummaryBar from "../components/layout/SummaryBar";
+import CalendarModal from "../components/calendar/CalendarModal";
 import { Sun } from "lucide-react";
 
 import { Link } from "react-router-dom";
@@ -231,6 +232,28 @@ function DashboardMain({
   const halfClass = "";
   const fullClass = "md:col-span-2";
 
+  // Universal calendar (Bills + Deadlines) — state lives at dashboard level
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarView, setCalendarView] = useState(() => {
+    try {
+      const saved = localStorage.getItem("calendar:lastView");
+      return saved === "deadlines" ? "deadlines" : "bills";
+    } catch {
+      return "bills";
+    }
+  });
+  const showBills = !!liveData.actualConfigured;
+  const openCalendar = (viewKey) => {
+    const resolved = viewKey === "bills" && !showBills ? "deadlines" : viewKey || calendarView;
+    setCalendarView(resolved);
+    try { localStorage.setItem("calendar:lastView", resolved); } catch { /* ignore */ }
+    setCalendarOpen(true);
+  };
+  const changeCalendarView = (viewKey) => {
+    setCalendarView(viewKey);
+    try { localStorage.setItem("calendar:lastView", viewKey); } catch { /* ignore */ }
+  };
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const summaryStats = {
@@ -273,7 +296,27 @@ function DashboardMain({
         loaded={loaded}
         generating={generating}
         onNavigateToEmail={handleNavigateToEmail}
+        calendarLastView={calendarView}
+        calendarShowBills={showBills}
+        onOpenCalendar={openCalendar}
         {...headerProps}
+      />
+
+      <CalendarModal
+        open={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        view={calendarView}
+        onViewChange={changeCalendarView}
+        billsData={{
+          schedules: liveData.allSchedules,
+          recentTransactions: liveData.recentTransactions,
+          payeeMap: liveData.payeeMap,
+          actualBudgetUrl: liveData.actualBudgetUrl,
+        }}
+        deadlinesData={{
+          ctm: d.ctm,
+          todoist: d.todoist,
+        }}
       />
 
       <SummaryBar stats={summaryStats} loaded={loaded} />
@@ -309,11 +352,8 @@ function DashboardMain({
         <BillsPaymentsSection
           bills={liveData.liveBills}
           recentTransactions={liveData.recentTransactions}
-          allSchedules={liveData.allSchedules}
-          payeeMap={liveData.payeeMap}
           billsLoading={liveData.billsLoading}
           actualConfigured={liveData.actualConfigured}
-          actualBudgetUrl={liveData.actualBudgetUrl}
           onMarkedPaid={liveData.refreshNow}
           isMock={isMock}
           loaded={loaded}

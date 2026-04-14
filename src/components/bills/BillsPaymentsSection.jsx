@@ -6,7 +6,6 @@ import { useDashboard } from "../../context/DashboardContext";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { markBillPaid } from "../../api";
 import { formatAmount, formatDate, daysUntil, daysLabel, urgencyColor } from "../../lib/bill-utils";
-import BillsCalendarModal from "./BillsCalendarModal";
 import { Check, AlertTriangle, History } from "lucide-react";
 
 const LOADING_MESSAGES = [
@@ -32,7 +31,7 @@ function shuffleArray(arr) {
 }
 
 
-export default function BillsPaymentsSection({ bills, recentTransactions, allSchedules, payeeMap, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, actualBudgetUrl, onMarkedPaid, isMock, loaded, delay, className }) {
+export default function BillsPaymentsSection({ bills, recentTransactions, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, onMarkedPaid, isMock, loaded, delay, className }) {
   // in mock mode, simulate loading for 8s then stop
   const [mockLoading, setMockLoading] = useState(true);
   useEffect(() => {
@@ -125,8 +124,6 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
   const scheduledTotal = scheduledBills.reduce((sum, b) => sum + (b.amount || 0), 0);
   const combinedTotal = totalBills + scheduledTotal;
 
-  const [showCalendar, setShowCalendar] = useState(false);
-
   const showLoading = billsLoading && actualConfigured && !scheduledBills.length;
   const doneEmpty = !billsLoading && !scheduledBills.length && actualConfigured;
 
@@ -197,35 +194,6 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
             </span>
             <span className="text-[11px] max-sm:text-xs text-muted-foreground/40">total</span>
           </div>
-        )}
-        {actualConfigured && !showLoading && (
-          <button
-            onClick={() => setShowCalendar(true)}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "rgba(203,166,218,0.14)";
-              e.currentTarget.style.borderColor = "rgba(203,166,218,0.35)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(203,166,218,0.06)";
-              e.currentTarget.style.borderColor = "rgba(203,166,218,0.12)";
-            }}
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 cursor-pointer transition-all duration-150 ml-auto"
-            style={{
-              background: "rgba(203,166,218,0.06)",
-              border: "1px solid rgba(203,166,218,0.12)",
-              fontFamily: "inherit",
-            }}
-            title="Calendar view"
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ opacity: 0.8 }}>
-              <rect x="1" y="3" width="14" height="12" rx="2" stroke="#cba6da" strokeWidth="1.5" fill="none" />
-              <path d="M1 7h14" stroke="#cba6da" strokeWidth="1.5" />
-              <path d="M5 1v4M11 1v4" stroke="#cba6da" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <span className="text-[11px] max-sm:text-xs font-medium" style={{ color: "rgba(203,166,218,0.8)" }}>
-              Calendar
-            </span>
-          </button>
         )}
       </div>
 
@@ -499,14 +467,6 @@ export default function BillsPaymentsSection({ bills, recentTransactions, allSch
         Email detection · Actual Budget
       </div>
     </Section>
-    <BillsCalendarModal
-      open={showCalendar}
-      onClose={() => setShowCalendar(false)}
-      schedules={allSchedules}
-      recentTransactions={recentTransactions}
-      payeeMap={payeeMap}
-      actualBudgetUrl={actualBudgetUrl}
-    />
     </div>
   );
 }
