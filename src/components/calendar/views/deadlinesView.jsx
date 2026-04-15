@@ -97,16 +97,15 @@ function compute({ data, viewYear, viewMonth }) {
 }
 
 function canNavigateBack({ viewYear, viewMonth, currentYear, currentMonth, computed }) {
-  const earliest = computed?.earliestOverdue;
-  if (!earliest) return false;
-  const earliestYear = earliest.getFullYear();
-  const earliestMonth = earliest.getMonth();
   const currentIdx = currentYear * 12 + currentMonth;
   const viewIdx = viewYear * 12 + viewMonth;
-  const earliestIdx = earliestYear * 12 + earliestMonth;
-  // Allow prev nav if the target (viewIdx - 1) is still >= earliest overdue month,
-  // and we're not already at the earliest overdue month, and we're still at/before current month.
-  return viewIdx > earliestIdx && viewIdx <= currentIdx;
+  // Future months: always allow returning toward the current month.
+  if (viewIdx > currentIdx) return true;
+  // At/before current month: floor is the earliest overdue month (if any).
+  const earliest = computed?.earliestOverdue;
+  if (!earliest) return false;
+  const earliestIdx = earliest.getFullYear() * 12 + earliest.getMonth();
+  return viewIdx > earliestIdx;
 }
 
 function hasOverdue(items) {
