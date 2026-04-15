@@ -395,8 +395,9 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
             {scheduledBills.map((bill) => {
               const days = daysUntil(bill.next_date);
               const uc = urgencyColor(days);
-              const accent = bill.paid ? "#a6e3a1" : uc.accent;
-              const highlight = bill.paid || (days !== null && days <= 1);
+              const isTransfer = bill.type === "transfer";
+              const accent = bill.paid ? "#a6e3a1" : isTransfer ? "#b4befe" : uc.accent;
+              const highlight = bill.paid || isTransfer || (days !== null && days <= 1);
               return (
                 <MotionItem key={bill.id}>
                   <div
@@ -442,8 +443,8 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
                         <span
                           className="text-[10px] max-sm:text-xs font-semibold tabular-nums px-2 py-0.5 rounded"
                           style={{
-                            color: bill.paid ? "#a6e3a1" : uc.text,
-                            background: bill.paid ? "rgba(166,227,161,0.12)" : uc.bg,
+                            color: bill.paid ? "#a6e3a1" : isTransfer ? "#b4befe" : uc.text,
+                            background: bill.paid ? "rgba(166,227,161,0.12)" : isTransfer ? "rgba(180,190,254,0.12)" : uc.bg,
                           }}
                         >
                           {bill.paid ? "Paid" : (days !== null ? daysLabel(days) : "")}

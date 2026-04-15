@@ -405,10 +405,12 @@ export async function getUpcomingBills(userId) {
 
   return schedules
     .filter(s => s.next_date && s.next_date <= weekFromNow)
+    .filter(s => s.type !== "income")
     .map(s => {
       const amtCond = s.conditions.find(c => c.field === "amount");
       const payeeCond = s.conditions.find(c => c.field === "payee");
-      const amountCents = amtCond?.value ?? 0;
+      const rawAmt = amtCond?.value;
+      const amountCents = typeof rawAmt === "object" && rawAmt !== null ? (rawAmt.num1 ?? 0) : (rawAmt ?? 0);
       const payeeName = payeeCond ? payeeMap[payeeCond.value] : s.name;
 
       return {
@@ -420,6 +422,7 @@ export async function getUpcomingBills(userId) {
         isDueToday: s.next_date === today,
         isOverdue: s.next_date < today,
         paid: isSchedulePaid(s, recentTransactions),
+        type: s.type || "bill",
       };
     })
     .sort((a, b) => a.next_date.localeCompare(b.next_date));
