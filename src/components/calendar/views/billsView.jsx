@@ -100,7 +100,11 @@ function compute({ data, viewYear, viewMonth }) {
 }
 
 function hasOverdue(items) {
-  return items.some((b) => daysUntil(b.next_date) < 0);
+  return items.some((b) => !b.paid && daysUntil(b.next_date) < 0);
+}
+
+function allComplete(items) {
+  return items.length > 0 && items.every((b) => b.paid);
 }
 
 function renderCellContents({ items, hasOverdue: overdue }) {
@@ -258,6 +262,8 @@ function renderFooter({ viewYear, viewMonth, computed }) {
         background: "rgba(255,255,255,0.03)",
         border: "1px solid rgba(255,255,255,0.04)",
         borderRadius: 8,
+        minHeight: 56,
+        boxSizing: "border-box",
       }}
     >
       <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
@@ -502,6 +508,7 @@ function UtilityStatusButton({ data, suppressOutsideClick }) {
 const billsView = {
   compute,
   hasOverdue,
+  allComplete,
   renderCellContents,
   renderDetail,
   renderFooter,

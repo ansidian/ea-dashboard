@@ -107,6 +107,8 @@ export default function CTMCard({ task, expanded, onToggle, onComplete, onStatus
   const isCanvas = task.source === "canvas";
   const isCTMSource = isCanvas || task.source === "manual";
   const isCompleting = !!task._completing;
+  const isComplete = task.status === "complete";
+  const showCompletedVisual = isCompleting || isComplete;
   const urgColor = { high: "#f38ba8", medium: "#f9e2af", low: "#a6adc8" }[urg];
   const statuses = isTodoist ? TODOIST_STATUSES : CTM_STATUSES;
   function handleSpineChange(newStatus) {
@@ -128,10 +130,10 @@ export default function CTMCard({ task, expanded, onToggle, onComplete, onStatus
       onContextMenu={onContextMenu}
       role="button"
       tabIndex={0}
-      className={`group relative rounded-lg p-3 px-4 pl-5 cursor-pointer transition-all duration-150${isCompleting ? " ctm-card-completing" : ""}`}
+      className={`group relative rounded-lg p-3 px-4 pl-5 cursor-pointer transition-all duration-150${isCompleting ? " ctm-card-completing" : ""}${isComplete && !isCompleting ? " ctm-card-complete" : ""}`}
       style={{
-        background: isCompleting ? "rgba(75,153,104,0.08)" : "rgba(36,36,58,0.5)",
-        border: `1px solid ${isCompleting ? "rgba(75,153,104,0.25)" : "rgba(255,255,255,0.04)"}`,
+        background: showCompletedVisual ? "rgba(75,153,104,0.08)" : "rgba(36,36,58,0.5)",
+        border: `1px solid ${showCompletedVisual ? "rgba(75,153,104,0.25)" : "rgba(255,255,255,0.04)"}`,
       }}
     >
       {/* Hover bg */}
@@ -161,7 +163,7 @@ export default function CTMCard({ task, expanded, onToggle, onComplete, onStatus
               {isTodoist ? "Todoist" : isCanvas ? "Canvas" : "CTM"}
             </span>
           </div>
-          <div className="text-[13px] font-medium text-foreground/90 mt-0.5">{task.title}</div>
+          <div className="ctm-title text-[13px] font-medium text-foreground/90 mt-0.5">{task.title}</div>
           <MotionExpand isOpen={expanded}>
             <div className="mt-2 pt-2 border-t border-white/[0.04]">
               {task.description && <div className="ctm-desc" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(task.description) }} />}

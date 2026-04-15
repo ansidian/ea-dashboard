@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Receipt, ListChecks } from "lucide-react";
 import billsView from "./views/billsView.jsx";
 import deadlinesView from "./views/deadlinesView.jsx";
 
@@ -74,53 +74,6 @@ export default function CalendarModal({
     setSelectedDay(null);
   }
 
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-      switch (e.key) {
-        case "Escape":
-          onClose();
-          e.stopPropagation();
-          break;
-        case "ArrowLeft":
-        case "p":
-          if (viewYear !== currentYear || viewMonth !== currentMonth) {
-            navigateMonthRef.current(-1);
-          }
-          e.preventDefault();
-          e.stopPropagation();
-          break;
-        case "ArrowRight":
-        case "n":
-          navigateMonthRef.current(1);
-          e.preventDefault();
-          e.stopPropagation();
-          break;
-        case "t":
-        case "T":
-          setViewDate({ month: currentMonth, year: currentYear });
-          setSelectedDay(null);
-          e.preventDefault();
-          e.stopPropagation();
-          break;
-        default:
-          if (e.key.length === 1 && e.key !== "r" && e.key !== "R") {
-            e.stopPropagation();
-          }
-          break;
-      }
-    }
-    document.addEventListener("keydown", handleKey, true);
-    return () => document.removeEventListener("keydown", handleKey, true);
-  }, [open, onClose, viewMonth, viewYear, currentMonth, currentYear]);
-
   // Allow views to opt out of outside-click close (e.g., when a popover is open)
   const suppressOutsideClickRef = useRef(null);
   const suppressOutsideClick = useCallback((test) => {
@@ -131,6 +84,8 @@ export default function CalendarModal({
     if (!open) return;
     function handleClick(e) {
       if (suppressOutsideClickRef.current?.(e.target)) return;
+      // Ignore clicks inside floating menus/dialogs rendered in portals outside the panel.
+      if (e.target.closest?.('[role="menu"], [role="dialog"]')) return;
       if (panelRef.current && !panelRef.current.contains(e.target)) {
         onClose();
       }
@@ -167,7 +122,57 @@ export default function CalendarModal({
   const totalCells = firstDay + daysInMonth;
   const trailingEmpty = GRID_ROWS * 7 - totalCells;
 
-  const canGoPrev = !isCurrentMonth;
+  const canGoPrev = activeView.canNavigateBack
+    ? activeView.canNavigateBack({ viewYear, viewMonth, currentYear, currentMonth, data: viewData, computed })
+    : !isCurrentMonth;
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKey(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      switch (e.key) {
+        case "Escape":
+          onClose();
+          e.stopPropagation();
+          break;
+        case "ArrowLeft":
+        case "p":
+          if (canGoPrev) {
+            navigateMonthRef.current(-1);
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        case "ArrowRight":
+        case "n":
+          navigateMonthRef.current(1);
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        case "t":
+        case "T":
+          setViewDate({ month: currentMonth, year: currentYear });
+          setSelectedDay(null);
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        default:
+          if (e.key.length === 1 && e.key !== "r" && e.key !== "R") {
+            e.stopPropagation();
+          }
+          break;
+      }
+    }
+    document.addEventListener("keydown", handleKey, true);
+    return () => document.removeEventListener("keydown", handleKey, true);
+  }, [open, onClose, currentMonth, currentYear, canGoPrev]);
+
   const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
@@ -211,8 +216,8 @@ export default function CalendarModal({
             style={{ padding: "32px 40px" }}
           >
             {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", marginBottom: 24, gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "start" }}>
                 <button
                   onClick={() => canGoPrev && navigateMonth(-1)}
                   style={{
@@ -272,18 +277,23 @@ export default function CalendarModal({
                   borderRadius: 8,
                   padding: 3,
                   gap: 2,
+                  justifySelf: "center",
                 }}
               >
                 {[
-                  { key: "bills", label: "Bills" },
-                  { key: "deadlines", label: "Deadlines" },
+                  { key: "bills", label: "Bills", Icon: Receipt },
+                  { key: "deadlines", label: "Deadlines", Icon: ListChecks },
                 ].map((opt) => {
                   const active = view === opt.key;
+                  const { Icon } = opt;
                   return (
                     <button
                       key={opt.key}
                       onClick={() => !active && onViewChange?.(opt.key)}
                       style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
                         padding: "6px 14px",
                         borderRadius: 6,
                         fontSize: 12,
@@ -297,13 +307,14 @@ export default function CalendarModal({
                         transition: "background 150ms, color 150ms",
                       }}
                     >
+                      <Icon size={12} strokeWidth={1.8} />
                       {opt.label}
                     </button>
                   );
                 })}
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "end" }}>
                 {HeaderExtras ? (
                   <HeaderExtras
                     data={viewData}
@@ -362,6 +373,7 @@ export default function CalendarModal({
                 const isToday = isCurrentMonth && day === todayDate;
                 const isSelected = selectedDay === day;
                 const hasOverdue = activeView.hasOverdue?.(items) || false;
+                const allComplete = activeView.allComplete?.(items) || false;
 
                 let cellBg = "rgba(255,255,255,0.02)";
                 let cellBorder = "1px solid rgba(255,255,255,0.04)";
@@ -381,6 +393,9 @@ export default function CalendarModal({
                   cellShadow = "0 0 8px rgba(249,115,22,0.08)";
                   dateColor = "#f97316";
                   dateWeight = 600;
+                } else if (allComplete) {
+                  cellBg = "rgba(166,227,161,0.06)";
+                  cellBorder = "1px solid rgba(166,227,161,0.18)";
                 } else if (hasOverdue) {
                   cellBg = "rgba(243,139,168,0.06)";
                   cellBorder = "1px solid rgba(243,139,168,0.15)";
@@ -448,7 +463,7 @@ export default function CalendarModal({
             </div>
 
             {/* Footer */}
-            {activeView.renderFooter?.({ viewYear, viewMonth, itemsByDay, computed })}
+            {activeView.renderFooter?.({ viewYear, viewMonth, currentYear, currentMonth, todayDate, itemsByDay, computed, data: viewData })}
           </div>
         </div>
       </div>

@@ -14,12 +14,6 @@ const SOURCE_COLORS = {
   todoist: "#e8776a",
 };
 
-const SOURCE_LABELS = {
-  canvas: "Canvas",
-  manual: "Canvas",
-  todoist: "Todoist",
-};
-
 function sourceOf(task) {
   return task?.source || "canvas";
 }
@@ -69,11 +63,20 @@ function compute({ data, viewYear, viewMonth }) {
   const todoistItems = data?.todoist?.upcoming || [];
   const all = [...ctmItems, ...todoistItems];
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const itemsByDay = {};
+  let earliestOverdue = null;
   for (const t of all) {
     if (!t.due_date) continue;
     const d = parseDueDate(t.due_date);
     if (isNaN(d.getTime())) continue;
+
+    if (t.status !== "complete" && d < today) {
+      if (!earliestOverdue || d < earliestOverdue) earliestOverdue = d;
+    }
+
     if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) continue;
     const day = d.getDate();
     if (!itemsByDay[day]) itemsByDay[day] = [];
@@ -90,12 +93,29 @@ function compute({ data, viewYear, viewMonth }) {
     });
   }
 
-  return { itemsByDay };
+  return { itemsByDay, earliestOverdue };
+}
+
+function canNavigateBack({ viewYear, viewMonth, currentYear, currentMonth, computed }) {
+  const earliest = computed?.earliestOverdue;
+  if (!earliest) return false;
+  const earliestYear = earliest.getFullYear();
+  const earliestMonth = earliest.getMonth();
+  const currentIdx = currentYear * 12 + currentMonth;
+  const viewIdx = viewYear * 12 + viewMonth;
+  const earliestIdx = earliestYear * 12 + earliestMonth;
+  // Allow prev nav if the target (viewIdx - 1) is still >= earliest overdue month,
+  // and we're not already at the earliest overdue month, and we're still at/before current month.
+  return viewIdx > earliestIdx && viewIdx <= currentIdx;
 }
 
 function hasOverdue(items) {
   // "overdue" styling only meaningful for items not yet complete — de-emphasize
   return items.some((t) => t.status !== "complete" && t._overdueHint);
+}
+
+function allComplete(items) {
+  return items.length > 0 && items.every((t) => t.status === "complete");
 }
 
 function renderCellContents({ items }) {
@@ -184,46 +204,26 @@ function DeadlinesDetail({ selectedDay, viewYear, viewMonth, items }) {
         {items.map((item) => {
           const source = sourceOf(item);
           return (
-            <div
+            <CTMCard
               key={`${source}-${item.id}`}
-              style={{
-                position: "relative",
-                paddingLeft: 10,
+              task={item}
+              expanded={expandedTask === item.id}
+              onToggle={() =>
+                setExpandedTask(expandedTask === item.id ? null : item.id)
+              }
+              onComplete={handleCompleteTask}
+              onStatusChange={handleUpdateTaskStatus}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setMenuState({
+                  task: item,
+                  x: e.clientX,
+                  y: e.clientY,
+                  rowEl: e.currentTarget,
+                });
               }}
-            >
-              <span
-                title={SOURCE_LABELS[source] || "Task"}
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  top: 14,
-                  width: 4,
-                  height: 4,
-                  borderRadius: "50%",
-                  background: SOURCE_COLORS[source] || "rgba(255,255,255,0.3)",
-                  boxShadow: `0 0 6px ${SOURCE_COLORS[source] || "rgba(255,255,255,0.3)"}55`,
-                }}
-              />
-              <CTMCard
-                task={item}
-                expanded={expandedTask === item.id}
-                onToggle={() =>
-                  setExpandedTask(expandedTask === item.id ? null : item.id)
-                }
-                onComplete={handleCompleteTask}
-                onStatusChange={handleUpdateTaskStatus}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setMenuState({
-                    task: item,
-                    x: e.clientX,
-                    y: e.clientY,
-                    rowEl: e.currentTarget,
-                  });
-                }}
-              />
-            </div>
+            />
           );
         })}
       </div>
@@ -262,12 +262,32 @@ function renderDetail(props) {
   return <DeadlinesDetail {...props} />;
 }
 
-function renderFooter({ itemsByDay }) {
+function renderFooter({ viewYear, viewMonth, currentYear, currentMonth, todayDate, itemsByDay, data }) {
   const total = Object.values(itemsByDay).reduce((sum, arr) => sum + arr.length, 0);
-  const open = Object.values(itemsByDay).reduce(
-    (sum, arr) => sum + arr.filter((t) => t.status !== "complete").length,
-    0,
-  );
+  const isCurrentMonth = viewYear === currentYear && viewMonth === currentMonth;
+
+  let dueToday = 0;
+  let dueThisWeek = 0;
+  if (isCurrentMonth) {
+    const allItems = [
+      ...(data?.ctm?.upcoming || []),
+      ...(data?.todoist?.upcoming || []),
+    ];
+    const today = new Date(currentYear, currentMonth, todayDate);
+    today.setHours(0, 0, 0, 0);
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay()); // Sunday
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    for (const t of allItems) {
+      if (t.status === "complete" || !t.due_date) continue;
+      const d = new Date(t.due_date + "T00:00:00");
+      if (isNaN(d.getTime())) continue;
+      if (d.getTime() === today.getTime()) dueToday++;
+      if (d >= weekStart && d <= weekEnd) dueThisWeek++;
+    }
+  }
+
   return (
     <div
       style={{
@@ -280,6 +300,8 @@ function renderFooter({ itemsByDay }) {
         border: "1px solid rgba(255,255,255,0.04)",
         borderRadius: 8,
         gap: 16,
+        minHeight: 56,
+        boxSizing: "border-box",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -287,9 +309,15 @@ function renderFooter({ itemsByDay }) {
         <LegendDot color={SOURCE_COLORS.todoist} label="Todoist" />
       </div>
       <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
-        <span style={{ color: "#cdd6f4", fontWeight: 600 }}>{open}</span> open
-        <span style={{ color: "rgba(255,255,255,0.25)", margin: "0 8px" }}>·</span>
-        {total} total this month
+        {isCurrentMonth && (
+          <>
+            <span style={{ color: "#cdd6f4", fontWeight: 600 }}>{dueToday}</span> due today
+            <span style={{ color: "rgba(255,255,255,0.25)", margin: "0 8px" }}>·</span>
+            <span style={{ color: "#cdd6f4", fontWeight: 600 }}>{dueThisWeek}</span> due this week
+            <span style={{ color: "rgba(255,255,255,0.25)", margin: "0 8px" }}>·</span>
+          </>
+        )}
+        <span style={{ color: "#cdd6f4", fontWeight: 600 }}>{total}</span> total this month
       </span>
     </div>
   );
@@ -314,7 +342,9 @@ function LegendDot({ color, label }) {
 
 const deadlinesView = {
   compute,
+  canNavigateBack,
   hasOverdue,
+  allComplete,
   renderCellContents,
   renderDetail,
   renderFooter,
