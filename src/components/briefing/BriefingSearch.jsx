@@ -150,7 +150,11 @@ export default function BriefingSearch({ onNavigateToEmail }) {
   }, [isMobile, openEmail]);
 
   // Reset bill form when the open email changes.
-  useEffect(() => { setShowBillForm(false); }, [openEmail?.uid]);
+  const [prevOpenUid, setPrevOpenUid] = useState(openEmail?.uid);
+  if (prevOpenUid !== openEmail?.uid) {
+    setPrevOpenUid(openEmail?.uid);
+    setShowBillForm(false);
+  }
 
   // Scroll trapping on the SCROLL CONTAINER (not the outer panel)
   useEffect(() => {
