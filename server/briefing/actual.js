@@ -193,11 +193,11 @@ function findScheduleByPayee(schedules, payeeId, accountId, amountCents) {
     s.conditions.some(c => c.field === 'payee' && c.value === payeeId)
   );
   if (matches.length === 0) return null;
-  if (matches.length === 1) return matches[0];
 
-  // Transfers share a single payee (the transfer-payee of from_account), so
-  // matches can include schedules for every card. Account must dominate —
-  // falling back to matches[0] on amount mismatch corrupts the wrong schedule.
+  // Transfers share a single payee (the transfer-payee of from_account), so a
+  // single payee-match is NOT sufficient — it may belong to a different card.
+  // Account must dominate even when matches.length === 1, otherwise creating a
+  // new CC transfer schedule silently rewrites the one existing one.
   const acctMatches = accountId
     ? matches.filter(s => s.conditions.some(c => c.field === 'account' && c.value === accountId))
     : matches;
