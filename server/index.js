@@ -13,6 +13,7 @@ import briefingRoutes from "./routes/briefing.js";
 import accountsRoutes from "./routes/accounts.js";
 import searchRoutes from "./routes/search.js";
 import liveRoutes from "./routes/live.js";
+import calendarRoutes from "./routes/calendar.js";
 import { initScheduler, startBackgroundIndexer } from "./briefing/scheduler.js";
 import { migrate } from "./db/migrate.js";
 
@@ -56,6 +57,7 @@ app.use("/api/briefing", briefingRoutes);
 app.use("/api/ea", accountsRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/live", liveRoutes);
+app.use("/api/calendar", calendarRoutes);
 
 // Serve static frontend in production (behind auth)
 if (process.env.NODE_ENV === "production") {

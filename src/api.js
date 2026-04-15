@@ -64,6 +64,9 @@ export const trashEmail = (uid) => apiFetch(`/api/briefing/email/${encodeURIComp
 export const markAllEmailsAsRead = (uids) => apiFetch("/api/briefing/email/mark-all-read", { method: "POST", body: JSON.stringify({ uids }) });
 export const deleteBriefing = (id) => apiFetch(`/api/briefing/${id}`, { method: "DELETE" });
 
+// Calendar
+export const getCalendarDeadlines = () => apiFetch("/api/calendar/deadlines");
+
 // Todoist
 export const getTodoistProjects = () => apiFetch("/api/briefing/todoist/projects");
 export const getTodoistLabels = () => apiFetch("/api/briefing/todoist/labels");

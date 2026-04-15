@@ -3,7 +3,7 @@ import { dismissEmail, completeTask, updateTaskStatus } from "../api";
 
 const DashboardContext = createContext(null);
 
-export function DashboardProvider({ briefing, setBriefing, children }) {
+export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines, children }) {
   const [activeAccount, setActiveAccount] = useState(0);
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [loadingBillId, setLoadingBillId] = useState(null);
@@ -59,11 +59,12 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
   }, [selectedEmail, setBriefing]);
 
   const removeCompletedTask = useCallback((taskId) => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+    const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+    // Dashboard list: drop completed tasks entirely (out of sight).
     setBriefing(prev => {
+      if (!prev) return prev;
       const updated = JSON.parse(JSON.stringify(prev));
-      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
-      const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
-
       for (const section of ["ctm", "todoist"]) {
         if (!updated[section]?.upcoming) continue;
         updated[section].upcoming = updated[section].upcoming.filter(
@@ -77,17 +78,32 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
         }
         updated[section].stats = { incomplete: updated[section].upcoming.length, dueToday, dueThisWeek, totalPoints };
       }
-
       return updated;
     });
-  }, [setBriefing]);
+    // Calendar modal: keep completed tasks visible; flip status and clear the
+    // dashboard-only flash flag so they render with the completed treatment.
+    setCalendarDeadlines?.(prev => {
+      if (!prev) return prev;
+      const updated = JSON.parse(JSON.stringify(prev));
+      for (const section of ["ctm", "todoist"]) {
+        const task = updated[section]?.upcoming?.find(
+          t => String(t.id) === String(taskId) || t.todoist_id === String(taskId)
+        );
+        if (task) {
+          task.status = "complete";
+          delete task._completing;
+        }
+      }
+      return updated;
+    });
+  }, [setBriefing, setCalendarDeadlines]);
 
   const handleCompleteTask = useCallback(async (taskId) => {
     completeTask(taskId).catch(() => {});
 
-    // Mark as completing (triggers green flash animation)
-    setBriefing(prev => {
-      const updated = JSON.parse(JSON.stringify(prev));
+    const flagCompleting = (root) => {
+      if (!root) return root;
+      const updated = JSON.parse(JSON.stringify(root));
       for (const section of ["ctm", "todoist"]) {
         const task = updated[section]?.upcoming?.find(
           t => String(t.id) === String(taskId) || t.todoist_id === String(taskId)
@@ -95,23 +111,25 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
         if (task) task._completing = true;
       }
       return updated;
-    });
+    };
+    setBriefing(prev => flagCompleting(prev));
+    setCalendarDeadlines?.(prev => (prev ? flagCompleting(prev) : prev));
 
     // Remove after animation
     setTimeout(() => removeCompletedTask(taskId), 600);
     if (expandedTask === taskId) setExpandedTask(null);
-  }, [expandedTask, setBriefing, removeCompletedTask]);
+  }, [expandedTask, setBriefing, setCalendarDeadlines, removeCompletedTask]);
 
   const handleUpdateTask = useCallback((updatedTask) => {
-    setBriefing(prev => {
-      const updated = JSON.parse(JSON.stringify(prev));
+    const applyUpdate = (root) => {
+      if (!root) return root;
+      const updated = JSON.parse(JSON.stringify(root));
       if (!updated.todoist?.upcoming) return updated;
       const idx = updated.todoist.upcoming.findIndex(
         t => String(t.id) === String(updatedTask.id),
       );
       if (idx >= 0) updated.todoist.upcoming[idx] = updatedTask;
 
-      // Recalculate stats — due_date may have changed
       const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
       const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
       let dueToday = 0, dueThisWeek = 0;
@@ -120,10 +138,11 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
         if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
       }
       updated.todoist.stats = { incomplete: updated.todoist.upcoming.length, dueToday, dueThisWeek, totalPoints: 0 };
-
       return updated;
-    });
-  }, [setBriefing]);
+    };
+    setBriefing(prev => applyUpdate(prev));
+    setCalendarDeadlines?.(prev => (prev ? applyUpdate(prev) : prev));
+  }, [setBriefing, setCalendarDeadlines]);
 
   const handleAddTask = useCallback((task) => {
     setBriefing(prev => {
@@ -149,27 +168,30 @@ export function DashboardProvider({ briefing, setBriefing, children }) {
     updateTaskStatus(taskId, status).catch(() => {});
 
     if (status === "complete") {
-      // Green flash then remove
-      setBriefing(prev => {
-        const updated = JSON.parse(JSON.stringify(prev));
+      const flagCompleting = (root) => {
+        if (!root) return root;
+        const updated = JSON.parse(JSON.stringify(root));
         const task = updated.ctm?.upcoming?.find(t => String(t.id) === String(taskId));
         if (task) task._completing = true;
         return updated;
-      });
+      };
+      setBriefing(prev => flagCompleting(prev));
+      setCalendarDeadlines?.(prev => (prev ? flagCompleting(prev) : prev));
       setTimeout(() => removeCompletedTask(taskId), 600);
       if (String(expandedTask) === String(taskId)) setExpandedTask(null);
       return;
     }
 
-    setBriefing(prev => {
-      const updated = JSON.parse(JSON.stringify(prev));
+    const applyStatus = (root) => {
+      if (!root) return root;
+      const updated = JSON.parse(JSON.stringify(root));
       const task = updated.ctm?.upcoming?.find(t => String(t.id) === String(taskId));
       if (task) task.status = status;
-
       return updated;
-    });
-    if (status === "complete" && String(expandedTask) === String(taskId)) setExpandedTask(null);
-  }, [expandedTask, setBriefing, removeCompletedTask]);
+    };
+    setBriefing(prev => applyStatus(prev));
+    setCalendarDeadlines?.(prev => (prev ? applyStatus(prev) : prev));
+  }, [expandedTask, setBriefing, setCalendarDeadlines, removeCompletedTask]);
 
   const emailAccounts = useMemo(
     () => briefing?.emails?.accounts || [],

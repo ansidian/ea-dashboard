@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
-import { suspendService } from "../api";
+import { suspendService, getCalendarDeadlines } from "../api";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import ErrorState from "../components/layout/ErrorState";
 import RefreshBanner from "../components/layout/RefreshBanner";
@@ -127,6 +127,27 @@ export default function Dashboard() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyTriggerRef = useRef(null);
 
+  // Calendar deadlines: lifted here so mutation handlers in DashboardContext
+  // can keep this state in sync with briefing changes (task complete/status).
+  const [calendarDeadlines, setCalendarDeadlines] = useState(null);
+  const calendarDeadlinesLoadingRef = useRef(false);
+  const loadCalendarDeadlines = (opts) => {
+    if (calendarDeadlinesLoadingRef.current && !opts?.force) return;
+    calendarDeadlinesLoadingRef.current = true;
+    getCalendarDeadlines()
+      .then((data) => setCalendarDeadlines(data))
+      .catch((err) => console.error("Calendar deadlines fetch failed:", err))
+      .finally(() => { calendarDeadlinesLoadingRef.current = false; });
+  };
+
+  // Keep the calendar modal fresh on quick refreshes / full regenerations.
+  // Only refetch when we've already loaded once (modal was opened at least
+  // once this session); otherwise let the open handler do the initial fetch.
+  useEffect(() => {
+    if (calendarDeadlines !== null) loadCalendarDeadlines({ force: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bd.lastQuickRefreshAt, bd.latestId]);
+
   function onSelectHistory(briefingData, meta) {
     bd.selectHistory(briefingData, meta);
     setHistoryOpen(false);
@@ -169,7 +190,11 @@ export default function Dashboard() {
   // --- Render ---
 
   return (
-    <DashboardProvider briefing={bd.briefing} setBriefing={bd.setBriefing}>
+    <DashboardProvider
+      briefing={bd.briefing}
+      setBriefing={bd.setBriefing}
+      setCalendarDeadlines={setCalendarDeadlines}
+    >
       <DashboardMain
         d={bd.briefing}
         loaded={bd.loaded}
@@ -179,6 +204,8 @@ export default function Dashboard() {
         isMock={isMock}
         viewingPast={bd.viewingPast}
         onNavigateToEmail={bd.navigateToEmail}
+        calendarDeadlines={calendarDeadlines}
+        loadCalendarDeadlines={loadCalendarDeadlines}
         headerProps={{
           refreshing: bd.refreshing,
           refreshHold,
@@ -218,6 +245,8 @@ function DashboardMain({
   isMock,
   viewingPast,
   onNavigateToEmail,
+  calendarDeadlines,
+  loadCalendarDeadlines,
   headerProps,
 }) {
   const {
@@ -248,10 +277,12 @@ function DashboardMain({
     setCalendarView(resolved);
     try { localStorage.setItem("calendar:lastView", resolved); } catch { /* ignore */ }
     setCalendarOpen(true);
+    if (resolved === "deadlines") loadCalendarDeadlines();
   };
   const changeCalendarView = (viewKey) => {
     setCalendarView(viewKey);
     try { localStorage.setItem("calendar:lastView", viewKey); } catch { /* ignore */ }
+    if (viewKey === "deadlines") loadCalendarDeadlines();
   };
 
   const today = new Date();
@@ -314,8 +345,8 @@ function DashboardMain({
           actualBudgetUrl: liveData.actualBudgetUrl,
         }}
         deadlinesData={{
-          ctm: d.ctm,
-          todoist: d.todoist,
+          ctm: calendarDeadlines?.ctm || d.ctm,
+          todoist: calendarDeadlines?.todoist || d.todoist,
         }}
       />
 

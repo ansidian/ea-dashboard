@@ -130,7 +130,7 @@ function nowPacific() {
 
 // Load todoist IDs completed from the dashboard, reconciling against live Todoist tasks.
 // If a task was un-completed in Todoist (reappears in the API), remove it from the table.
-async function loadCompletedTaskIds(userId, todoistTasks) {
+export async function loadCompletedTaskIds(userId, todoistTasks) {
   const result = await db.execute({
     sql: "SELECT todoist_id FROM ea_completed_tasks WHERE user_id = ?",
     args: [userId],
@@ -153,7 +153,7 @@ async function loadCompletedTaskIds(userId, todoistTasks) {
 }
 
 // Separate CTM and Todoist tasks, deduplicating by todoist_id (CTM wins), filtering completed
-function separateDeadlines(ctmDeadlines, todoistTasks, completedIds) {
+export function separateDeadlines(ctmDeadlines, todoistTasks, completedIds) {
   // CTM items with a todoist_id suppress the matching Todoist task
   const ctmTodoistIds = new Set(ctmDeadlines.filter(d => d.todoist_id).map(d => d.todoist_id));
   const uniqueTodoist = todoistTasks.filter(t => !ctmTodoistIds.has(t.id));
@@ -173,7 +173,7 @@ function separateDeadlines(ctmDeadlines, todoistTasks, completedIds) {
 }
 
 // Compute stats from a deadlines array (works for both CTM and Todoist)
-function computeDeadlineStats(deadlines) {
+export function computeDeadlineStats(deadlines) {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
   const today = fmt.format(new Date());
   const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));

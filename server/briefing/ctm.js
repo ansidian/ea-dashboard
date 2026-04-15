@@ -48,6 +48,23 @@ async function ctmFetch(path, options = {}) {
   return res.json();
 }
 
+function mapCTMEvent(e) {
+  return {
+    id: e.id,
+    title: e.title,
+    due_date: e.due_date?.includes("T") ? toPacificDate(e.due_date) : e.due_date,
+    due_time: e.due_time ? formatTime12h(e.due_time) : e.due_date?.includes("T") ? formatTime12h(e.due_date) : null,
+    class_name: e.class_name || "Uncategorized",
+    class_color: e.class_color || "#6b7280",
+    points_possible: e.points_possible || null,
+    status: e.status,
+    source: e.canvas_id ? "canvas" : "manual",
+    todoist_id: e.todoist_id || null,
+    description: e.description || "",
+    url: e.url || null,
+  };
+}
+
 export async function fetchCTMDeadlines() {
   if (!CTM_API_URL || !CTM_API_KEY) {
     console.warn("[CTM] No CTM API credentials — skipping deadlines");
@@ -65,21 +82,23 @@ export async function fetchCTMDeadlines() {
   });
 
   const events = await ctmFetch(`/events?${params}`);
+  return events.map(mapCTMEvent);
+}
 
-  return events.map((e) => ({
-    id: e.id,
-    title: e.title,
-    due_date: e.due_date?.includes("T") ? toPacificDate(e.due_date) : e.due_date,
-    due_time: e.due_time ? formatTime12h(e.due_time) : e.due_date?.includes("T") ? formatTime12h(e.due_date) : null,
-    class_name: e.class_name || "Uncategorized",
-    class_color: e.class_color || "#6b7280",
-    points_possible: e.points_possible || null,
-    status: e.status,
-    source: e.canvas_id ? "canvas" : "manual",
-    todoist_id: e.todoist_id || null,
-    description: e.description || "",
-    url: e.url || null,
-  }));
+// Full-horizon fetch for the calendar modal: all incomplete items regardless of date.
+export async function fetchCTMDeadlinesAll() {
+  if (!CTM_API_URL || !CTM_API_KEY) {
+    console.warn("[CTM] No CTM API credentials — skipping deadlines");
+    return [];
+  }
+
+  const params = new URLSearchParams({
+    status: "incomplete,in_progress",
+    exclude_source: "todoist",
+  });
+
+  const events = await ctmFetch(`/events?${params}`);
+  return events.map(mapCTMEvent);
 }
 
 export async function updateCTMEventStatus(eventId, status) {

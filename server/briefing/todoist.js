@@ -112,18 +112,27 @@ function extractDate(due) {
   return due.date.split("T")[0];
 }
 
-export async function fetchTodoistTasks(userId) {
-  const token = await getToken(userId);
-  if (!token) return [];
+function mapTodoistTask(t, projects) {
+  const proj = projects.get(t.project_id);
+  return {
+    id: t.id,
+    title: t.content,
+    due_date: extractDate(t.due),
+    due_time: formatTime12h(t.due.date),
+    class_name: proj?.name || "Todoist",
+    class_color: proj ? mapColor(proj.color) : "#cba6da",
+    points_possible: null,
+    status: "incomplete",
+    source: "todoist",
+    description: t.description || "",
+    url: todoistTaskUrl(t.content, t.id),
+    priority: toUiPriority(t.priority),
+    labels: t.labels || [],
+  };
+}
 
-  const projects = await fetchProjects(token);
-
-  // Fetch tasks due within the next 7 days using filter endpoint
-  const params = new URLSearchParams({
-    query: "due before: +8 days",
-    limit: "200",
-  });
-
+async function fetchTodoistFiltered(token, query) {
+  const params = new URLSearchParams({ query, limit: "200" });
   const allTasks = [];
   let cursor = null;
   do {
@@ -132,27 +141,33 @@ export async function fetchTodoistTasks(userId) {
     allTasks.push(...(data.results || data.items || []));
     cursor = data.next_cursor || null;
   } while (cursor);
+  return allTasks;
+}
 
-  return allTasks
+export async function fetchTodoistTasks(userId) {
+  const token = await getToken(userId);
+  if (!token) return [];
+
+  const projects = await fetchProjects(token);
+  const tasks = await fetchTodoistFiltered(token, "due before: +8 days");
+
+  return tasks
     .filter(t => !t.checked && !t.is_deleted && t.due)
-    .map(t => {
-      const proj = projects.get(t.project_id);
-      return {
-        id: t.id,
-        title: t.content,
-        due_date: extractDate(t.due),
-        due_time: formatTime12h(t.due.date),
-        class_name: proj?.name || "Todoist",
-        class_color: proj ? mapColor(proj.color) : "#cba6da",
-        points_possible: null,
-        status: "incomplete",
-        source: "todoist",
-        description: t.description || "",
-        url: todoistTaskUrl(t.content, t.id),
-        priority: toUiPriority(t.priority),
-        labels: t.labels || [],
-      };
-    });
+    .map(t => mapTodoistTask(t, projects));
+}
+
+// Full-horizon fetch for the calendar modal: overdue + future incomplete, up to 1 year out.
+export async function fetchTodoistTasksAll(userId) {
+  const token = await getToken(userId);
+  if (!token) return [];
+
+  const projects = await fetchProjects(token);
+  // "due before: +N days" already includes overdue items in Todoist filter syntax.
+  const tasks = await fetchTodoistFiltered(token, "due before: +365 days");
+
+  return tasks
+    .filter(t => !t.checked && !t.is_deleted && t.due)
+    .map(t => mapTodoistTask(t, projects));
 }
 
 export async function completeTodoistTask(userId, taskId) {
