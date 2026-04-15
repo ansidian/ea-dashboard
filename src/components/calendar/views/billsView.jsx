@@ -38,7 +38,8 @@ function formatFullDate(year, month, day) {
 function scheduleToBill(schedule, payeeMap) {
   const amtCond = schedule.conditions?.find((c) => c.field === "amount");
   const payeeCond = schedule.conditions?.find((c) => c.field === "payee");
-  const amountCents = amtCond?.value ?? 0;
+  const rawAmt = amtCond?.value;
+  const amountCents = typeof rawAmt === "object" && rawAmt !== null ? (rawAmt.num1 ?? 0) : (rawAmt ?? 0);
   const payeeName = payeeCond ? payeeMap[payeeCond.value] : schedule.name;
   return {
     id: schedule.id,
@@ -47,6 +48,7 @@ function scheduleToBill(schedule, payeeMap) {
     amount: Math.abs(amountCents) / 100,
     next_date: schedule.next_date,
     paid: !!schedule.paid,
+    type: schedule.type || "bill",
   };
 }
 
@@ -61,6 +63,7 @@ function compute({ data, viewYear, viewMonth }) {
   if (schedules.length) {
     for (const s of schedules) {
       if (!s.next_date) continue;
+      if (s.type === "income") continue;
       const d = new Date(s.next_date + "T00:00:00");
       if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) continue;
       const day = d.getDate();
@@ -75,6 +78,7 @@ function compute({ data, viewYear, viewMonth }) {
       if (!t.scheduleId || !t.date) continue;
       const sched = scheduleById.get(t.scheduleId);
       if (!sched) continue;
+      if (sched.type === "income") continue;
       const d = new Date(t.date + "T00:00:00");
       if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) continue;
       const day = d.getDate();
@@ -113,13 +117,16 @@ function renderCellContents({ items, hasOverdue: overdue }) {
       {items.slice(0, MAX_PILLS).map((b) => {
         const d = daysUntil(b.next_date);
         const uc = urgencyColor(d);
+        const isTransfer = b.type === "transfer";
         const amountColor = b.paid
           ? "#a6e3a1"
-          : overdue && d < 0
-            ? "#f38ba8"
-            : uc.text === "rgba(205,214,244,0.5)"
-              ? "#a6e3a1"
-              : uc.text;
+          : isTransfer
+            ? "#b4befe"
+            : overdue && d < 0
+              ? "#f38ba8"
+              : uc.text === "rgba(205,214,244,0.5)"
+                ? "#a6e3a1"
+                : uc.text;
         return (
           <div
             key={b.id}
@@ -180,9 +187,14 @@ function renderDetail({ selectedDay, viewYear, viewMonth, items, data }) {
         {items.map((b) => {
           const days = daysUntil(b.next_date);
           const uc = urgencyColor(days);
-          const accent = b.paid ? "#a6e3a1" : uc.accent;
-          const rowBg = b.paid ? "rgba(166,227,161,0.06)" : uc.bg;
-          const amountColor = b.paid ? "#a6e3a1" : uc.text;
+          const isTransfer = b.type === "transfer";
+          const accent = b.paid ? "#a6e3a1" : isTransfer ? "#b4befe" : uc.accent;
+          const rowBg = b.paid
+            ? "rgba(166,227,161,0.06)"
+            : isTransfer
+              ? "rgba(180,190,254,0.06)"
+              : uc.bg;
+          const amountColor = b.paid ? "#a6e3a1" : isTransfer ? "#b4befe" : uc.text;
           const scheduleUrl = actualBudgetUrl
             ? `${actualBudgetUrl.replace(/\/+$/, "")}/schedules?highlight=${b.id}`
             : null;

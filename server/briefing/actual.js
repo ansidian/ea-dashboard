@@ -109,6 +109,24 @@ export function getMetadata(userId) {
 
       const payeeMap = Object.fromEntries(rawPayees.map(p => [p.id, p.name]));
 
+      // Classify each schedule as bill / transfer / income so the calendar can
+      // hide income (paychecks) and style transfers distinctly. Transfer payees
+      // (Actual's special per-account payees) carry a non-null transfer_acct.
+      const transferPayeeIds = new Set(rawPayees.filter(p => p.transfer_acct).map(p => p.id));
+      const classifiedSchedules = schedules.map(s => {
+        const payeeId = s.conditions?.find(c => c.field === "payee")?.value;
+        const amtCond = s.conditions?.find(c => c.field === "amount");
+        const rawAmt = amtCond?.value;
+        const signedAmt = typeof rawAmt === "object" && rawAmt !== null
+          ? (rawAmt.num1 ?? 0)
+          : (rawAmt ?? 0);
+        let type;
+        if (transferPayeeIds.has(payeeId)) type = "transfer";
+        else if (signedAmt > 0) type = "income";
+        else type = "bill";
+        return { ...s, type };
+      });
+
       const categories = groups
         .filter(g => g.name !== "Internal")
         .map(g => ({
@@ -127,7 +145,7 @@ export function getMetadata(userId) {
           scheduleId: t.schedule || null,
         }));
 
-      const result = { accounts, payees, payeeMap, categories, schedules, recentTransactions };
+      const result = { accounts, payees, payeeMap, categories, schedules: classifiedSchedules, recentTransactions };
       metadataCache = { data: result, ts: Date.now() };
       return result;
     } finally {
