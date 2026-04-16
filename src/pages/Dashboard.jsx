@@ -386,7 +386,9 @@ function DashboardMain({
   });
   const deadlinesToday = [...ctmToday, ...todoistToday];
 
-  const billsDueToday = (liveData.liveBills || []).filter((b) => !b.paid && daysUntil(b.next_date) <= 0);
+  const unpaidBills = (liveData.liveBills || []).filter((b) => !b.paid);
+  const billsDueToday = unpaidBills.filter((b) => daysUntil(b.next_date) === 0);
+  const billsOverdue = unpaidBills.filter((b) => daysUntil(b.next_date) < 0);
 
   const [payingBillId, setPayingBillId] = useState(null);
   async function handleModalMarkPaid(billId) {
@@ -400,13 +402,27 @@ function DashboardMain({
     }
   }
 
+  // #3 — next upcoming event context
+  const calendarEvents = (liveData.liveCalendar || d.calendar)?.filter((e) => !e.allDay) || [];
+  const nowMs = Date.now();
+  const nextEvent = calendarEvents.find((e) => e.startMs > nowMs) || calendarEvents.find((e) => e.endMs && e.endMs > nowMs);
+  const nextEventInfo = nextEvent ? {
+    title: nextEvent.title?.length > 20 ? nextEvent.title.slice(0, 20) + "…" : nextEvent.title,
+    minutesUntil: Math.max(0, Math.round((nextEvent.startMs - nowMs) / 60000)),
+  } : null;
+
   const summaryStats = {
     urgentEmails: urgentEmails.length,
+    billsOverdue: billsOverdue.length,
     billsDueToday: billsDueToday.length,
     dueToday:
       (d.ctm?.stats?.dueToday || 0) +
       (d.todoist?.stats?.dueToday || 0),
-    events: (liveData.liveCalendar || d.calendar)?.filter((e) => !e.allDay)?.length || 0,
+    totalDeadlines:
+      (d.ctm?.stats?.incomplete || 0) +
+      (d.todoist?.stats?.incomplete || 0),
+    events: calendarEvents.length,
+    nextEvent: nextEventInfo,
     temp: (liveData.liveWeather || d.weather)?.temp,
   };
 
@@ -465,7 +481,7 @@ function DashboardMain({
         loaded={loaded}
         urgentEmails={urgentEmails}
         deadlinesToday={deadlinesToday}
-        billsDueToday={billsDueToday}
+        billsDueToday={[...billsOverdue, ...billsDueToday]}
         modalContent={{
           emails: () => (
             <div className="flex flex-col gap-1.5">
