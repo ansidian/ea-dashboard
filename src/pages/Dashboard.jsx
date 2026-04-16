@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { suspendService, getCalendarDeadlines, markBillPaid } from "../api";
 import EmailRow from "../components/email/EmailRow";
+import EmailReaderOverlay from "../components/email/EmailReaderOverlay";
+import useEmailReaderNav from "../hooks/email/useEmailReaderNav";
 import CTMCard from "../components/ctm/CTMCard";
 import { daysUntil, urgencyColor, daysLabel, formatAmount, formatDate } from "../lib/bill-utils";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
@@ -318,6 +320,39 @@ function DeadlinesModalContent({ tasks, onComplete, onStatusChange }) {
   );
 }
 
+// self-contained urgent email list with its own reader overlay so
+// arrow nav is scoped to urgent emails, not the account tab
+function UrgentEmailList({ emails }) {
+  const [openEmail, setOpenEmail] = useState(null);
+  const onOpen = useCallback((e) => setOpenEmail(e), []);
+  const nav = useEmailReaderNav({ list: emails, openEmail, onOpen });
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {emails.map((email) => (
+        <EmailRow
+          key={email.id}
+          email={email}
+          onOpen={onOpen}
+          preview={email.preview}
+          accentBar={
+            <div
+              className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+              style={{ background: "#f38ba8", opacity: 0.7, boxShadow: "0 0 6px rgba(243,139,168,0.19)" }}
+            />
+          }
+        />
+      ))}
+      <EmailReaderOverlay
+        open={!!openEmail}
+        email={openEmail}
+        onClose={() => setOpenEmail(null)}
+        navigation={nav}
+      />
+    </div>
+  );
+}
+
 function DashboardMain({
   d,
   loaded,
@@ -484,22 +519,7 @@ function DashboardMain({
         billsDueToday={[...billsOverdue, ...billsDueToday]}
         modalContent={{
           emails: () => (
-            <div className="flex flex-col gap-1.5">
-              {urgentEmails.map((email) => (
-                <EmailRow
-                  key={email.id}
-                  email={email}
-                  onOpen={(e) => { setSelectedEmail(e); }}
-                  preview={email.preview}
-                  accentBar={
-                    <div
-                      className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
-                      style={{ background: "#f38ba8", opacity: 0.7, boxShadow: "0 0 6px rgba(243,139,168,0.19)" }}
-                    />
-                  }
-                />
-              ))}
-            </div>
+            <UrgentEmailList emails={urgentEmails} />
           ),
           deadlines: () => (
             <DeadlinesModalContent
