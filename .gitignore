@@ -33,4 +33,7 @@ dist-ssr
 *.sw?
 .interface-design/
 .superpowers/
+.agents/
+.continue/
+skills-lock.json
 docs/
