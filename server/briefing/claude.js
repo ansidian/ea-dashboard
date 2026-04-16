@@ -61,6 +61,7 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
    - PREFER pre-minted slot IDs from the "Available date slots" section of the user message. Reference them with {slot_id}, e.g., {tk_abc123}. When you reference a pre-minted slot, leave the insight's "slots" object EMPTY ({}).
    - Only MINT a new slot in the insight's "slots" object when referencing a date not present in the pre-minted list (e.g., a computed date like "three days before your flight"). New slot IDs must start with "new_" and contain only lowercase letters, digits, and underscores.
    - A slot has shape { "iso": "YYYY-MM-DD", "time": "HH:MM" }. Time is optional (24-hour format). iso must be a valid calendar date derived from the "Now" block — NEVER from training data.
+   - CALENDAR EVENTS — STRICT RULE: For any reference to a calendar event (class meeting, scheduled event, appointment), you MUST use a pre-minted cal_* or nwcal_* slot ID. NEVER mint new_cal_* or new_nwcal_* slots — the iso/time/weekday would be your invention, not the user's actual calendar. If no pre-minted cal_*/nwcal_* slot fits the event you want to mention, do NOT reference that event — pick a different anchor or drop the insight.
 
    ICON: "icon" MUST be one of these exact strings (case-sensitive, no emojis): ${ALLOWED_INSIGHT_ICONS.join(", ")}. Pick the most semantically appropriate one. When unsure, use "Sparkles" or "Lightbulb".
 
@@ -428,6 +429,17 @@ function extractToolUseInput(data, toolName) {
 
 // --- Slot resolution and validation pipeline ---
 
+// A new_cal_*/new_nwcal_* slot is a fabrication — the prompts forbid minting
+// calendar slots, so if one appears the iso/time/weekday was invented by the
+// model rather than derived from real calendar data. Dropping these is
+// cheaper than letting a wrong weekday reach the user (see the "Mon class
+// rendered as Tue" bug that motivated this check).
+const FABRICATED_CAL_SLOT_REGEX = /^new_(?:cal|nwcal)_/;
+
+export function fabricatedCalendarSlotKeys(insight) {
+  return Object.keys(insight?.slots || {}).filter(k => FABRICATED_CAL_SLOT_REGEX.test(k));
+}
+
 // Resolve slot references: for each {id} in the template, prefer the insight's
 // own `slots` entry, then fall back to the pre-minted global dict. Returns a
 // clean slots object containing only the referenced slots (no dead weight).
@@ -459,7 +471,7 @@ function formatSlotReferenceBlock(preMinted) {
 
 async function reformatInsightWithHaiku({ brokenInsight, errors, preMinted, nowBlock }) {
   const slotRefs = formatSlotReferenceBlock(preMinted);
-  const system = `You convert a broken insight object into the correct typed date slot format. NEVER use relative date words (today, tomorrow, tonight, yesterday, last night, this morning, this afternoon, this evening, this week, next week, in N days, soon, next {weekday}). Always reference dates via {slot_id} placeholders. Prefer pre-minted slot IDs; only mint a new slot (prefixed "new_") if no pre-minted slot fits. Respond with ONLY a JSON object, no commentary.`;
+  const system = `You convert a broken insight object into the correct typed date slot format. NEVER use relative date words (today, tomorrow, tonight, yesterday, last night, this morning, this afternoon, this evening, this week, next week, in N days, soon, next {weekday}). Always reference dates via {slot_id} placeholders. Prefer pre-minted slot IDs; only mint a new slot (prefixed "new_") if no pre-minted slot fits. NEVER mint new_cal_* or new_nwcal_* slots — calendar events MUST reference a pre-minted cal_*/nwcal_* slot. If the broken insight refers to a calendar event (weekday + time, class meeting, appointment) and no pre-minted cal_*/nwcal_* slot matches that weekday/time, return an empty template to drop the insight (do not attempt to salvage with a minted calendar slot — the weekday is likely hallucinated). Respond with ONLY a JSON object, no commentary.`;
 
   const user = `## Broken insight (fix this)
 ${JSON.stringify(brokenInsight)}
@@ -626,9 +638,15 @@ ${nextWeekSummary || "No events"}${interestsNote}${categoriesNote}${scheduledNot
   for (let i = 0; i < rawInsights.length; i++) {
     let insight = resolveInsightSlots(rawInsights[i], preMintedSlots);
     let check = validateInsight(insight);
+    let fabricated = fabricatedCalendarSlotKeys(insight);
 
-    if (check.valid) {
+    if (check.valid && fabricated.length === 0) {
       finalInsights.push(insight);
+      continue;
+    }
+
+    if (fabricated.length > 0) {
+      console.warn(`[EA] Insight ${i} references fabricated calendar slot(s) ${fabricated.join(", ")} — dropping (no reformatter rescue; weekday is likely hallucinated)`);
       continue;
     }
 
@@ -648,13 +666,22 @@ ${nextWeekSummary || "No events"}${interestsNote}${categoriesNote}${scheduledNot
       });
       // Reformatter may return an empty template to signal "unrecoverable"
       if (reformatted && reformatted.template) {
+        const mintedNewSlots = Object.keys(reformatted.slots || {}).filter(k => k.startsWith("new_"));
+        if (mintedNewSlots.length > 0) {
+          console.warn(`[EA] Haiku reformatter minted new slot(s) for insight ${i}: ${JSON.stringify(mintedNewSlots.map(k => ({ id: k, ...reformatted.slots[k] })))}`);
+        }
         const resolved = resolveInsightSlots(reformatted, preMintedSlots);
         const recheck = validateInsight(resolved);
-        if (recheck.valid) {
+        const reFabricated = fabricatedCalendarSlotKeys(resolved);
+        if (recheck.valid && reFabricated.length === 0) {
           finalInsights.push(resolved);
           continue;
         }
-        console.warn(`[EA] Haiku reformatter still invalid for insight ${i}: ${recheck.errors.join("; ")}`);
+        if (reFabricated.length > 0) {
+          console.warn(`[EA] Haiku reformatter produced fabricated calendar slot(s) ${reFabricated.join(", ")} for insight ${i} — dropping`);
+        } else {
+          console.warn(`[EA] Haiku reformatter still invalid for insight ${i}: ${recheck.errors.join("; ")}`);
+        }
       } else {
         console.warn(`[EA] Haiku reformatter returned empty template for insight ${i} — dropping`);
       }

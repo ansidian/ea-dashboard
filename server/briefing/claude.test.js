@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 // Set dummy API key BEFORE importing claude.js — the module reads it at load time
 process.env.ANTHROPIC_API_KEY = "test-key";
 
-const { buildSlotCandidates } = await import("./claude.js");
+const { buildSlotCandidates, fabricatedCalendarSlotKeys } = await import("./claude.js");
 
 describe("buildSlotCandidates", () => {
   it("returns empty dict on empty input", () => {
@@ -100,5 +100,54 @@ describe("buildSlotCandidates", () => {
     expect(slots.tk_b.time).toBe("12:00");
     expect(slots.tk_c.time).toBe("23:59");
     expect(slots.tk_d.time).toBe("00:00");
+  });
+});
+
+describe("fabricatedCalendarSlotKeys", () => {
+  it("returns [] when no slots are present", () => {
+    expect(fabricatedCalendarSlotKeys({ template: "hello" })).toEqual([]);
+    expect(fabricatedCalendarSlotKeys({ template: "hello", slots: {} })).toEqual([]);
+  });
+
+  it("returns [] for pre-minted calendar slot keys", () => {
+    const insight = {
+      template: "Class {cal_abc123} — notes {nwcal_def456}.",
+      slots: {
+        cal_abc123: { iso: "2026-04-20", time: "18:00" },
+        nwcal_def456: { iso: "2026-04-21" },
+      },
+    };
+    expect(fabricatedCalendarSlotKeys(insight)).toEqual([]);
+  });
+
+  it("flags new_cal_* keys as fabricated", () => {
+    const insight = {
+      template: "Class {new_cal_foo}.",
+      slots: { new_cal_foo: { iso: "2026-04-21", time: "18:00" } },
+    };
+    expect(fabricatedCalendarSlotKeys(insight)).toEqual(["new_cal_foo"]);
+  });
+
+  it("flags new_nwcal_* keys as fabricated", () => {
+    const insight = {
+      template: "Next {new_nwcal_bar}.",
+      slots: { new_nwcal_bar: { iso: "2026-04-27" } },
+    };
+    expect(fabricatedCalendarSlotKeys(insight)).toEqual(["new_nwcal_bar"]);
+  });
+
+  it("permits legitimate new_* slots that are not calendar-prefixed", () => {
+    // A "three days before flight" style minted slot is allowed.
+    const insight = {
+      template: "Start packing {new_prep}.",
+      slots: { new_prep: { iso: "2026-04-18" } },
+    };
+    expect(fabricatedCalendarSlotKeys(insight)).toEqual([]);
+  });
+
+  it("handles null/undefined input defensively", () => {
+    expect(fabricatedCalendarSlotKeys(null)).toEqual([]);
+    expect(fabricatedCalendarSlotKeys(undefined)).toEqual([]);
+    expect(fabricatedCalendarSlotKeys({})).toEqual([]);
   });
 });
