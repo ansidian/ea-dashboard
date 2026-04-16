@@ -74,7 +74,9 @@ function MenuPanel({ x, y, items, onClose, isRoot, anchorWidth }) {
     function handleKey(e) {
       if (e.key === "Escape") onClose();
     }
-    function handleScroll() {
+    function handleScroll(e) {
+      // don't dismiss when scrolling inside a modal content area
+      if (e.target.closest?.("[data-modal-scroll]")) return;
       onClose();
     }
     document.addEventListener("pointerdown", handlePointer);
@@ -137,6 +139,7 @@ function MenuPanel({ x, y, items, onClose, isRoot, anchorWidth }) {
     <div
       ref={panelRef}
       role="menu"
+      data-context-menu={isRoot ? "true" : undefined}
       data-submenu-root={!isRoot ? "true" : undefined}
       onMouseLeave={panelLeave}
       style={{
