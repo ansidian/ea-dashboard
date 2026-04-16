@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
-import { suspendService, getCalendarDeadlines } from "../api";
+import { suspendService, getCalendarDeadlines, markBillPaid } from "../api";
+import EmailRow from "../components/email/EmailRow";
+import CTMCard from "../components/ctm/CTMCard";
+import { daysUntil, urgencyColor, daysLabel, formatAmount, formatDate } from "../lib/bill-utils";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import ErrorState from "../components/layout/ErrorState";
 import RefreshBanner from "../components/layout/RefreshBanner";
@@ -251,11 +254,11 @@ function DashboardMain({
 }) {
   const {
     emailAccounts,
-    billEmails,
-    totalBills,
     emailSectionRef,
     setActiveAccount,
     setSelectedEmail,
+    handleCompleteTask,
+    handleUpdateTaskStatus,
   } = useDashboard();
 
   const halfClass = "";
@@ -287,12 +290,40 @@ function DashboardMain({
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
+  const urgentEmails = emailAccounts
+    .flatMap((a) => (a.important || []).map((e) => ({ ...e, _accountColor: a.color })))
+    .filter((e) => e.urgency === "high");
+
+  const ctmToday = (d.ctm?.upcoming || []).filter((t) => {
+    if (!t.due_date) return false;
+    const due = new Date(t.due_date + "T00:00:00");
+    return due.getTime() === today.getTime();
+  });
+  const todoistToday = (d.todoist?.upcoming || []).filter((t) => {
+    if (!t.due_date) return false;
+    const due = new Date(t.due_date + "T00:00:00");
+    return due.getTime() === today.getTime();
+  });
+  const deadlinesToday = [...ctmToday, ...todoistToday];
+
+  const billsDueToday = (liveData.liveBills || []).filter((b) => !b.paid && daysUntil(b.next_date) <= 0);
+
+  const [payingBillId, setPayingBillId] = useState(null);
+  async function handleModalMarkPaid(billId) {
+    if (payingBillId) return;
+    setPayingBillId(billId);
+    try {
+      await markBillPaid(billId);
+      liveData.refreshNow?.();
+    } finally {
+      setPayingBillId(null);
+    }
+  }
+
   const summaryStats = {
-    urgentEmails: emailAccounts
-      .flatMap((a) => a.important || [])
-      .filter((e) => e.urgency === "high").length,
-    billCount: billEmails.length,
-    billTotal: totalBills,
+    urgentEmails: urgentEmails.length,
+    billsDueToday: billsDueToday.length,
     dueToday:
       (d.ctm?.stats?.dueToday || 0) +
       (d.todoist?.stats?.dueToday || 0),
@@ -350,7 +381,109 @@ function DashboardMain({
         }}
       />
 
-      <SummaryBar stats={summaryStats} loaded={loaded} />
+      <SummaryBar
+        stats={summaryStats}
+        loaded={loaded}
+        urgentEmails={urgentEmails}
+        deadlinesToday={deadlinesToday}
+        billsDueToday={billsDueToday}
+        modalContent={{
+          emails: (onClose) => (
+            <div className="flex flex-col gap-1.5">
+              {urgentEmails.map((email) => (
+                <EmailRow
+                  key={email.id}
+                  email={email}
+                  onOpen={(e) => { setSelectedEmail(e); onClose(); }}
+                  preview={email.preview}
+                  accentBar={
+                    <div
+                      className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full"
+                      style={{ background: "#f38ba8", opacity: 0.7, boxShadow: "0 0 6px rgba(243,139,168,0.19)" }}
+                    />
+                  }
+                />
+              ))}
+            </div>
+          ),
+          deadlines: (_onClose) => (
+            <div className="flex flex-col gap-1.5">
+              {deadlinesToday.map((task) => (
+                <CTMCard
+                  key={`${task.source || "ctm"}-${task.id}`}
+                  task={task}
+                  expanded={false}
+                  onToggle={() => {}}
+                  onComplete={(id) => { handleCompleteTask(id); }}
+                  onStatusChange={(id, status) => { handleUpdateTaskStatus(id, status); }}
+                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                />
+              ))}
+            </div>
+          ),
+          bills: (_onClose) => (
+            <div className="flex flex-col gap-1">
+              {billsDueToday.map((bill) => {
+                const days = daysUntil(bill.next_date);
+                const uc = urgencyColor(days);
+                return (
+                  <div
+                    key={bill.id}
+                    className="group relative rounded-md py-2 px-3 pl-4 transition-all duration-150"
+                    style={{
+                      background: `${uc.accent}0a`,
+                      border: `1px solid ${uc.accent}20`,
+                    }}
+                  >
+                    <div
+                      className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
+                      style={{ background: uc.accent, opacity: 0.7, boxShadow: `0 0 6px ${uc.accent}30` }}
+                    />
+                    <div className="flex justify-between items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium text-foreground/90">{bill.name}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {bill.payee && bill.payee !== bill.name && (
+                            <span className="text-[11px] text-muted-foreground/40">{bill.payee}</span>
+                          )}
+                          <span className="text-[11px] text-muted-foreground/50">
+                            Due {formatDate(bill.next_date)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleModalMarkPaid(bill.id)}
+                          disabled={payingBillId === bill.id}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-[10px] font-semibold uppercase tracking-wide cursor-pointer rounded px-2 py-0.5"
+                          style={{
+                            color: "#a6e3a1",
+                            background: "rgba(166,227,161,0.1)",
+                            border: "1px solid rgba(166,227,161,0.25)",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          {payingBillId === bill.id ? "Marking..." : "Mark paid"}
+                        </button>
+                        <span
+                          className="text-[10px] font-semibold tabular-nums px-2 py-0.5 rounded"
+                          style={{ color: uc.text, background: uc.bg }}
+                        >
+                          {days !== null ? daysLabel(days) : ""}
+                        </span>
+                        <span className="text-[12px] font-semibold tabular-nums text-foreground/80">
+                          {formatAmount(bill.amount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ),
+        }}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-6">
         <InsightsSection

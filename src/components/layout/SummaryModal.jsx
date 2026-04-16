@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
-export default function SummaryModal({ badgeType, title, accentColor, onClose, children }) {
+export default function SummaryModal({ _badgeType, title, _accentColor, onClose, children }) {
   const backdropRef = useRef(null);
   const panelRef = useRef(null);
 
