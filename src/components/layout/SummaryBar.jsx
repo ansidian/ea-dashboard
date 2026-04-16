@@ -1,10 +1,27 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
+import useIsMobile from "../../hooks/useIsMobile";
+import SummaryModal from "./SummaryModal";
 
-export default function SummaryBar({ stats, loaded }) {
+export default function SummaryBar({ stats, loaded, urgentEmails, deadlinesToday, billsDueToday, modalContent }) {
+  const isMobile = useIsMobile();
+  const [activeBadge, setActiveBadge] = useState(null);
+
+  // auto-close when actioned items empty the list
+  const activeCount = activeBadge === "emails" ? urgentEmails?.length
+    : activeBadge === "deadlines" ? deadlinesToday?.length
+    : activeBadge === "bills" ? billsDueToday?.length
+    : 0;
+  if (activeBadge && activeCount === 0) {
+    // schedule close on next tick to avoid setState during render
+    queueMicrotask(() => setActiveBadge(null));
+  }
+
   if (!stats) return null;
 
   const items = [
     stats.urgentEmails > 0 && {
+      badgeKey: "emails",
       color: "#f38ba8",
       icon: (
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -15,7 +32,8 @@ export default function SummaryBar({ stats, loaded }) {
       value: stats.urgentEmails,
       label: `email${stats.urgentEmails !== 1 ? "s" : ""} need${stats.urgentEmails !== 1 ? "" : "s"} action`,
     },
-    stats.billCount > 0 && {
+    stats.billsDueToday > 0 && {
+      badgeKey: "bills",
       color: "#a6e3a1",
       icon: (
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -23,11 +41,11 @@ export default function SummaryBar({ stats, loaded }) {
           <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
         </svg>
       ),
-      value: stats.billCount,
-      label: `bill${stats.billCount !== 1 ? "s" : ""}`,
-      suffix: `$${stats.billTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+      value: stats.billsDueToday,
+      label: `bill${stats.billsDueToday !== 1 ? "s" : ""} due today`,
     },
     stats.dueToday > 0 && {
+      badgeKey: "deadlines",
       color: "#fab387",
       icon: (
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -76,10 +94,15 @@ export default function SummaryBar({ stats, loaded }) {
       {items.map((item, i) => (
         <div
           key={i}
+          role={!isMobile && item.badgeKey ? "button" : undefined}
+          tabIndex={!isMobile && item.badgeKey ? 0 : undefined}
+          onClick={!isMobile && item.badgeKey ? () => setActiveBadge(item.badgeKey) : undefined}
+          onKeyDown={!isMobile && item.badgeKey ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveBadge(item.badgeKey); } } : undefined}
           className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-colors max-sm:shrink-0"
           style={{
             background: `${item.color}08`,
             border: `1px solid ${item.color}15`,
+            cursor: !isMobile && item.badgeKey ? "pointer" : undefined,
           }}
         >
           <span style={{ color: `${item.color}99` }}>{item.icon}</span>
@@ -104,6 +127,19 @@ export default function SummaryBar({ stats, loaded }) {
           )}
         </div>
       ))}
+      {activeBadge && modalContent?.[activeBadge] && (
+        <SummaryModal
+          badgeType={activeBadge}
+          title={
+            activeBadge === "emails" ? "Emails Needing Action"
+              : activeBadge === "deadlines" ? "Due Today"
+              : "Bills Due Today"
+          }
+          onClose={() => setActiveBadge(null)}
+        >
+          {modalContent[activeBadge](() => setActiveBadge(null))}
+        </SummaryModal>
+      )}
     </div>
   );
 }
