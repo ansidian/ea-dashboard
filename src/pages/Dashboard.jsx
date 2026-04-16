@@ -14,6 +14,7 @@ import BillsPaymentsSection from "../components/bills/BillsPaymentsSection";
 import EmailTabSection from "../components/email/EmailTabSection";
 import SummaryBar from "../components/layout/SummaryBar";
 import CalendarModal from "../components/calendar/CalendarModal";
+import ContextMenu from "../components/ui/ContextMenu";
 import { Sun } from "lucide-react";
 
 import { Link } from "react-router-dom";
@@ -239,6 +240,84 @@ export default function Dashboard() {
   );
 }
 
+function openInNewTab(url) {
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function buildTaskMenu(task, { onComplete, onStatusChange }) {
+  const isTodoist = task.source === "todoist";
+  const isCanvas = task.source === "canvas";
+  const isComplete = task.status === "complete";
+
+  if (isTodoist) {
+    return [
+      !isComplete && { label: "Mark complete", onSelect: onComplete },
+      task.url && { label: "Open in Todoist", onSelect: () => openInNewTab(task.url) },
+    ].filter(Boolean);
+  }
+
+  const statusItems = [];
+  if (task.status !== "incomplete") {
+    statusItems.push({ label: "Mark incomplete", onSelect: () => onStatusChange("incomplete") });
+  }
+  if (task.status !== "in_progress") {
+    statusItems.push({ label: "Mark in-progress", onSelect: () => onStatusChange("in_progress") });
+  }
+  if (task.status !== "complete") {
+    statusItems.push({ label: "Mark complete", onSelect: () => onStatusChange("complete") });
+  }
+
+  const ctmUrl = `https://ctm.andysu.tech/#/event/${task.id}`;
+  const openItems = [];
+  if (isCanvas && task.url) {
+    openItems.push({ label: "Open in Canvas", onSelect: () => openInNewTab(task.url) });
+  }
+  openItems.push({ label: "Open in CTM", onSelect: () => openInNewTab(ctmUrl) });
+
+  return [
+    ...statusItems,
+    { type: "separator" },
+    ...openItems,
+  ];
+}
+
+function DeadlinesModalContent({ tasks, onComplete, onStatusChange }) {
+  const [expandedId, setExpandedId] = useState(null);
+  const [menuState, setMenuState] = useState(null);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {tasks.map((task) => (
+        <CTMCard
+          key={`${task.source || "ctm"}-${task.id}`}
+          task={task}
+          expanded={expandedId === task.id}
+          onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)}
+          onComplete={onComplete}
+          onStatusChange={onStatusChange}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setMenuState({ task, x: e.clientX, y: e.clientY });
+          }}
+        />
+      ))}
+      {menuState && (
+        <ContextMenu
+          x={menuState.x}
+          y={menuState.y}
+          onClose={() => setMenuState(null)}
+          items={buildTaskMenu(menuState.task, {
+            onComplete: () => onComplete(menuState.task.id),
+            onStatusChange: (status) => onStatusChange(menuState.task.id, status),
+          })}
+        />
+      )}
+    </div>
+  );
+}
+
 function DashboardMain({
   d,
   loaded,
@@ -388,13 +467,13 @@ function DashboardMain({
         deadlinesToday={deadlinesToday}
         billsDueToday={billsDueToday}
         modalContent={{
-          emails: (onClose) => (
+          emails: () => (
             <div className="flex flex-col gap-1.5">
               {urgentEmails.map((email) => (
                 <EmailRow
                   key={email.id}
                   email={email}
-                  onOpen={(e) => { setSelectedEmail(e); onClose(); }}
+                  onOpen={(e) => { setSelectedEmail(e); }}
                   preview={email.preview}
                   accentBar={
                     <div
@@ -406,20 +485,12 @@ function DashboardMain({
               ))}
             </div>
           ),
-          deadlines: (_onClose) => (
-            <div className="flex flex-col gap-1.5">
-              {deadlinesToday.map((task) => (
-                <CTMCard
-                  key={`${task.source || "ctm"}-${task.id}`}
-                  task={task}
-                  expanded={false}
-                  onToggle={() => {}}
-                  onComplete={(id) => { handleCompleteTask(id); }}
-                  onStatusChange={(id, status) => { handleUpdateTaskStatus(id, status); }}
-                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                />
-              ))}
-            </div>
+          deadlines: () => (
+            <DeadlinesModalContent
+              tasks={deadlinesToday}
+              onComplete={handleCompleteTask}
+              onStatusChange={handleUpdateTaskStatus}
+            />
           ),
           bills: (_onClose) => (
             <div className="flex flex-col gap-1">

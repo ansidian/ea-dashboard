@@ -185,6 +185,17 @@ body::before {
 @keyframes scaleIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes aiGradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 
+/* Clickable summary badges */
+.badge-clickable:hover {
+  border-color: color-mix(in srgb, var(--badge-color) 25%, transparent) !important;
+  background: color-mix(in srgb, var(--badge-color) 8%, transparent) !important;
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--badge-color) 15%, transparent);
+}
+.badge-clickable:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--badge-color) 40%, transparent);
+  outline-offset: 1px;
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

@@ -91,18 +91,24 @@ export default function SummaryBar({ stats, loaded, urgentEmails, deadlinesToday
         loaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2",
       )}
     >
-      {items.map((item, i) => (
+      {items.map((item, i) => {
+        const clickable = !isMobile && item.badgeKey;
+        return (
         <div
           key={i}
-          role={!isMobile && item.badgeKey ? "button" : undefined}
-          tabIndex={!isMobile && item.badgeKey ? 0 : undefined}
-          onClick={!isMobile && item.badgeKey ? () => setActiveBadge(item.badgeKey) : undefined}
-          onKeyDown={!isMobile && item.badgeKey ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveBadge(item.badgeKey); } } : undefined}
-          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 transition-colors max-sm:shrink-0"
+          role={clickable ? "button" : undefined}
+          tabIndex={clickable ? 0 : undefined}
+          onClick={clickable ? () => setActiveBadge(item.badgeKey) : undefined}
+          onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveBadge(item.badgeKey); } } : undefined}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 max-sm:shrink-0 transition-all duration-150",
+            clickable && "cursor-pointer badge-clickable hover:scale-[1.03] active:scale-[0.97]",
+          )}
           style={{
             background: `${item.color}08`,
-            border: `1px solid ${item.color}15`,
-            cursor: !isMobile && item.badgeKey ? "pointer" : undefined,
+            border: `1px solid ${item.color}${clickable ? "20" : "15"}`,
+            boxShadow: clickable ? `0 0 0 0 ${item.color}00` : undefined,
+            "--badge-color": clickable ? item.color : undefined,
           }}
         >
           <span style={{ color: `${item.color}99` }}>{item.icon}</span>
@@ -126,7 +132,8 @@ export default function SummaryBar({ stats, loaded, urgentEmails, deadlinesToday
             </span>
           )}
         </div>
-      ))}
+        );
+      })}
       {activeBadge && modalContent?.[activeBadge] && (
         <SummaryModal
           badgeType={activeBadge}
