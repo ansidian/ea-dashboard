@@ -3,6 +3,29 @@ import db from "../db/connection.js";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+function hashToken(raw) {
+  return crypto.createHash("sha256").update(raw).digest("hex");
+}
+
+export async function validateBearer(raw) {
+  if (!raw) return null;
+  const result = await db.execute({
+    sql: "SELECT id, scopes, expires_at FROM ea_api_tokens WHERE token_hash = ?",
+    args: [hashToken(raw)],
+  });
+  const row = result.rows[0];
+  if (!row) return null;
+  if (row.expires_at && Date.now() > row.expires_at) return null;
+  // Fire-and-forget last_used update; don't block request on it
+  db.execute({
+    sql: "UPDATE ea_api_tokens SET last_used_at = ? WHERE id = ?",
+    args: [Date.now(), row.id],
+  }).catch((err) => console.error("[EA] api-token last_used update failed:", err.message));
+  let scopes = [];
+  try { scopes = JSON.parse(row.scopes); } catch { scopes = []; }
+  return { id: row.id, scopes };
+}
+
 export async function deleteSession(token) {
   await db.execute({
     sql: "DELETE FROM ea_sessions WHERE token = ?",
@@ -39,9 +62,17 @@ export async function validateSession(token) {
 }
 
 export async function requireAuth(req, res, next) {
-  const token = req.cookies?.ea_session;
-  if (!await validateSession(token)) {
-    return res.status(401).json({ message: "Not authenticated" });
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith("Bearer ")) {
+    const ctx = await validateBearer(authHeader.slice(7).trim());
+    if (ctx) {
+      req.apiToken = ctx;
+      return next();
+    }
   }
-  next();
+  const token = req.cookies?.ea_session;
+  if (await validateSession(token)) {
+    return next();
+  }
+  return res.status(401).json({ message: "Not authenticated" });
 }

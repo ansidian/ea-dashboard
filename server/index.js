@@ -38,13 +38,15 @@ app.set("trust proxy", 1);
 app.use(express.json());
 app.use(cookieParser());
 
-// CSRF protection: require custom header on all state-changing API requests
+// CSRF protection: require custom header on all state-changing API requests.
+// Bearer-authenticated requests are exempt — CSRF only applies to cookie auth,
+// and a forged request can't attach a bearer token the attacker doesn't have.
 app.use("/api", (req, res, next) => {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
     return next();
   }
-  // Exempt login so a missing/broken frontend doesn't lock you out
   if (req.path === "/auth/login") return next();
+  if (req.headers.authorization?.startsWith("Bearer ")) return next();
   if (req.headers["x-requested-with"] !== "EADashboard") {
     return res.status(403).json({ message: "Forbidden" });
   }

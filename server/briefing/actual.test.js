@@ -192,3 +192,107 @@ describe("actual.js testConnection mutex", () => {
     expect(order.indexOf("init-1-end")).toBeLessThan(order.indexOf("init-2-start"));
   });
 });
+
+describe("actual.js createQuickTxn", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  it("resolves account name case-insensitively and posts a negative-signed payment", async () => {
+    const { createQuickTxn } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
+
+    const result = await createQuickTxn("user1", {
+      accountName: "checking", // lowercase — mock has "Checking"
+      amount: 12.34,
+      payee: "Starbucks",
+      type: "payment",
+      date: "2026-04-16",
+    });
+
+    expect(actualApi.addTransactions).toHaveBeenCalledTimes(1);
+    const [accountId, [txn]] = actualApi.addTransactions.mock.calls[0];
+    expect(accountId).toBe("a1");
+    expect(txn.amount).toBe(-1234);
+    expect(txn.payee_name).toBe("Starbucks");
+    expect(txn.date).toBe("2026-04-16");
+    expect(txn.cleared).toBe(false);
+    expect(txn.category).toBeUndefined();
+    expect(result.success).toBe(true);
+    expect(result.account).toBe("Checking");
+  });
+
+  it("flips sign for type=deposit", async () => {
+    const { createQuickTxn } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
+
+    await createQuickTxn("user1", {
+      accountName: "Checking",
+      amount: 50,
+      payee: "Refund",
+      type: "deposit",
+      date: "2026-04-16",
+    });
+
+    const [, [txn]] = actualApi.addTransactions.mock.calls[0];
+    expect(txn.amount).toBe(5000);
+  });
+
+  it("throws with status 404 for unknown account name", async () => {
+    const { createQuickTxn } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
+
+    const err = await createQuickTxn("user1", {
+      accountName: "Nonexistent",
+      amount: 1,
+      payee: "X",
+    }).catch((e) => e);
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err.status).toBe(404);
+    expect(actualApi.addTransactions).not.toHaveBeenCalled();
+  });
+
+  it("resolves category name and attaches category id to transaction", async () => {
+    const { createQuickTxn } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
+
+    await createQuickTxn("user1", {
+      accountName: "Checking",
+      amount: 100,
+      payee: "Landlord",
+      categoryName: "rent", // lowercase — mock has "Rent"
+      date: "2026-04-16",
+    });
+
+    const [, [txn]] = actualApi.addTransactions.mock.calls[0];
+    expect(txn.category).toBe("c1");
+  });
+
+  it("acquires the mutex (serializes against getMetadata)", async () => {
+    const { getMetadata, createQuickTxn } = await import("./actual.js");
+    const actualApi = (await import("@actual-app/api")).default;
+
+    const order = [];
+    let callCount = 0;
+    actualApi.init.mockImplementation(async () => {
+      const n = ++callCount;
+      order.push(`init-${n}-start`);
+      await new Promise((r) => setTimeout(r, 20));
+      order.push(`init-${n}-end`);
+    });
+
+    const p1 = getMetadata("user1");
+    const p2 = createQuickTxn("user1", {
+      accountName: "Checking",
+      amount: 1,
+      payee: "X",
+      date: "2026-04-16",
+    });
+
+    await Promise.all([p1, p2]);
+
+    expect(order.indexOf("init-1-end")).toBeLessThan(order.indexOf("init-2-start"));
+  });
+});

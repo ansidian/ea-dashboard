@@ -73,7 +73,13 @@ export function testConnection(userId, overrides = null) {
 // so we batch everything into one connection.
 // Cache check is inside withLock to prevent cache stampede (D-03 from RESEARCH.md).
 export function getMetadata(userId) {
-  return withLock(async () => {
+  return withLock(() => getMetadataInner(userId));
+}
+
+// Inner body — assumes caller already holds the withLock mutex. Lets operations
+// like createQuickTxn chain metadata fetch + mutation inside one critical section
+// without re-entering the lock (which would serialize against itself).
+async function getMetadataInner(userId) {
     const now = Date.now();
     if (metadataCache.data && now - metadataCache.ts < METADATA_TTL_MS) {
       return metadataCache.data;
@@ -151,7 +157,6 @@ export function getMetadata(userId) {
     } finally {
       await actualApi.shutdown().catch(() => {});
     }
-  });
 }
 
 // Individual accessors (used by briefing generation where only one is needed)
@@ -493,6 +498,72 @@ export function sendBill(billData, userId) {
 
       await actualApi.sync();
       return result;
+    } finally {
+      await actualApi.shutdown().catch(() => {});
+    }
+  });
+}
+
+// One-shot transaction post for mobile shortcuts (Tap-to-Pay). Resolves account
+// and optional category by name, then writes a single cleared=false transaction.
+export function createQuickTxn(userId, { accountName, amount, payee, type = "payment", date, notes, categoryName }) {
+  return withLock(async () => {
+    if (!accountName || amount == null || !payee) {
+      const e = new Error("accountName, amount, and payee are required");
+      e.status = 400;
+      throw e;
+    }
+
+    const meta = await getMetadataInner(userId);
+    const acct = meta.accounts.find(a => a.name.toLowerCase() === String(accountName).toLowerCase());
+    if (!acct) {
+      const e = new Error(`Account "${accountName}" not found in Actual Budget`);
+      e.status = 404;
+      throw e;
+    }
+
+    let categoryId = null;
+    if (categoryName) {
+      for (const group of meta.categories) {
+        const match = group.categories.find(c => c.name.toLowerCase() === String(categoryName).toLowerCase());
+        if (match) { categoryId = match.id; break; }
+      }
+    }
+
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+    const txnDate = date || today;
+    const amountCents = Math.round(Math.abs(Number(amount)) * 100);
+    const signed = type === "deposit" ? amountCents : -amountCents;
+
+    const { serverURL, password, syncId } = await getActualConfig(userId);
+    try {
+      await actualApi.init({ serverURL, password });
+      await actualApi.downloadBudget(syncId);
+
+      const txn = {
+        date: txnDate,
+        amount: signed,
+        payee_name: payee,
+        notes: notes || "Tap-to-Pay",
+        cleared: false,
+      };
+      if (categoryId) txn.category = categoryId;
+
+      await actualApi.addTransactions(acct.id, [txn]);
+      await actualApi.sync();
+
+      // Invalidate cached recentTransactions so bill-paid detection sees this txn
+      metadataCache = { data: null, ts: 0 };
+
+      return {
+        success: true,
+        account: acct.name,
+        payee,
+        amount: Math.abs(Number(amount)),
+        type,
+        date: txnDate,
+        category: categoryName || null,
+      };
     } finally {
       await actualApi.shutdown().catch(() => {});
     }

@@ -6,7 +6,7 @@ import { indexEmails } from "../briefing/email-index.js";
 import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, markAsUnread as gmailMarkAsUnread, trashMessage as gmailTrash, batchMarkAsRead as gmailBatchMarkAsRead } from "../briefing/gmail.js";
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, markAsUnread as icloudMarkAsUnread, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
-import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual } from "../briefing/actual.js";
+import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual, createQuickTxn } from "../briefing/actual.js";
 import { trimBillBody } from "../briefing/bill-extract.js";
 import { completeTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask, updateTodoistTask } from "../briefing/todoist.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
@@ -835,6 +835,35 @@ router.post("/actual/send", async (req, res) => {
   } catch (err) {
     console.error("Error sending to Actual Budget:", err);
     res.status(500).json({ message: err.message });
+  }
+});
+
+// One-shot transaction endpoint for mobile shortcuts (Tap-to-Pay).
+// Designed to mirror ActualTap's payload shape so shortcut templates translate 1:1.
+router.post("/actual/quick-txn", async (req, res) => {
+  if (req.apiToken && !req.apiToken.scopes.includes("actual:write")) {
+    return res.status(403).json({ message: "Token lacks actual:write scope" });
+  }
+  const userId = process.env.EA_USER_ID;
+  const { account, amount, payee, type, date, notes, category } = req.body || {};
+  if (!account || amount == null || !payee) {
+    return res.status(400).json({ message: "account, amount, and payee are required" });
+  }
+  try {
+    const result = await createQuickTxn(userId, {
+      accountName: account,
+      amount: Number(amount),
+      payee: String(payee),
+      type: type === "deposit" ? "deposit" : "payment",
+      date,
+      notes,
+      categoryName: category || null,
+    });
+    res.json(result);
+  } catch (err) {
+    const status = err.status || 500;
+    if (status >= 500) console.error("[EA] quick-txn error:", err);
+    res.status(status).json({ message: err.message });
   }
 });
 
