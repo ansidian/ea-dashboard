@@ -71,7 +71,7 @@ function extractDisplayName(from) {
 }
 
 // GET /api/live/all — combined live data endpoint
-router.get("/all", async (req, res) => {
+router.get("/all", async (_req, res) => {
   const userId = process.env.EA_USER_ID;
 
   try {
@@ -142,12 +142,14 @@ router.get("/all", async (req, res) => {
           return [];
         }),
       ),
-      ...icloudAccounts.map(a => {
+      ...icloudAccounts.map(async a => {
         const password = decrypt(a.credentials_encrypted);
-        return fetchIcloudEmails(a, password, hoursBack).catch(err => {
+        try {
+          return await fetchIcloudEmails(a, password, hoursBack);
+        } catch (err) {
           console.error(`[Live] iCloud fetch failed for ${a.email}:`, err.message);
           return [];
-        });
+        }
       }),
     ];
 
