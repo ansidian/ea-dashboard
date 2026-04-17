@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
-import { X, ChevronLeft, ChevronDown, Mail, Cloud, Bot, Clock, Tag, BellRing, CalendarClock, MapPin, Database, Check, Loader2, AlertCircle } from "lucide-react";
+import { X, ChevronLeft, ChevronDown, Mail, Cloud, Bot, Clock, Tag, BellRing, CalendarClock, MapPin, Database, Check, Loader2, AlertCircle, KeyRound, Copy, Trash2 } from "lucide-react";
 import { SiActualbudget, SiTodoist } from "@icons-pack/react-simple-icons";
 import {
   getAccounts, getSettings, updateSettings,
   getGmailAuthUrl, addICloudAccount, removeAccount,
   testActualBudget, geocodeLocation, getModels, skipSchedule,
   getImportantSenders, updateImportantSenders,
+  listApiTokens, createApiToken, revokeApiToken,
 } from "../api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,149 @@ function SettingsCard({ title, icon, children }) {
       </h3>
       {children}
     </div>
+  );
+}
+
+// --- API Tokens card (for iOS Shortcuts etc.) ---
+function ApiTokensCard() {
+  const [tokens, setTokens] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [label, setLabel] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newToken, setNewToken] = useState(null); // { token, label } — shown once
+  const [copied, setCopied] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => {
+    listApiTokens().then(setTokens).catch(e => setLoadError(e.message));
+  }, []);
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    if (!label.trim() || creating) return;
+    setCreating(true);
+    try {
+      const res = await createApiToken(label.trim(), ["actual:write"]);
+      setNewToken({ token: res.token, label: res.label });
+      setLabel("");
+      const list = await listApiTokens();
+      setTokens(list);
+    } catch (err) {
+      alert(err.message || "Failed to create token");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleRevoke(id) {
+    if (!confirm("Revoke this token? Any device using it will stop working immediately.")) return;
+    setBusyId(id);
+    try {
+      await revokeApiToken(id);
+      setTokens(ts => ts.filter(t => t.id !== id));
+    } catch (err) {
+      alert(err.message || "Failed to revoke token");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(newToken.token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard may be blocked — user can long-press to copy from the input
+    }
+  }
+
+  function fmtDate(ms) {
+    if (!ms) return "never";
+    const d = new Date(Number(ms));
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  return (
+    <SettingsCard title="API Tokens" icon={<KeyRound size={12} />}>
+      <div className="text-xs text-muted-foreground/70 leading-relaxed mb-3">
+        Bearer tokens for mobile shortcuts (e.g. Apple Shortcuts posting Tap-to-Pay transactions to Actual Budget).
+        Tokens are shown once at creation — copy them immediately.
+      </div>
+
+      {newToken ? (
+        <div className="bg-warning/10 border border-warning/40 rounded-lg p-3 px-4 mb-3">
+          <div className="text-[11px] tracking-[1.5px] uppercase text-warning font-semibold mb-2">
+            Copy now — you won't see this again
+          </div>
+          <div className="font-mono text-xs break-all bg-black/30 rounded-md p-2 px-3 mb-2 select-all">
+            {newToken.token}
+          </div>
+          <div className="flex gap-2 items-center">
+            <Button size="sm" onClick={handleCopy} variant="secondary">
+              <Copy size={12} className="mr-1" />
+              {copied ? "Copied" : "Copy"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setNewToken(null)}>
+              I've saved it
+            </Button>
+            <span className="text-[11px] text-muted-foreground/70 ml-auto">Label: {newToken.label}</span>
+          </div>
+        </div>
+      ) : null}
+
+      <form onSubmit={handleCreate} className="flex gap-2 items-end mb-4">
+        <div className="flex-1">
+          <label className="text-[11px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground font-medium mb-1 block">
+            New token label
+          </label>
+          <Input
+            type="text"
+            placeholder="iPhone Shortcuts"
+            value={label}
+            onChange={e => setLabel(e.target.value)}
+            disabled={creating}
+          />
+        </div>
+        <Button type="submit" size="sm" disabled={!label.trim() || creating}>
+          {creating ? "Creating…" : "Create"}
+        </Button>
+      </form>
+
+      {loadError ? (
+        <div className="text-xs text-danger">Failed to load tokens: {loadError}</div>
+      ) : tokens === null ? (
+        <div className="text-xs text-muted-foreground/70">Loading…</div>
+      ) : tokens.length === 0 ? (
+        <div className="text-xs text-muted-foreground/70">No tokens yet.</div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {tokens.map(t => (
+            <div key={t.id} className="flex items-center gap-3 bg-white/[0.02] border border-border rounded-lg p-2.5 px-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] truncate">{t.label}</div>
+                <div className="text-[11px] text-muted-foreground/70 flex gap-2 flex-wrap">
+                  <span>{t.scopes.join(", ") || "no scopes"}</span>
+                  <span>·</span>
+                  <span>created {fmtDate(t.created_at)}</span>
+                  <span>·</span>
+                  <span>last used {fmtDate(t.last_used_at)}</span>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleRevoke(t.id)}
+                disabled={busyId === t.id}
+                title="Revoke"
+              >
+                <Trash2 size={12} />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </SettingsCard>
   );
 }
 
@@ -754,28 +898,32 @@ export default function Settings() {
               )}
 
               {tab === "system" && (
-                <SettingsCard title="Search & Historical Context" icon={<Database size={12} />}>
-                  <div className="text-xs text-muted-foreground/70 leading-relaxed">
-                    <p className="mb-2">
-                      Briefings use vector embeddings to retrieve relevant historical context (bill trends, recurring senders, deadline patterns).
-                      Search lets you query past briefing data.
-                    </p>
-                    <div className="flex flex-col gap-1.5 mt-3">
-                      <div className="flex items-center gap-2">
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", settings?.openai_available ? "bg-success" : "bg-warning")} />
-                        <span>
-                          OpenAI Embeddings: {settings?.openai_available
-                            ? <span className="text-success">Connected</span>
-                            : <span className="text-warning">Not configured (set OPENAI_API_KEY)</span>}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", settings?.embedding_count > 0 ? "bg-success" : "bg-text-muted")} />
-                        <span>Indexed chunks: {settings?.embedding_count ?? 0}</span>
+                <>
+                  <SettingsCard title="Search & Historical Context" icon={<Database size={12} />}>
+                    <div className="text-xs text-muted-foreground/70 leading-relaxed">
+                      <p className="mb-2">
+                        Briefings use vector embeddings to retrieve relevant historical context (bill trends, recurring senders, deadline patterns).
+                        Search lets you query past briefing data.
+                      </p>
+                      <div className="flex flex-col gap-1.5 mt-3">
+                        <div className="flex items-center gap-2">
+                          <span className={cn("w-2 h-2 rounded-full shrink-0", settings?.openai_available ? "bg-success" : "bg-warning")} />
+                          <span>
+                            OpenAI Embeddings: {settings?.openai_available
+                              ? <span className="text-success">Connected</span>
+                              : <span className="text-warning">Not configured (set OPENAI_API_KEY)</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={cn("w-2 h-2 rounded-full shrink-0", settings?.embedding_count > 0 ? "bg-success" : "bg-text-muted")} />
+                          <span>Indexed chunks: {settings?.embedding_count ?? 0}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </SettingsCard>
+                  </SettingsCard>
+
+                  <ApiTokensCard />
+                </>
               )}
             </>
           )}

@@ -35,6 +35,9 @@ export async function login(password) {
   return res.json();
 }
 export const logout = () => apiFetch("/api/auth/logout", { method: "POST" });
+export const listApiTokens = () => apiFetch("/api/auth/api-tokens");
+export const createApiToken = (label, scopes) => apiFetch("/api/auth/api-tokens", { method: "POST", body: JSON.stringify({ label, scopes }) });
+export const revokeApiToken = (id) => apiFetch(`/api/auth/api-tokens/${id}`, { method: "DELETE" });
 
 // Briefings
 export const getLatestBriefing = (scenarioOverride) => {
