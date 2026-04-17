@@ -402,6 +402,25 @@ function DashboardMain({
     if (viewKey === "deadlines") loadCalendarDeadlines();
   };
 
+  // C hotkey — open calendar modal
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (
+        e.repeat ||
+        e.key !== "c" ||
+        e.metaKey || e.ctrlKey || e.altKey ||
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "TEXTAREA" ||
+        e.target.isContentEditable
+      )
+        return;
+      if (calendarOpen) return;
+      openCalendar();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
