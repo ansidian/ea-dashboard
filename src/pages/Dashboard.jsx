@@ -402,7 +402,7 @@ function DashboardMain({
     if (viewKey === "deadlines") loadCalendarDeadlines();
   };
 
-  // C hotkey — open calendar modal
+  // 'c' (calendar)
   useEffect(() => {
     function onKeyDown(e) {
       if (
