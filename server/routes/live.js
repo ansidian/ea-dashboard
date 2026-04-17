@@ -213,9 +213,21 @@ router.get("/all", async (req, res) => {
       }));
 
     // Strip email bills that match actioned items in Actual Budget (schedules + recent transactions)
-    if (latestResult.rows.length && (bills.length || recentTransactions.length)) {
+    if (latestResult.rows.length && (bills.length || actualMeta.schedules.length || recentTransactions.length)) {
+      const scheduleItems = (actualMeta.schedules || []).map(s => {
+        const payeeCond = s.conditions?.find(c => c.field === "payee");
+        const amtCond = s.conditions?.find(c => c.field === "amount");
+        const rawAmt = amtCond?.value;
+        const amountCents = typeof rawAmt === "object" && rawAmt !== null ? (rawAmt.num1 ?? 0) : (rawAmt ?? 0);
+        return {
+          payee: payeeCond ? actualMeta.payeeMap[payeeCond.value] || "" : s.name || "",
+          amount: Math.abs(amountCents) / 100,
+          date: s.next_date,
+        };
+      });
       const actionedItems = [
         ...bills.map(b => ({ payee: b.payee, amount: b.amount, date: b.next_date })),
+        ...scheduleItems,
         ...recentTransactions.map(t => ({ payee: t.payee, amount: t.amount, date: t.date })),
       ];
       try {

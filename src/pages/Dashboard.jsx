@@ -623,6 +623,8 @@ function DashboardMain({
         <BillsPaymentsSection
           bills={liveData.liveBills}
           recentTransactions={liveData.recentTransactions}
+          allSchedules={liveData.allSchedules}
+          payeeMap={liveData.payeeMap}
           billsLoading={liveData.billsLoading}
           actualConfigured={liveData.actualConfigured}
           onMarkedPaid={liveData.refreshNow}

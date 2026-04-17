@@ -31,7 +31,7 @@ function shuffleArray(arr) {
 }
 
 
-export default function BillsPaymentsSection({ bills, recentTransactions, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, onMarkedPaid, isMock, loaded, delay, className }) {
+export default function BillsPaymentsSection({ bills, recentTransactions, allSchedules, payeeMap, billsLoading: billsLoadingProp, actualConfigured: actualConfiguredProp, onMarkedPaid, isMock, loaded, delay, className }) {
   // in mock mode, simulate loading for 8s then stop
   const [mockLoading, setMockLoading] = useState(true);
   useEffect(() => {
@@ -93,12 +93,27 @@ export default function BillsPaymentsSection({ bills, recentTransactions, billsL
     }
   }
 
-  // Combine scheduled bills + recent transactions for cross-reference matching
+  // Combine scheduled bills + all budget schedules + recent transactions for cross-reference matching
   const txns = useMemo(() => recentTransactions || [], [recentTransactions]);
+  const scheduleItems = useMemo(() => {
+    const pm = payeeMap || {};
+    return (allSchedules || []).map(s => {
+      const payeeCond = s.conditions?.find(c => c.field === "payee");
+      const amtCond = s.conditions?.find(c => c.field === "amount");
+      const rawAmt = amtCond?.value;
+      const amountCents = typeof rawAmt === "object" && rawAmt !== null ? (rawAmt.num1 ?? 0) : (rawAmt ?? 0);
+      return {
+        payee: payeeCond ? pm[payeeCond.value] || "" : s.name || "",
+        amount: Math.abs(amountCents) / 100,
+        date: s.next_date,
+      };
+    });
+  }, [allSchedules, payeeMap]);
   const actionedItems = useMemo(() => [
     ...scheduledBills.map(b => ({ payee: b.payee, amount: b.amount, date: b.next_date })),
+    ...scheduleItems,
     ...txns.map(t => ({ payee: t.payee, amount: t.amount, date: t.date })),
-  ], [scheduledBills, txns]);
+  ], [scheduledBills, scheduleItems, txns]);
 
   // Client-side cross-reference: suppress email bills already actioned in Actual Budget
   // (fuzzy payee, amount within 5%, dates within 30 days)
