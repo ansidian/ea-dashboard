@@ -45,6 +45,10 @@ const DATE_TIME_PATTERNS = [
   { re: /\b(this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/i, type: "this_day" },
   { re: /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i, type: "day" },
   { re: /\b(in\s+\d+\s+(?:days?|weeks?|months?))\b/i, type: "in_duration" },
+  // "apr 29 at 9am", "apr 29 9am", "apr 29, 2026 at 9am"
+  { re: /\b((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}(?:\s*,?\s*\d{4})?)(?:\s+at)?\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b/i, type: "month_day_time" },
+  // "9am apr 29"
+  { re: /\b(\d{1,2}(?::\d{2})?\s*(?:am|pm))\s+((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}(?:\s*,?\s*\d{4})?)\b/i, type: "time_month_day" },
   { re: /\b((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}(?:\s*,?\s*\d{4})?)\b/i, type: "month_day" },
   { re: /\b(\d{4}-\d{2}-\d{2})\b/, type: "iso" },
   // Bare time with no date — assumes today: "2pm", "8:30am"
@@ -169,8 +173,12 @@ function resolveDate(input) {
         }
         break;
       }
-      case "month_day": {
-        const parts = m[1].match(/(\w+)\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?/i);
+      case "month_day":
+      case "month_day_time":
+      case "time_month_day": {
+        const dateGroup = type === "time_month_day" ? m[2] : m[1];
+        const timeGroup = type === "month_day_time" ? m[2] : type === "time_month_day" ? m[1] : null;
+        const parts = dateGroup.match(/(\w+)\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?/i);
         if (parts) {
           const monthIdx = MONTHS_LONG.findIndex(mo => mo.startsWith(parts[1].toLowerCase()));
           if (monthIdx >= 0) {
@@ -180,6 +188,7 @@ function resolveDate(input) {
             if (!parts[3] && date < today) date.setFullYear(date.getFullYear() + 1);
           }
         }
+        if (timeGroup) time = parseTime(timeGroup);
         break;
       }
       case "iso": {
