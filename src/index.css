@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Serif:wght@300;400;500&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -38,8 +39,10 @@
   --sidebar-border: oklch(0.4037 0.0320 280.1520);
   --sidebar-ring: oklch(0.7871 0.1187 304.7693);
   --font-sans: Montserrat, sans-serif;
-  --font-serif: Georgia, serif;
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-display: var(--serif-choice, "Instrument Serif"), Georgia, serif;
   --font-mono: Fira Code, monospace;
+  --ea-accent: #cba6da;
   --radius: 0.35rem;
   --shadow-x: 0px;
   --shadow-y: 4px;
@@ -175,8 +178,15 @@ body::before {
   );
 }
 
+/* Display serif (hero greeting) — overridable via --serif-choice */
+.ea-display {
+  font-family: var(--serif-choice, "Instrument Serif"), Georgia, serif;
+}
+
 /* Animations */
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes livepulse { 0% { transform: scale(1); opacity: 0.4; } 100% { transform: scale(2.2); opacity: 0; } }
+@keyframes dashPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.7; } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
