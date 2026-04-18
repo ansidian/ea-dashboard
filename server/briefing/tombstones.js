@@ -7,6 +7,13 @@ function todayPacific() {
   }).format(new Date());
 }
 
+// Subtract whole days from an ISO date string, returning a new ISO string.
+export function addDaysIso(iso, n) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(dt);
+}
+
 // Capture the fields needed to re-render a completed Todoist occurrence
 // after the live API has advanced the task to its next due_date.
 // Explicitly whitelists known fields — drops transient runtime props
@@ -41,10 +48,29 @@ export function partitionByExpiry(rows, today) {
 }
 
 // Read all tombstone rows for a user (those with a non-null due_date),
-// delete expired ones in a single statement, and return the live rows
-// hydrated as synthetic complete Todoist entries ready to concat onto
-// briefing.todoist.upcoming.
-export async function hydrateRecurringTombstones(userId) {
+// delete rows past the retention boundary in a single statement, and return
+// the surviving rows hydrated as synthetic complete Todoist entries ready to
+// concat onto briefing.todoist.upcoming.
+//
+// Two date gates work together:
+//   - Retention gate (DB delete): `due_date < yesterday`. Most lenient
+//     across all views, so one view's cleanup never strips tombstones
+//     another view still needs. Calendar needs yesterday's completed rows
+//     visible; deadlines only wants today+.
+//   - Render gate (`viewBoundary`): `due_date >= today` for the deadlines
+//     section (default), `due_date >= yesterday` for the calendar.
+//
+// `liveTodoistIds` (optional): a Set of id strings present in the live
+// Todoist task list. When provided, tombstones whose task id is NOT in
+// the set are treated as orphaned (e.g. the task was deleted in Todoist)
+// and pruned alongside retention-expired rows. Pass `null` to skip orphan
+// detection — required when the live list is unavailable, since a
+// missing-from-list check with no list would wipe every tombstone.
+export async function hydrateRecurringTombstones(
+  userId,
+  liveTodoistIds = null,
+  { viewBoundary = "today" } = {},
+) {
   const result = await db.execute({
     sql: "SELECT todoist_id, due_date, snapshot_json FROM ea_completed_tasks WHERE user_id = ? AND due_date IS NOT NULL",
     args: [userId],
@@ -52,18 +78,35 @@ export async function hydrateRecurringTombstones(userId) {
   if (!result.rows.length) return [];
 
   const today = todayPacific();
-  const { live, expired } = partitionByExpiry(result.rows, today);
+  const yesterday = addDaysIso(today, -1);
+  const retentionBoundary = yesterday;
+  const filterBoundary = viewBoundary === "yesterday" ? yesterday : today;
 
-  if (expired.length) {
-    const placeholders = expired.map(() => "?").join(",");
+  const toDelete = [];
+  const retained = [];
+  for (const row of result.rows) {
+    if (!row.due_date || row.due_date < retentionBoundary) {
+      toDelete.push(row);
+    } else if (liveTodoistIds && !liveTodoistIds.has(String(row.todoist_id))) {
+      toDelete.push(row);
+    } else {
+      retained.push(row);
+    }
+  }
+
+  if (toDelete.length) {
+    const placeholders = toDelete.map(() => "?").join(",");
     await db.execute({
       sql: `DELETE FROM ea_completed_tasks WHERE user_id = ? AND todoist_id IN (${placeholders})`,
-      args: [userId, ...expired.map((r) => r.todoist_id)],
+      args: [userId, ...toDelete.map((r) => r.todoist_id)],
     });
   }
 
   const hydrated = [];
-  for (const row of live) {
+  for (const row of retained) {
+    // Retention kept this row alive for another view's benefit — filter it
+    // out of THIS view if it's past the render boundary.
+    if (row.due_date < filterBoundary) continue;
     let snapshot;
     try {
       snapshot = JSON.parse(row.snapshot_json);

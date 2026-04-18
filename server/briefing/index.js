@@ -5,7 +5,7 @@ import { fetchEmails as fetchIcloudEmails } from "./icloud.js";
 import { fetchCalendar, getNextWeekRange, getTomorrowRange } from "./calendar.js";
 import { fetchWeather } from "./weather.js";
 import { fetchCTMDeadlines } from "./ctm.js";
-import { fetchTodoistTasks } from "./todoist.js";
+import { fetchTodoistTasks, fetchTodoistTaskIdSet } from "./todoist.js";
 import { callClaude } from "./claude.js";
 import { getCategories, getUpcomingBills } from "./actual.js";
 import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../embeddings/index.js";
@@ -59,7 +59,7 @@ async function fetchLiveData(userId, accounts, settings) {
   const gmailAccounts = accounts.filter((a) => a.type === "gmail");
   const calendarAccounts = gmailAccounts.filter((a) => a.calendar_enabled);
 
-  const [calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks] = await Promise.all([
+  const [calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks, todoistTaskIdSet] = await Promise.all([
     fetchCalendar(calendarAccounts).catch((err) => {
       console.error("Calendar fetch failed:", err.message);
       return [];
@@ -87,9 +87,16 @@ async function fetchLiveData(userId, accounts, settings) {
       console.error("Todoist fetch failed:", err.message);
       return [];
     }),
+    // Separate full-horizon probe so tombstone orphan detection doesn't
+    // false-positive on weekly/monthly recurrences that advance past +8d.
+    // null signals "can't verify" so the hydrator skips pruning.
+    fetchTodoistTaskIdSet(userId).catch((err) => {
+      console.error("Todoist task id set fetch failed:", err.message);
+      return null;
+    }),
   ]);
 
-  return { calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks };
+  return { calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks, todoistTaskIdSet };
 }
 
 // Fetch emails from all accounts
@@ -175,6 +182,32 @@ export function separateDeadlines(ctmDeadlines, todoistTasks, completedIds) {
   }
 
   return { ctm, todoist };
+}
+
+// Preserve completed non-recurring Todoist rows across a rebuild.
+//
+// Todoist's API doesn't return closed tasks, so without this step a refresh
+// would wipe any task the user marked complete since the last briefing.
+// Recurring completions are already handled by the tombstone path (they'd
+// carry `_tombstone: true` and we skip those here to avoid duplicating).
+//
+// Gate:
+//   - boundary = "today"     → deadlines section (default)
+//   - boundary = "yesterday" → calendar view (shows one extra day back)
+export function carryForwardCompletedTodoist(newList, prevList, boundary) {
+  if (!prevList?.length) return newList;
+  const keyOf = (t) => `${t.id}:${t.due_date}`;
+  const keys = new Set(newList.map(keyOf));
+  const carried = [];
+  for (const t of prevList) {
+    if (t.status !== "complete" || t._tombstone) continue;
+    if (!t.due_date || t.due_date < boundary) continue;
+    const k = keyOf(t);
+    if (keys.has(k)) continue;
+    carried.push(t);
+    keys.add(k);
+  }
+  return carried.length ? [...newList, ...carried] : newList;
 }
 
 // Compute stats from a deadlines array (works for both CTM and Todoist)
@@ -509,7 +542,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     const emailCount = accounts.filter(a => a.type === "gmail" || a.type === "icloud").length;
     await updateProgress(briefingId, `Fetching emails from ${emailCount} account${emailCount !== 1 ? "s" : ""}...`);
 
-    const [{ calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks }, emails, { triagedIds, prevBriefing, dismissedIds, pinnedIds }] = await Promise.all([
+    const [{ calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks, todoistTaskIdSet }, emails, { triagedIds, prevBriefing, dismissedIds, pinnedIds }] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
       fetchAllEmails(accounts, settings, hoursBack),
       loadPreviousTriage(userId),
@@ -554,10 +587,15 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       const cloned = { ...prevBriefing };
       cloned.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
       const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
-      const tombstones = await hydrateRecurringTombstones(userId);
-      const todoistWithTombstones = [...separated.todoist, ...tombstones];
+      const tombstones = await hydrateRecurringTombstones(userId, todoistTaskIdSet);
+      const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+      const withCarried = carryForwardCompletedTodoist(
+        [...separated.todoist, ...tombstones],
+        prevBriefing?.todoist?.upcoming,
+        todayStr,
+      );
       cloned.ctm = { upcoming: separated.ctm, stats: computeDeadlineStats(separated.ctm) };
-      cloned.todoist = { upcoming: todoistWithTombstones, stats: computeDeadlineStats(todoistWithTombstones) };
+      cloned.todoist = { upcoming: withCarried, stats: computeDeadlineStats(withCarried) };
       // Increment seenCount and filter dismissed/expired emails on clone
       for (const acct of cloned.emails?.accounts || []) {
         acct.important = acct.important
@@ -656,15 +694,20 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 
     // Always overwrite deadline data with server-fetched values (Claude may hallucinate these)
     const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
-    const tombstones = await hydrateRecurringTombstones(userId);
-    const todoistWithTombstones = [...separated.todoist, ...tombstones];
+    const tombstones = await hydrateRecurringTombstones(userId, todoistTaskIdSet);
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+    const todoistAfterCarry = carryForwardCompletedTodoist(
+      [...separated.todoist, ...tombstones],
+      prevBriefing?.todoist?.upcoming,
+      todayStr,
+    );
     briefingJson.ctm = {
       upcoming: separated.ctm,
       stats: computeDeadlineStats(separated.ctm),
     };
     briefingJson.todoist = {
-      upcoming: todoistWithTombstones,
-      stats: computeDeadlineStats(todoistWithTombstones),
+      upcoming: todoistAfterCarry,
+      stats: computeDeadlineStats(todoistAfterCarry),
     };
 
     // Server owns all deadline data (CTM, Todoist) — discard any Claude output
@@ -720,7 +763,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 // Quick refresh: update calendar, weather, CTM only — emails left to full generation
 export async function quickRefresh(userId) {
   const { accounts, settings } = await loadUserConfig(userId);
-  const { calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks } = await fetchLiveData(userId, accounts, settings);
+  const { calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks, todoistTaskIdSet } = await fetchLiveData(userId, accounts, settings);
   const completedTaskIds = await loadCompletedTaskIds(userId, todoistTasks);
 
   // Load the latest ready briefing to patch into
@@ -741,21 +784,30 @@ export async function quickRefresh(userId) {
     };
   }
 
+  // Snapshot the previous Todoist list before overwriting — needed for
+  // carry-forward of completed rows that Todoist no longer returns.
+  const prevTodoistList = briefing.todoist?.upcoming;
+
   // Overwrite live data fields, keep emails and AI fields untouched
   briefing.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
   briefing.calendar = calendar;
   briefing.nextWeekCalendar = nextWeekCalendar;
   briefing.tomorrowCalendar = tomorrowCalendar;
   const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
-  const tombstones = await hydrateRecurringTombstones(userId);
-  const todoistWithTombstones = [...separated.todoist, ...tombstones];
+  const tombstones = await hydrateRecurringTombstones(userId, todoistTaskIdSet);
+  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+  const todoistAfterCarry = carryForwardCompletedTodoist(
+    [...separated.todoist, ...tombstones],
+    prevTodoistList,
+    todayStr,
+  );
   briefing.ctm = {
     upcoming: separated.ctm,
     stats: computeDeadlineStats(separated.ctm),
   };
   briefing.todoist = {
-    upcoming: todoistWithTombstones,
-    stats: computeDeadlineStats(todoistWithTombstones),
+    upcoming: todoistAfterCarry,
+    stats: computeDeadlineStats(todoistAfterCarry),
   };
   briefing.dataUpdatedAt = new Date().toISOString();
 

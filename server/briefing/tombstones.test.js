@@ -161,4 +161,139 @@ describe("hydrateRecurringTombstones", () => {
     );
     expect(deleteCall).toBeUndefined();
   });
+
+  it("prunes tombstones whose task id is absent from the live Todoist set", async () => {
+    mockDb.execute.mockReset();
+    mockDb.execute.mockImplementation(async ({ sql }) => {
+      if (sql.startsWith("SELECT")) {
+        return {
+          rows: [
+            {
+              todoist_id: "still-there",
+              due_date: "2099-01-01",
+              snapshot_json: JSON.stringify({ id: "still-there", title: "Kept", source: "todoist", is_recurring: true }),
+            },
+            {
+              todoist_id: "deleted-in-todoist",
+              due_date: "2099-01-01",
+              snapshot_json: JSON.stringify({ id: "deleted-in-todoist", title: "Gone", source: "todoist", is_recurring: true }),
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    const liveIds = new Set(["still-there"]);
+    const out = await hydrateRecurringTombstones("user-1", liveIds);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("still-there");
+
+    const deleteCall = mockDb.execute.mock.calls.find(
+      ([arg]) => arg.sql?.startsWith("DELETE"),
+    );
+    expect(deleteCall).toBeDefined();
+    expect(deleteCall[0].args).toContain("deleted-in-todoist");
+    expect(deleteCall[0].args).not.toContain("still-there");
+  });
+
+  it("retains yesterday's tombstone but filters per view: today hides it, yesterday shows it", async () => {
+    // Pin clock so "today" / "yesterday" are stable.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-18T16:00:00Z")); // midday Pacific on 2026-04-18
+
+    mockDb.execute.mockReset();
+    mockDb.execute.mockImplementation(async ({ sql }) => {
+      if (sql.startsWith("SELECT")) {
+        return {
+          rows: [
+            {
+              todoist_id: "yesterday-task",
+              due_date: "2026-04-17",
+              snapshot_json: JSON.stringify({ id: "yesterday-task", title: "Y", source: "todoist", is_recurring: false }),
+            },
+            {
+              todoist_id: "today-task",
+              due_date: "2026-04-18",
+              snapshot_json: JSON.stringify({ id: "today-task", title: "T", source: "todoist", is_recurring: false }),
+            },
+            {
+              todoist_id: "two-days-ago",
+              due_date: "2026-04-16",
+              snapshot_json: JSON.stringify({ id: "two-days-ago", title: "Old", source: "todoist" }),
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    // Deadlines view: today gate. Yesterday filtered out IN MEMORY but
+    // retained in DB for calendar's benefit. Two-days-ago deleted from DB.
+    const deadlinesOut = await hydrateRecurringTombstones("user-1", null, { viewBoundary: "today" });
+    expect(deadlinesOut.map((t) => t.id)).toEqual(["today-task"]);
+
+    const firstDelete = mockDb.execute.mock.calls.find(
+      ([arg]) => arg.sql?.startsWith("DELETE"),
+    );
+    expect(firstDelete).toBeDefined();
+    expect(firstDelete[0].args).toContain("two-days-ago");
+    // Crucially: yesterday's tombstone survives the deadlines pass.
+    expect(firstDelete[0].args).not.toContain("yesterday-task");
+
+    // Calendar view: yesterday gate. Sees both today AND yesterday.
+    mockDb.execute.mockClear();
+    mockDb.execute.mockImplementation(async ({ sql }) => {
+      if (sql.startsWith("SELECT")) {
+        // Simulate post-deadlines-cleanup state (two-days-ago already gone).
+        return {
+          rows: [
+            {
+              todoist_id: "yesterday-task",
+              due_date: "2026-04-17",
+              snapshot_json: JSON.stringify({ id: "yesterday-task", title: "Y", source: "todoist" }),
+            },
+            {
+              todoist_id: "today-task",
+              due_date: "2026-04-18",
+              snapshot_json: JSON.stringify({ id: "today-task", title: "T", source: "todoist" }),
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    const calendarOut = await hydrateRecurringTombstones("user-1", null, { viewBoundary: "yesterday" });
+    expect(calendarOut.map((t) => t.id).sort()).toEqual(["today-task", "yesterday-task"]);
+
+    vi.useRealTimers();
+  });
+
+  it("skips orphan pruning when liveTodoistIds is null (can't verify)", async () => {
+    mockDb.execute.mockReset();
+    mockDb.execute.mockImplementation(async ({ sql }) => {
+      if (sql.startsWith("SELECT")) {
+        return {
+          rows: [
+            {
+              todoist_id: "td-1",
+              due_date: "2099-01-01",
+              snapshot_json: JSON.stringify({ id: "td-1", title: "X", source: "todoist" }),
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    // Explicit null — callers pass this when Todoist fetch failed, so we
+    // must not wipe tombstones just because we couldn't check them.
+    const out = await hydrateRecurringTombstones("user-1", null);
+    expect(out).toHaveLength(1);
+
+    const deleteCall = mockDb.execute.mock.calls.find(
+      ([arg]) => arg.sql?.startsWith("DELETE"),
+    );
+    expect(deleteCall).toBeUndefined();
+  });
 });
