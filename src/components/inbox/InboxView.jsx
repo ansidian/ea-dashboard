@@ -1665,7 +1665,7 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
                   fontStyle: "italic",
                 }}
               >
-                Arrived after this morning's briefing. Claude hasn't weighed in.
+                Arrived after your last briefing. Claude hasn't weighed in.
               </div>
             </div>
           </div>
