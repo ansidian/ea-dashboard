@@ -15,6 +15,7 @@ import searchRoutes from "./routes/search.js";
 import liveRoutes from "./routes/live.js";
 import calendarRoutes from "./routes/calendar.js";
 import { initScheduler, startBackgroundIndexer } from "./briefing/scheduler.js";
+import { startSnoozeWaker } from "./briefing/snooze-waker.js";
 import { migrate } from "./db/migrate.js";
 
 
@@ -82,6 +83,7 @@ migrate().then(() => {
       console.error("[EA Scheduler] Init failed:", err.message),
     );
     startBackgroundIndexer();
+    startSnoozeWaker();
   });
 }).catch((err) => {
   console.error("Migration failed:", err);
