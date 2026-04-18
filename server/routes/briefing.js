@@ -581,6 +581,23 @@ router.post("/complete-task/:taskId", async (req, res) => {
   }
 });
 
+// Dismiss a tombstone (local-only ghost row for a recurring Todoist completion).
+// Guarded by due_date IS NOT NULL so a legacy dedupe row can never be removed here.
+router.delete("/tombstone/:todoistId", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { todoistId } = req.params;
+  try {
+    await db.execute({
+      sql: "DELETE FROM ea_completed_tasks WHERE user_id = ? AND todoist_id = ? AND due_date IS NOT NULL",
+      args: [userId, todoistId],
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error dismissing tombstone:", err);
+    res.status(500).json({ message: "Failed to dismiss tombstone" });
+  }
+});
+
 // --- Update CTM task status ---
 router.patch("/task-status/:taskId", async (req, res) => {
   const userId = process.env.EA_USER_ID;
