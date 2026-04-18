@@ -128,6 +128,7 @@ function mapTodoistTask(t, projects) {
     url: todoistTaskUrl(t.content, t.id),
     priority: toUiPriority(t.priority),
     labels: t.labels || [],
+    is_recurring: !!t.due?.is_recurring,
   };
 }
 
@@ -234,6 +235,7 @@ export async function createTodoistTask(userId, { content, description, project_
     url: todoistTaskUrl(task.content, task.id),
     priority: toUiPriority(task.priority),
     labels: task.labels || [],
+    is_recurring: !!task.due?.is_recurring,
   };
 }
 
@@ -271,6 +273,7 @@ export async function updateTodoistTask(userId, taskId, { content, description, 
     url: todoistTaskUrl(task.content, task.id),
     priority: toUiPriority(task.priority),
     labels: task.labels || [],
+    is_recurring: !!task.due?.is_recurring,
   };
 }
 
@@ -280,3 +283,6 @@ export async function testConnection(userId) {
   const data = await todoistFetch(token, "/projects?limit=1");
   return { success: true, projectCount: (data.results || data).length };
 }
+
+// Test-only exports (do not use in production code)
+export const __testing__ = { mapTodoistTask };
