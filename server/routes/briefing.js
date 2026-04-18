@@ -3,7 +3,15 @@ import db from "../db/connection.js";
 import { requireAuth } from "../middleware/auth.js";
 import { generateBriefing, quickRefresh, loadUserConfig, fetchAllEmails } from "../briefing/index.js";
 import { indexEmails } from "../briefing/email-index.js";
-import { fetchEmailBody as fetchGmailBody, markAsRead as gmailMarkAsRead, markAsUnread as gmailMarkAsUnread, trashMessage as gmailTrash, batchMarkAsRead as gmailBatchMarkAsRead } from "../briefing/gmail.js";
+import {
+  fetchEmailBody as fetchGmailBody,
+  markAsRead as gmailMarkAsRead,
+  markAsUnread as gmailMarkAsUnread,
+  trashMessage as gmailTrash,
+  batchMarkAsRead as gmailBatchMarkAsRead,
+  archiveMessage as gmailArchive,
+  unarchiveMessage as gmailUnarchive,
+} from "../briefing/gmail.js";
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, markAsUnread as icloudMarkAsUnread, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual, createQuickTxn } from "../briefing/actual.js";
@@ -344,14 +352,17 @@ router.post("/dismiss/:emailId", async (req, res) => {
   }
 });
 
-// --- Pin email for next briefing ---
+// --- Pin email (sticky: keeps email visible across briefings + biases next triage) ---
 router.post("/pin/:emailId", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   const emailId = req.params.emailId;
+  const snapshot = req.body?.snapshot ? JSON.stringify(req.body.snapshot) : null;
   try {
     await db.execute({
-      sql: "INSERT OR IGNORE INTO ea_pinned_emails (user_id, email_id) VALUES (?, ?)",
-      args: [userId, emailId],
+      sql: `INSERT INTO ea_pinned_emails (user_id, email_id, email_snapshot)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, email_id) DO UPDATE SET email_snapshot = excluded.email_snapshot`,
+      args: [userId, emailId, snapshot],
     });
     res.json({ ok: true });
   } catch (err) {
@@ -372,6 +383,91 @@ router.delete("/pin/:emailId", async (req, res) => {
   } catch (err) {
     console.error("Error unpinning email:", err);
     res.status(500).json({ message: "Failed to unpin email" });
+  }
+});
+
+// --- Snooze email until a specific timestamp ---
+router.post("/email/:uid/snooze", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { uid } = req.params;
+  const untilTs = Number(req.body?.until_ts);
+  if (!Number.isFinite(untilTs) || untilTs <= Date.now()) {
+    return res.status(400).json({ message: "until_ts must be a future epoch millisecond value" });
+  }
+  const snapshot = req.body?.snapshot ? JSON.stringify(req.body.snapshot) : null;
+  try {
+    await db.execute({
+      sql: `INSERT INTO ea_snoozed_emails (user_id, email_id, until_ts, email_snapshot)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, email_id) DO UPDATE
+              SET until_ts = excluded.until_ts, email_snapshot = excluded.email_snapshot`,
+      args: [userId, uid, untilTs, snapshot],
+    });
+
+    // Best-effort: if this is a Gmail account, archive at the source so the
+    // email disappears from Gmail's inbox too (not just the client). iCloud
+    // accounts keep client-only snooze for now.
+    const parsedSnap = req.body?.snapshot;
+    const accountId = parsedSnap?.account_id;
+    if (accountId) {
+      try {
+        const { accounts } = await loadUserConfig(userId);
+        const acc = accounts.find((a) => a.id === accountId || a.email === parsedSnap?.account_email);
+        if (acc?.type === "gmail") {
+          await gmailArchive(acc, uid);
+        }
+      } catch (archiveErr) {
+        console.error("[EA Snooze] Gmail archive failed, rolling back DB row:", archiveErr.message);
+        await db.execute({
+          sql: "DELETE FROM ea_snoozed_emails WHERE user_id = ? AND email_id = ?",
+          args: [userId, uid],
+        });
+        return res.status(502).json({ message: "Failed to archive on Gmail" });
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error snoozing email:", err);
+    res.status(500).json({ message: "Failed to snooze email" });
+  }
+});
+
+router.delete("/email/:uid/snooze", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  const { uid } = req.params;
+  try {
+    // Look up the account before deleting, so we still have the snapshot.
+    const existing = await db.execute({
+      sql: "SELECT email_snapshot FROM ea_snoozed_emails WHERE user_id = ? AND email_id = ?",
+      args: [userId, uid],
+    });
+    let snap = null;
+    if (existing.rows[0]?.email_snapshot) {
+      try { snap = JSON.parse(existing.rows[0].email_snapshot); } catch { /* ignore */ }
+    }
+
+    await db.execute({
+      sql: "DELETE FROM ea_snoozed_emails WHERE user_id = ? AND email_id = ?",
+      args: [userId, uid],
+    });
+
+    if (snap?.account_id) {
+      try {
+        const { accounts } = await loadUserConfig(userId);
+        const acc = accounts.find((a) => a.id === snap.account_id || a.email === snap.account_email);
+        if (acc?.type === "gmail") await gmailUnarchive(acc, uid);
+      } catch (unarchiveErr) {
+        console.error("[EA Snooze] Gmail unarchive failed:", unarchiveErr.message);
+        // Don't fail the request — the DB state is correct; user can manually
+        // locate the email in Gmail's "All Mail".
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error unsnoozing email:", err);
+    res.status(500).json({ message: "Failed to unsnooze email" });
   }
 });
 
@@ -608,6 +704,18 @@ router.post("/email/:uid/trash", async (req, res) => {
     } else {
       await gmailTrash(found.account, uid);
     }
+    // Trash supersedes pin/snooze — clear any stale state so zombie rows don't
+    // reappear after a briefing roll or snooze wake.
+    await Promise.all([
+      db.execute({
+        sql: "DELETE FROM ea_pinned_emails WHERE user_id = ? AND email_id = ?",
+        args: [userId, uid],
+      }),
+      db.execute({
+        sql: "DELETE FROM ea_snoozed_emails WHERE user_id = ? AND email_id = ?",
+        args: [userId, uid],
+      }),
+    ]);
     res.json({ ok: true });
   } catch (err) {
     console.error("Error trashing email:", err);
