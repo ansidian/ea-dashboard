@@ -172,9 +172,14 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
               <MotionItem key={item._tombstone ? `ctm-${item.id}-ghost` : `ctm-${item.id}-${item.status}`}>
                 <CTMCard
                   task={item}
-                  expanded={expandedTask === item.id}
-                  onToggle={() =>
-                    setExpandedTask(expandedTask === item.id ? null : item.id)
+                  expanded={!item._tombstone && expandedTask === item.id}
+                  onToggle={
+                    item._tombstone
+                      ? () => {}
+                      : () =>
+                          setExpandedTask(
+                            expandedTask === item.id ? null : item.id,
+                          )
                   }
                   onComplete={handleCompleteTask}
                   onStatusChange={handleUpdateTaskStatus}
