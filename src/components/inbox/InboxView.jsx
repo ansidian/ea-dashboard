@@ -656,14 +656,17 @@ function InboxList({
   const toggleLane = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
 
   const grouped = useMemo(() => {
-    const g = { live: [], action: [], fyi: [], noise: [] };
+    const g = { pinned: [], live: [], action: [], fyi: [], noise: [] };
     for (const e of emails) {
-      if (e._untriaged) g.live.push(e);
+      const key = e.uid || e.id;
+      if (pinnedIds?.has?.(key) || pinnedIds?.has?.(e.id)) g.pinned.push(e);
+      else if (e._untriaged) g.live.push(e);
       else g[e._lane]?.push(e);
     }
+    g.pinned.sort((a, b) => new Date(b.date) - new Date(a.date));
     g.live.sort((a, b) => new Date(b.date) - new Date(a.date));
     return g;
-  }, [emails]);
+  }, [emails, pinnedIds]);
 
   const renderRows = (list) => list.map((email) => (
     <EmailRow
@@ -794,6 +797,49 @@ function InboxList({
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {layout === "swimlanes" ? (
           <>
+            {grouped.pinned.length > 0 && (
+              <div>
+                <StickyHeader borderColor={`${accent}22`}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleLane("pinned")}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleLane("pinned"); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, width: "100%",
+                      cursor: "pointer", background: "transparent", border: "none",
+                      fontFamily: "inherit", color: "inherit", padding: 0,
+                    }}
+                  >
+                    <Pin size={11} color={accent} />
+                    <span
+                      style={{
+                        fontSize: 10, fontWeight: 700, letterSpacing: 2,
+                        textTransform: "uppercase", color: accent,
+                      }}
+                    >
+                      Pinned
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 999,
+                        background: `${accent}22`, color: `${accent}cc`,
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {grouped.pinned.length}
+                    </span>
+                    <span style={{ flex: 1 }} />
+                    {collapsed.pinned ? <ChevronRight size={12} color="rgba(205,214,244,0.4)" /> : <ChevronDown size={12} color="rgba(205,214,244,0.4)" />}
+                  </div>
+                </StickyHeader>
+                {!collapsed.pinned && (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {renderRows(grouped.pinned)}
+                  </div>
+                )}
+              </div>
+            )}
             {grouped.live.length > 0 && (
               <div>
                 <StickyHeader borderColor="rgba(137,180,250,0.12)">
