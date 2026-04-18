@@ -76,32 +76,38 @@ ea-dashboard/
 │   │   ├── index.js                # Orchestrator: generateBriefing, quickRefresh, delta merge
 │   │   ├── claude.js               # Claude API: tool_choice-forced submit_briefing, slot minting, validator retry
 │   │   ├── insight-validator.js    # Pure-function insight validator (forbidden words, slot refs)
+│   │   ├── insight-icons.js        # Icon selection for AI-generated insights
 │   │   ├── gmail.js                # Gmail OAuth, fetch, mark-read, trash
 │   │   ├── icloud.js               # IMAP connection pool, fetch, mark-read, trash
 │   │   ├── calendar.js             # Google Calendar: today/tomorrow/next-week ranges
 │   │   ├── weather.js              # Pirate Weather: forecast + geocoding
 │   │   ├── ctm.js                  # Canvas deadlines: fetch + status update
 │   │   ├── todoist.js              # Todoist tasks: fetch + complete
+│   │   ├── tombstones.js           # Hydrate completed-but-visible recurring Todoist rows
+│   │   ├── snooze-waker.js         # Periodic unsnoozer: resurfaces emails past their until_ts
 │   │   ├── actual.js               # Actual Budget: metadata, bills, send transactions
-│   │   ├── email-index.js           # FTS5 email indexing for cross-account search
+│   │   ├── bill-extract.js         # Heuristic bill extraction from email text
+│   │   ├── html-to-text.js         # HTML email body → plain text for indexing/snippets
+│   │   ├── email-index.js          # FTS5 email indexing for cross-account search
 │   │   ├── encryption.js           # AES-256-GCM encrypt/decrypt (legacy CBC migration)
 │   │   └── scheduler.js            # Cron job management with hot reload
 │   ├── embeddings/                 # Vector search: chunk, embed, query (RAG)
 │   ├── routes/
 │   │   ├── auth.js                 # Login, session check, logout (rate-limited)
-│   │   ├── briefing.js             # Generate, poll, refresh, email ops, task ops, Actual
-│   │   ├── accounts.js             # Account CRUD, Gmail OAuth, settings, schedules
+│   │   ├── briefing.js             # Generate, poll, refresh, email ops, task ops, Actual, pin/snooze
+│   │   ├── accounts.js             # Account CRUD, Gmail OAuth, settings, schedules, API tokens
 │   │   ├── search.js               # Vector search + Claude analysis
+│   │   ├── calendar.js             # Read-only calendar endpoints (mounted at /api/calendar)
 │   │   └── live.js                 # Real-time data: new emails, calendar, weather, bills
 │   ├── middleware/
-│   │   └── auth.js                 # Session validation, requireAuth middleware
+│   │   └── auth.js                 # Session + Bearer-token validation, requireAuth middleware
 │   └── db/
 │       ├── connection.js           # Turso client (remote prod, local dev file)
 │       ├── ctm-connection.js       # Read-only CTM database client
 │       ├── migrate.js              # Sequential SQL migration runner
-│       ├── migrations/             # 001–016 numbered .sql files
+│       ├── migrations/             # 001–025 numbered .sql files
 │       ├── dev-fixture.js          # Mock briefing generator for dev mode
-│       └── scenarios/              # Composable test fixtures (urgent-flags, bills, etc.)
+│       └── scenarios/              # Composable test fixtures (urgent-flags, bills, tombstones, etc.)
 ├── src/
 │   ├── main.jsx                    # React entry point
 │   ├── App.jsx                     # Router + auth guard (3 routes)
@@ -117,17 +123,29 @@ ea-dashboard/
 │   ├── hooks/
 │   │   ├── useBriefingData.js      # Briefing lifecycle: fetch, poll, generate, history
 │   │   ├── useLiveData.js          # 5-min polling: live emails, calendar, weather, bills
+│   │   ├── useLiveEmailState.js    # Derived read/pinned/snoozed state for live email rows
 │   │   ├── useNotifications.js     # Browser notifications for events, bills, emails
+│   │   ├── useAutoRefresh.js       # Visibility-aware auto refresh of briefing data
 │   │   ├── useHoldGesture.js       # Long-press detection (1.5s) for refresh/suspend
-│   │   └── useIsMobile.js          # Responsive breakpoint hook
+│   │   ├── useKeyHold.js           # Keyboard-hold state machine (powers hold gestures)
+│   │   ├── useCustomize.js         # Customize-panel drag/reorder state
+│   │   ├── useIsMobile.js          # Responsive breakpoint hook
+│   │   ├── useMediaQuery.js        # Generic media-query matcher
+│   │   ├── briefing/               # Smaller briefing-specific hooks
+│   │   └── email/                  # Smaller email-specific hooks (pin/snooze etc.)
 │   ├── components/
 │   │   ├── layout/                 # Header, SummaryBar, Section, Loading, Error
-│   │   ├── briefing/               # InsightsSection, HistoryPanel, Search (960 lines)
+│   │   ├── shell/                  # ShellHeader, CommandPalette, CustomizePanel
+│   │   ├── dashboard/              # TodayTimeline and other dashboard-root pieces
+│   │   ├── briefing/               # InsightsSection, HistoryPanel, Search
 │   │   ├── email/                  # EmailTabSection, EmailSection, LiveEmail, EmailRow, Body
+│   │   ├── inbox/                  # Inbox-style grouped email views
 │   │   ├── calendar/               # ScheduleSection (today/tomorrow/next-week, NowMarker)
-│   │   ├── deadlines/              # DeadlinesSection (merged CTM + Todoist)
+│   │   ├── deadlines/              # DeadlinesSection (merged CTM + Todoist + tombstones)
 │   │   ├── ctm/                    # CTMCard (status spine), CTMSection
+│   │   ├── todoist/                # AddTaskPanel and Todoist-specific UI
 │   │   ├── bills/                  # BillsPaymentsSection, BillBadge (Actual Budget send)
+│   │   ├── settings/               # Settings page sub-components
 │   │   ├── shared/                 # SearchableDropdown, Tooltip, WeatherTooltip
 │   │   ├── dev/                    # DevPanel (Ctrl+Shift+D, scenario switcher)
 │   │   └── ui/                     # shadcn primitives + MotionWrappers, BottomSheet
@@ -135,6 +153,10 @@ ea-dashboard/
 │       ├── utils.ts                # cn() — clsx + tailwind-merge
 │       ├── actualMetadata.js       # Singleton cache for Actual Budget metadata
 │       ├── dashboard-helpers.js    # Date formatting, urgency colors, greeting pools
+│       ├── redesign-helpers.js     # Layout/measurement helpers for the shell redesign
+│       ├── bill-utils.js           # Bill normalization and dedupe helpers
+│       ├── email-links.js          # Parse/transform email links for safe rendering
+│       ├── icons.js / icons.jsx    # Icon registry shared across components
 │       └── insight-resolver.js     # Typed date slot renderer for Claude insights
 └── docs/
     └── superpowers/                # Feature plans and design specs
@@ -254,7 +276,7 @@ graph LR
     Request --> TP[trust proxy]
     TP --> JSON[express.json]
     JSON --> Cookie[cookieParser]
-    Cookie --> CSRF{"CSRF Check\n(x-requested-with header)"}
+    Cookie --> CSRF{"CSRF Check\n(x-requested-with header OR\nBearer token OR login path)"}
     CSRF -->|non-GET| Validate
     CSRF -->|GET/HEAD/OPTIONS| Route
     Validate --> Route
@@ -264,11 +286,13 @@ graph LR
     Route --> EA["/api/ea"]
     Route --> Search["/api/search"]
     Route --> Live["/api/live"]
+    Route --> Cal["/api/calendar"]
 
     Briefing --> ReqAuth[requireAuth middleware]
     EA --> ReqAuth
     Search --> ReqAuth
     Live --> ReqAuth
+    Cal --> ReqAuth
     ReqAuth --> Handler[Route Handler]
 ```
 
@@ -277,10 +301,11 @@ graph LR
 | Group | Mount | Endpoints | Key Responsibilities |
 |-------|-------|-----------|---------------------|
 | Auth | `/api/auth` | 3 | Login (rate-limited 5/15min), session check, logout |
-| Briefing | `/api/briefing` | 23 | Generate, poll, refresh, email search, email ops, task ops, Actual Budget |
-| Accounts | `/api/ea` | 16 | Account CRUD, Gmail OAuth, settings, schedules, geocode, suspend |
-| Search | `/api/search`, `/api/briefing/email-search` | 4 | Vector search, Claude analysis, FTS5 email search, dev seed |
+| Briefing | `/api/briefing` | ~38 | Generate, poll, refresh, email ops (read/trash/pin/snooze/dismiss), FTS email search, task ops, Actual Budget, scenarios |
+| Accounts | `/api/ea` | 16 | Account CRUD, Gmail OAuth, settings, schedules, geocode, suspend, important senders, API tokens |
+| Search | `/api/search` | 2 | Vector search, Claude re-rank |
 | Live | `/api/live` | 1 | Combined real-time data (emails, calendar, weather, bills) |
+| Calendar | `/api/calendar` | 1 | Read-only calendar slice exposed separately from briefing |
 
 ### Authentication
 
@@ -301,9 +326,12 @@ sequenceDiagram
     S->>B: 200 briefing data (or 401 if expired)
 ```
 
-Sessions: 32-byte hex tokens, 30-day TTL, stored in `ea_sessions`. Lazy-deleted on expired validation.
+Two auth paths feed `requireAuth`:
 
-Gmail OAuth: Separate CSRF token flow (UUID, 10-min TTL, one-time use) stored in `ea_csrf_tokens`.
+1. **Cookie session** — 32-byte hex tokens in `ea_sessions`, 30-day TTL, lazy-deleted on expired validation. Used by the browser SPA.
+2. **Bearer API token** — `Authorization: Bearer <token>` validated against `ea_api_tokens` (token hash, scopes, optional expiry). Used by external integrations (shortcuts, scripts). Bearer requests are exempt from the `x-requested-with` CSRF check — they carry their own unforgeable secret.
+
+Gmail OAuth: separate CSRF token flow (UUID, 10-min TTL, one-time use) stored in `ea_csrf_tokens`.
 
 ## Briefing Pipeline
 
@@ -435,7 +463,6 @@ erDiagram
         int calendar_enabled
         text credentials_encrypted "AES-256-GCM"
         int sort_order
-        int gmail_index
         datetime created_at
         datetime updated_at
     }
@@ -502,7 +529,39 @@ erDiagram
     ea_completed_tasks {
         text user_id PK
         text todoist_id PK
+        text due_date "snapshot due for visibility window"
+        text snapshot_json "JSON of last-known task for render after source drop"
         datetime completed_at
+    }
+
+    ea_pinned_emails {
+        text user_id PK
+        text email_id PK
+        text pinned_at
+    }
+
+    ea_pinned_emails_snapshot {
+        text user_id PK
+        text email_id PK
+        text snapshot_json "frozen email payload if source drops"
+    }
+
+    ea_snoozed_emails {
+        text user_id PK
+        text email_id PK
+        int until_ts "Unix ms; snooze-waker resurfaces when passed"
+        text email_snapshot
+        text snoozed_at
+    }
+
+    ea_api_tokens {
+        int id PK
+        text token_hash UK "hash-only; raw token shown once on create"
+        text label
+        text scopes "CSV or JSON of permitted scopes"
+        int created_at
+        int last_used_at
+        int expires_at
     }
 
     ea_email_index {
@@ -516,7 +575,8 @@ erDiagram
         text from_name
         text from_address
         text subject
-        text body_snippet
+        text body_snippet "short UI preview"
+        text body_text "full plain-text body for FTS"
         text email_date
         int read
         datetime indexed_at
@@ -528,6 +588,7 @@ erDiagram
         text from_address "FTS5 indexed"
         text subject "FTS5 indexed"
         text body_snippet "FTS5 indexed"
+        text body_text "FTS5 indexed (full body)"
     }
 
     ea_briefings ||--o{ ea_embeddings : "briefing_id"
@@ -555,6 +616,15 @@ Sequential SQL files in `server/db/migrations/`, auto-run on server start:
 | 14 | `014_completed_tasks.sql` | `ea_completed_tasks` table |
 | 15 | `015_account_user_index.sql` | Index `ea_accounts(user_id)` |
 | 16 | `016_email_search_index.sql` | `ea_email_index` + `ea_email_fts` (FTS5) |
+| 17 | `017_drop_gmail_index.sql` | Drop obsolete `gmail_index` column (Gmail now uses `?authuser=`) |
+| 18 | `018_dedupe_email_fts.sql` | Clean up duplicate rows in `ea_email_fts` |
+| 19 | `019_email_body_text.sql` | Add `body_text` to index + rebuild FTS with new column |
+| 20 | `020_pinned_emails.sql` | `ea_pinned_emails` table |
+| 21 | `021_api_tokens.sql` | `ea_api_tokens` table — Bearer-auth for external integrations |
+| 22 | `022_pinned_emails_snapshot.sql` | `ea_pinned_emails_snapshot` for frozen payloads after source drop |
+| 23 | `023_snoozed_emails.sql` | `ea_snoozed_emails` + index on `(user_id, until_ts)` |
+| 24 | `024_snoozed_resurfaced.sql` | Track snooze resurface state |
+| 25 | `025_completed_tasks_metadata.sql` | Add `due_date` + `snapshot_json` to `ea_completed_tasks` |
 
 ## Key Patterns
 
@@ -590,6 +660,17 @@ Reference implementations: `BriefingHistoryPanel.jsx`, `BriefingSearch.jsx`.
 ### Scheduler
 
 Database-driven cron jobs via `node-cron`. Schedules stored as JSON array in `ea_settings.schedules_json`. Each entry: `{ label, time, tz, enabled, skipped_until? }`. Hot-reloaded on settings update (all jobs cleared and recreated). Skip functionality sets `skipped_until` to midnight tomorrow in the schedule's timezone.
+
+### Recurring Todoist Tombstones
+
+When a recurring Todoist task is completed, the Todoist API advances it to the next occurrence and the prior instance disappears from the live list. That would make the dashboard row flicker out before the user's "completed" strikethrough animation finishes.
+
+`server/briefing/tombstones.js`'s `hydrateRecurringTombstones(userId, todoistTaskIdSet)` compensates: it reads `ea_completed_tasks` entries whose `due_date` is still within the visibility window and whose `todoist_id` is no longer in the live set, then emits synthetic task rows rebuilt from `snapshot_json` (migration 025). The orchestrator merges these with the separated Todoist list so the completed instance keeps rendering until its due date falls off the window. `DeadlinesSection` treats tombstoned rows specially to avoid shared-id collisions (see recent commits `217286f`, `eb17d23`).
+
+### Snooze / Pin
+
+- **Snooze:** `ea_snoozed_emails` holds `(user_id, email_id, until_ts, email_snapshot)`. `server/briefing/snooze-waker.js` runs periodically; when `until_ts` has passed it re-injects the email into the live feed using the stored snapshot (so the email stays visible even if it's already been fetched-and-filed in the underlying mailbox).
+- **Pin:** `ea_pinned_emails` holds the pin record; `ea_pinned_emails_snapshot` keeps a frozen payload so a pinned email keeps rendering if it's deleted from the source mailbox.
 
 ## API Reference
 
@@ -630,6 +711,12 @@ Database-driven cron jobs via `node-cron`. Schedules stored as JSON array in `ea
 | POST | `/api/briefing/email/:uid/trash` | Move email to trash |
 | POST | `/api/briefing/email/mark-all-read` | Batch mark as read |
 | POST | `/api/briefing/dismiss/:emailId` | Permanently dismiss email |
+| POST | `/api/briefing/email/:uid/pin` | Pin email (frozen snapshot saved) |
+| DELETE | `/api/briefing/email/:uid/pin` | Unpin email |
+| POST | `/api/briefing/email/:uid/snooze` | Snooze email until `until_ts` |
+| POST | `/api/briefing/email/:uid/unsnooze` | Cancel snooze and resurface |
+
+Exact paths drift as the briefing route file grows; the source of truth is `server/routes/briefing.js` (38 handlers at last count).
 
 ### Tasks
 
@@ -682,6 +769,16 @@ Database-driven cron jobs via `node-cron`. Schedules stored as JSON array in `ea
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/live/all` | Real-time: new emails, calendar, weather, bills |
+
+### Calendar
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/calendar` | Read-only calendar slice (today/tomorrow/next-week) exposed outside the briefing envelope |
+
+### API Tokens (Bearer auth)
+
+Token management endpoints live under `/api/ea` (see Accounts & Settings). Bearer tokens authenticate by `Authorization: Bearer <token>` and bypass the `x-requested-with` CSRF check. Raw tokens are shown once on creation; only `token_hash` is persisted.
 
 ## Deployment
 
