@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 // eslint-disable-next-line no-unused-vars
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useKeyHold from "../../hooks/useKeyHold";
 import {
   Inbox, Mail, Send, Trash2, Pin, Clock, Check, CheckCheck,
   RefreshCw, Search, ChevronDown, ChevronRight, Zap, FileText, BellOff,
@@ -1150,7 +1151,11 @@ function SnoozePicker({ anchorRef, onSelect, onClose }) {
   );
 }
 
-function QuickAction({ icon: Icon, label, onClick, primary, danger, hint, accent = "#cba6da", buttonRef, title }) {
+function QuickAction({
+  icon: Icon, label, onClick, primary, danger, hint,
+  accent = "#cba6da", buttonRef, title,
+  holdProgress = 0, holdColor,
+}) {
   const [hover, setHover] = useState(false);
   return (
     <button
@@ -1161,6 +1166,7 @@ function QuickAction({ icon: Icon, label, onClick, primary, danger, hint, accent
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
+        position: "relative", overflow: "hidden",
         display: "inline-flex", alignItems: "center", gap: 6,
         padding: "7px 11px", borderRadius: 8,
         fontSize: 11, fontWeight: 600, fontFamily: "inherit",
@@ -1174,10 +1180,22 @@ function QuickAction({ icon: Icon, label, onClick, primary, danger, hint, accent
         whiteSpace: "nowrap",
       }}
     >
-      {Icon && <Icon size={11} />}
-      {label && <span>{label}</span>}
+      {holdProgress > 0 && holdColor && (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute", left: 0, top: 0, bottom: 0,
+            width: `${holdProgress * 100}%`,
+            background: `linear-gradient(90deg, ${holdColor}38, ${holdColor}1f)`,
+            pointerEvents: "none",
+            transition: "width 40ms linear",
+          }}
+        />
+      )}
+      {Icon && <Icon size={11} style={{ position: "relative" }} />}
+      {label && <span style={{ position: "relative" }}>{label}</span>}
       {hint && (
-        <span style={{ fontSize: 9, opacity: 0.6, marginLeft: 2, fontFamily: "Fira Code, monospace" }}>
+        <span style={{ position: "relative", fontSize: 9, opacity: 0.6, marginLeft: 2, fontFamily: "Fira Code, monospace" }}>
           {hint}
         </span>
       )}
@@ -1366,7 +1384,7 @@ function EmailBodyPane({ state, fallback }) {
   );
 }
 
-function Reader({ email, account, accent, pinned, onAction, onClose, showTriage, showDraft, billOpen, setBillOpen }) {
+function Reader({ email, account, accent, pinned, onAction, onClose, showTriage, showDraft, billOpen, setBillOpen, trashHoldProgress = 0, snoozeHoldProgress: _snoozeHoldProgress = 0 }) {
   const snoozeBtnRef = useRef(null);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   // Parent re-keys this component on email.id change so `drafting` resets
@@ -1510,7 +1528,16 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
             />
           );
         })()}
-        <QuickAction icon={Trash2} label="Trash" hint="E" danger onClick={() => onAction("trash")} accent={accent} />
+        <QuickAction
+          icon={Trash2}
+          label="Trash"
+          hint="E"
+          danger
+          onClick={() => onAction("trash")}
+          accent={accent}
+          holdProgress={trashHoldProgress}
+          holdColor="#f38ba8"
+        />
         <button
           type="button"
           onClick={onClose}
@@ -2038,6 +2065,13 @@ export default function InboxView({
     return flatEmails.find((e) => e.id === selectedId) || null;
   }, [selectedId, flatEmails]);
 
+  const trashHold = useKeyHold({
+    key: "e",
+    durationMs: 750,
+    enabled: !!selectedEmail,
+    onComplete: () => onAction("trash"),
+  });
+
   // Close the pay-bill drawer when moving to a different email so the user
   // always starts from a clean collapsed state — avoids the "did I already
   // open it?" confusion and the form visibly re-seeding with the new email's
@@ -2201,7 +2235,6 @@ export default function InboxView({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); moveBy(1); }
       else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); moveBy(-1); }
-      else if (e.key === "e") { e.preventDefault(); onAction("trash"); }
       else if (e.key === "s") {
         // Default snooze: tomorrow 9am local. Click the Snooze button in the
         // reader for the full picker.
@@ -2318,6 +2351,7 @@ export default function InboxView({
               showDraft={showDraft}
               billOpen={billOpen}
               setBillOpen={setBillOpen}
+              trashHoldProgress={trashHold.progress}
             />
           )}
         </div>
