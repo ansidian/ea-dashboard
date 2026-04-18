@@ -1,3 +1,135 @@
+import { deriveLane } from "../../lib/redesign-helpers";
+
+// Build a `synthAccount(source)` function bound to the briefing's emailAccounts.
+// Matches a live/resurfaced/pin-snapshot entry's account_label to an existing
+// briefing account so the sidebar groups them correctly, else synthesizes a
+// minimal account record. Built once per flatEmails recompute so the inner
+// lookup can be a Map get.
+export function makeSynthAccount(emailAccounts) {
+  const accountByName = new Map(emailAccounts.map((a) => [a.name, a]));
+  return (source) => accountByName.get(source.account_label) || {
+    name: source.account_label || "Live",
+    color: source.account_color || "#89b4fa",
+    icon: source.account_icon || "Mail",
+    important: [],
+    noise: [],
+  };
+}
+
+// Flatten briefing emailAccounts into email entries tagged with account
+// reference and lane. Important is iterated before noise so a uid appearing
+// in both wins the important lane (dedup is handled by the caller).
+export function collectBriefingEmails(emailAccounts) {
+  const out = [];
+  for (const acc of emailAccounts) {
+    const accountKey = acc.id || acc.name;
+    for (const e of acc.important || []) {
+      out.push({
+        ...e,
+        _accountKey: accountKey,
+        _account: acc,
+        _lane: deriveLane(e),
+        _untriaged: false,
+      });
+    }
+    for (const e of acc.noise || []) {
+      out.push({
+        ...e,
+        _accountKey: accountKey,
+        _account: acc,
+        _lane: "noise",
+        _untriaged: false,
+      });
+    }
+  }
+  return out;
+}
+
+// Build entries for live-polled emails (arrived after last briefing, not yet
+// triaged by Claude). Merges resurfaced metadata when a live uid is also
+// present in resurfacedMap — Gmail's `newer_than:Nh` poll re-fetches
+// recently-woken snoozes on its own; without this merge the live entry wins
+// dedup and the Snoozed badge / wake-time sort would be lost.
+export function collectLiveEmails(liveEmails, synthAccount, liveTrashedUids, liveReadUids, resurfacedMap) {
+  const out = [];
+  for (const e of liveEmails) {
+    if (liveTrashedUids.has(e.uid)) continue;
+    const acc = synthAccount(e);
+    const resurfacedHit = resurfacedMap.get(e.uid);
+    out.push({
+      ...e,
+      id: e.id || e.uid,
+      preview: e.preview || e.body_preview || "",
+      fromEmail: e.fromEmail || e.from_email,
+      read: e.read || liveReadUids.has(e.uid),
+      _accountKey: acc.id || acc.name,
+      _account: acc,
+      _lane: null,
+      _untriaged: true,
+      _live: true,
+      ...(resurfacedHit ? { _resurfaced: true, _resurfacedAt: resurfacedHit.resurfaced_at } : null),
+    });
+  }
+  return out;
+}
+
+// Inject resurfaced snapshots (snooze woke up). Gmail's live-poll filter
+// uses original internalDate so these wouldn't reach the inbox on their own.
+// Caller dedups against previously-collected sources; this drops entries with
+// no key or that the user has locally trashed.
+export function collectResurfaced(resurfacedMap, synthAccount, liveReadUids, liveTrashedUids) {
+  const out = [];
+  for (const entry of resurfacedMap.values()) {
+    const snap = entry.snapshot;
+    const key = snap?.uid || snap?.id;
+    if (!key) continue;
+    if (liveTrashedUids.has(key)) continue;
+    const acc = synthAccount(snap);
+    out.push({
+      ...snap,
+      id: snap.id || snap.uid,
+      preview: snap.preview || snap.body_preview || "",
+      fromEmail: snap.fromEmail || snap.from_email,
+      // entry.read is Gmail's current UNREAD state as of this poll (server-side
+      // probe). Union with liveReadUids so a read triggered within the session
+      // wins immediately without waiting for the next poll.
+      read: liveReadUids.has(key) || entry.read === true,
+      _accountKey: acc.id || acc.name,
+      _account: acc,
+      _lane: null,
+      _untriaged: true,
+      _live: true,
+      _resurfaced: true,
+      _resurfacedAt: entry.resurfaced_at,
+    });
+  }
+  return out;
+}
+
+// Inject pin snapshots for emails that have aged out of the briefing/live
+// window so a pinned email keeps rendering. Caller dedups on uid — if the
+// email is already in a fresher source (briefing/live), that version wins.
+export function collectPinSnapshots(pinnedSnapshotMap, synthAccount) {
+  const out = [];
+  for (const snap of pinnedSnapshotMap.values()) {
+    const key = snap.uid || snap.id;
+    if (!key) continue;
+    const acc = synthAccount(snap);
+    out.push({
+      ...snap,
+      id: snap.id || snap.uid,
+      preview: snap.preview || snap.body_preview || "",
+      fromEmail: snap.fromEmail || snap.from_email,
+      _accountKey: acc.id || acc.name,
+      _account: acc,
+      _lane: snap._lane || deriveLane(snap),
+      _untriaged: false,
+      _fromPinSnapshot: true,
+    });
+  }
+  return out;
+}
+
 export function timeAgo(iso) {
   if (!iso) return "";
   const d = new Date(iso);

@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useKeyHold from "../../hooks/useKeyHold";
-import { deriveLane } from "../../lib/redesign-helpers";
 import { useDashboard } from "../../context/DashboardContext";
 import {
   markEmailAsRead, markEmailAsUnread, trashEmail,
   pinEmail, unpinEmail, snoozeEmail, markAllEmailsAsRead,
 } from "../../api";
 import { getGmailUrl } from "../../lib/email-links";
-import { timeSince, defaultSnoozeTs } from "./helpers";
+import {
+  timeSince,
+  defaultSnoozeTs,
+  makeSynthAccount,
+  collectBriefingEmails,
+  collectLiveEmails,
+  collectResurfaced,
+  collectPinSnapshots,
+} from "./helpers";
 
 import Sidebar from "./Sidebar";
 import DigestStrip from "./DigestStrip";
@@ -106,123 +113,23 @@ export default function InboxView({
     return map;
   }, [emailAccounts]);
 
+  // Merge order matters: first push wins dedup (by uid|id). Briefing entries
+  // come first so their lane/_account take precedence over live/resurfaced
+  // re-fetches of the same uid; pin snapshots come last as a stale-fallback.
   const flatEmails = useMemo(() => {
+    const synthAccount = makeSynthAccount(emailAccounts);
     const out = [];
     const seenUids = new Set();
     const pushEmail = (entry) => {
       const key = entry.uid || entry.id;
-      // Skip if we've already pushed this id. Important is iterated before
-      // noise, so important wins (it has full email data; noise is sparse).
-      // This also defends against the briefing JSON containing the same email
-      // in both important[] and noise[] arrays.
       if (key && seenUids.has(key)) return;
       if (key) seenUids.add(key);
       out.push(entry);
     };
-    for (const acc of emailAccounts) {
-      for (const e of acc.important || []) {
-        pushEmail({
-          ...e,
-          _accountKey: acc.id || acc.name,
-          _account: acc,
-          _lane: deriveLane(e),
-          _untriaged: false,
-        });
-      }
-      for (const e of acc.noise || []) {
-        pushEmail({
-          ...e,
-          _accountKey: acc.id || acc.name,
-          _account: acc,
-          _lane: "noise",
-          _untriaged: false,
-        });
-      }
-    }
-    // Merge live emails from /api/live/all (arrived after last briefing,
-    // not yet triaged by Claude). Match to an existing briefing account by
-    // label when possible so the account sidebar groups them correctly;
-    // fall back to a synthesized account from the email's own fields.
-    const accountByName = new Map(emailAccounts.map((a) => [a.name, a]));
-    const synthAccount = (e) => accountByName.get(e.account_label) || {
-      name: e.account_label || "Live",
-      color: e.account_color || "#89b4fa",
-      icon: e.account_icon || "Mail",
-      important: [],
-      noise: [],
-    };
-    for (const e of liveEmails) {
-      if (liveTrashedUids.has(e.uid)) continue;
-      const acc = synthAccount(e);
-      // Merge the resurfaced provenance if this uid is also in resurfacedMap.
-      // Gmail's live-poll (`newer_than:Nh`) often re-fetches recently-woken
-      // emails on its own; without this, the live entry wins dedup and the
-      // Snoozed badge / wake-time sort would be lost.
-      const resurfacedHit = resurfacedMap.get(e.uid);
-      pushEmail({
-        ...e,
-        id: e.id || e.uid,
-        preview: e.preview || e.body_preview || "",
-        fromEmail: e.fromEmail || e.from_email,
-        read: e.read || liveReadUids.has(e.uid),
-        _accountKey: acc.id || acc.name,
-        _account: acc,
-        _lane: null,
-        _untriaged: true,
-        _live: true,
-        ...(resurfacedHit ? { _resurfaced: true, _resurfacedAt: resurfacedHit.resurfaced_at } : null),
-      });
-    }
-    // Merge resurfaced snapshots (snooze woke up). Gmail's live-poll filter
-    // (`newer_than:Nh`) uses the original internalDate so these wouldn't reach
-    // the inbox on their own — we inject them here with the live/untriaged
-    // treatment and tag them _resurfaced so the row can show a badge.
-    for (const entry of resurfacedMap.values()) {
-      const snap = entry.snapshot;
-      const key = snap?.uid || snap?.id;
-      if (!key || seenUids.has(key)) continue;
-      if (liveTrashedUids.has(key)) continue;
-      const acc = synthAccount(snap);
-      pushEmail({
-        ...snap,
-        id: snap.id || snap.uid,
-        preview: snap.preview || snap.body_preview || "",
-        fromEmail: snap.fromEmail || snap.from_email,
-        // `entry.read` is Gmail's current UNREAD state as of this poll
-        // (server-side probe). Union with `liveReadUids` so a read triggered
-        // within the session wins immediately without waiting for the next poll.
-        read: liveReadUids.has(key) || entry.read === true,
-        _accountKey: acc.id || acc.name,
-        _account: acc,
-        _lane: null,
-        _untriaged: true,
-        _live: true,
-        _resurfaced: true,
-        _resurfacedAt: entry.resurfaced_at,
-        // Preserve date for "resurfaced at" display via a separate field; the
-        // email's original date stays on `date` so sorting-by-age still works
-        // if the user prefers that.
-      });
-    }
-    // Merge pin snapshots for emails that have aged out of the briefing/live
-    // window. Dedup on uid — if the email is already in the list, the live
-    // version wins (fresher read state, full body).
-    for (const snap of pinnedSnapshotMap.values()) {
-      const key = snap.uid || snap.id;
-      if (!key || seenUids.has(key)) continue;
-      const acc = synthAccount(snap);
-      pushEmail({
-        ...snap,
-        id: snap.id || snap.uid,
-        preview: snap.preview || snap.body_preview || "",
-        fromEmail: snap.fromEmail || snap.from_email,
-        _accountKey: acc.id || acc.name,
-        _account: acc,
-        _lane: snap._lane || deriveLane(snap),
-        _untriaged: false,
-        _fromPinSnapshot: true,
-      });
-    }
+    for (const entry of collectBriefingEmails(emailAccounts)) pushEmail(entry);
+    for (const entry of collectLiveEmails(liveEmails, synthAccount, liveTrashedUids, liveReadUids, resurfacedMap)) pushEmail(entry);
+    for (const entry of collectResurfaced(resurfacedMap, synthAccount, liveReadUids, liveTrashedUids)) pushEmail(entry);
+    for (const entry of collectPinSnapshots(pinnedSnapshotMap, synthAccount)) pushEmail(entry);
     return out;
   }, [emailAccounts, liveEmails, liveReadUids, liveTrashedUids, pinnedSnapshotMap, resurfacedMap]);
 
