@@ -1,4 +1,6 @@
 import { createPortal } from "react-dom";
+// eslint-disable-next-line no-unused-vars
+import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Inbox, Mail, Send, Trash2, Pin, Clock, Check, CheckCheck,
@@ -668,19 +670,28 @@ function InboxList({
     return g;
   }, [emails, pinnedIds]);
 
-  const renderRows = (list) => list.map((email) => (
-    <EmailRow
-      key={email.id || email.uid}
-      email={email}
-      account={accountsById[email.accountId] || accountsById[email._accountKey]}
-      selected={selectedId === email.id}
-      onOpen={onOpen}
-      density={density}
-      showPreview={showPreview}
-      accent={accent}
-      pinned={!!(pinnedIds?.has?.(email.uid) || pinnedIds?.has?.(email.id))}
-    />
-  ));
+  const renderRows = (list) => list.map((email) => {
+    const rowKey = email.id || email.uid;
+    return (
+      <motion.div
+        key={rowKey}
+        layout
+        layoutId={rowKey}
+        transition={{ duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
+      >
+        <EmailRow
+          email={email}
+          account={accountsById[email.accountId] || accountsById[email._accountKey]}
+          selected={selectedId === email.id}
+          onOpen={onOpen}
+          density={density}
+          showPreview={showPreview}
+          accent={accent}
+          pinned={!!(pinnedIds?.has?.(email.uid) || pinnedIds?.has?.(email.id))}
+        />
+      </motion.div>
+    );
+  });
 
   return (
     <div
