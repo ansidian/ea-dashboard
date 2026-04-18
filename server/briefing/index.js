@@ -10,6 +10,7 @@ import { callClaude } from "./claude.js";
 import { getCategories, getUpcomingBills } from "./actual.js";
 import { embedAndStore, getContextForBriefing, isEmbeddingAvailable } from "../embeddings/index.js";
 import { indexEmails, isIndexEmpty } from "./email-index.js";
+import { hydrateRecurringTombstones } from "./tombstones.js";
 
 // Shared: load accounts + settings, return them
 export async function loadUserConfig(userId) {
@@ -553,8 +554,10 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       const cloned = { ...prevBriefing };
       cloned.weather = { ...weather, location: settings.weather_location || "El Monte, CA" };
       const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
+      const tombstones = await hydrateRecurringTombstones(userId);
+      const todoistWithTombstones = [...separated.todoist, ...tombstones];
       cloned.ctm = { upcoming: separated.ctm, stats: computeDeadlineStats(separated.ctm) };
-      cloned.todoist = { upcoming: separated.todoist, stats: computeDeadlineStats(separated.todoist) };
+      cloned.todoist = { upcoming: todoistWithTombstones, stats: computeDeadlineStats(todoistWithTombstones) };
       // Increment seenCount and filter dismissed/expired emails on clone
       for (const acct of cloned.emails?.accounts || []) {
         acct.important = acct.important
@@ -653,13 +656,15 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 
     // Always overwrite deadline data with server-fetched values (Claude may hallucinate these)
     const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
+    const tombstones = await hydrateRecurringTombstones(userId);
+    const todoistWithTombstones = [...separated.todoist, ...tombstones];
     briefingJson.ctm = {
       upcoming: separated.ctm,
       stats: computeDeadlineStats(separated.ctm),
     };
     briefingJson.todoist = {
-      upcoming: separated.todoist,
-      stats: computeDeadlineStats(separated.todoist),
+      upcoming: todoistWithTombstones,
+      stats: computeDeadlineStats(todoistWithTombstones),
     };
 
     // Server owns all deadline data (CTM, Todoist) — discard any Claude output
@@ -742,13 +747,15 @@ export async function quickRefresh(userId) {
   briefing.nextWeekCalendar = nextWeekCalendar;
   briefing.tomorrowCalendar = tomorrowCalendar;
   const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedTaskIds);
+  const tombstones = await hydrateRecurringTombstones(userId);
+  const todoistWithTombstones = [...separated.todoist, ...tombstones];
   briefing.ctm = {
     upcoming: separated.ctm,
     stats: computeDeadlineStats(separated.ctm),
   };
   briefing.todoist = {
-    upcoming: separated.todoist,
-    stats: computeDeadlineStats(separated.todoist),
+    upcoming: todoistWithTombstones,
+    stats: computeDeadlineStats(todoistWithTombstones),
   };
   briefing.dataUpdatedAt = new Date().toISOString();
 

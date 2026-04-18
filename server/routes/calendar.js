@@ -7,6 +7,7 @@ import {
   computeDeadlineStats,
   loadCompletedTaskIds,
 } from "../briefing/index.js";
+import { hydrateRecurringTombstones } from "../briefing/tombstones.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -28,6 +29,8 @@ router.get("/deadlines", async (req, res) => {
 
     const completedIds = await loadCompletedTaskIds(userId, todoistTasks);
     const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedIds);
+    const tombstones = await hydrateRecurringTombstones(userId);
+    const todoistWithTombstones = [...separated.todoist, ...tombstones];
 
     res.json({
       ctm: {
@@ -35,8 +38,8 @@ router.get("/deadlines", async (req, res) => {
         stats: computeDeadlineStats(separated.ctm),
       },
       todoist: {
-        upcoming: separated.todoist,
-        stats: computeDeadlineStats(separated.todoist),
+        upcoming: todoistWithTombstones,
+        stats: computeDeadlineStats(todoistWithTombstones),
       },
     });
   } catch (err) {
