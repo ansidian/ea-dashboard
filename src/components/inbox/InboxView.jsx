@@ -1,12 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Inbox, Mail, Send, Archive, Trash2, Pin, Clock, Check, CheckCheck,
+  Inbox, Mail, Send, Trash2, Pin, Clock, Check, CheckCheck,
   RefreshCw, Search, ChevronDown, ChevronRight, Zap, FileText, BellOff,
   Layers, Sparkles, X, Reply, ArrowUp, ArrowDown, Briefcase, GraduationCap,
-  DollarSign, AlertCircle,
+  DollarSign, AlertCircle, CreditCard, ExternalLink,
 } from "lucide-react";
-import { deriveLane, LANE } from "../../lib/redesign-helpers";
+import { deriveLane, LANE, briefingPhaseLabel } from "../../lib/redesign-helpers";
 import { useDashboard } from "../../context/DashboardContext";
+import BillBadge from "../bills/BillBadge";
+import {
+  getEmailBody, peekEmailBody, markEmailAsRead, trashEmail,
+  pinEmail, unpinEmail, snoozeEmail,
+} from "../../api";
+import { getGmailUrl } from "../../lib/email-links";
+import EmailIframe from "../email/EmailIframe";
 
 const ACCOUNT_ICON = { Mail, Briefcase, GraduationCap, DollarSign, Inbox };
 
@@ -39,6 +47,22 @@ function timeAgo(iso) {
   const days = hrs / 24;
   if (days < 7) return `${Math.round(days)}d`;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// Natural phrase variant — picks "5m ago" / "3h ago" / "5d ago" for recent
+// timestamps and "on Apr 7" for anything older than a week. Avoids the
+// "Triaged Apr 7 ago" grammar bug that comes from naively appending " ago".
+function timeSince(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const mins = Math.max(0, (Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${Math.round(mins)}m ago`;
+  const hrs = mins / 60;
+  if (hrs < 24) return `${Math.round(hrs)}h ago`;
+  const days = hrs / 24;
+  if (days < 7) return `${Math.round(days)}d ago`;
+  return `on ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
 function timeClock(iso) {
@@ -83,7 +107,8 @@ function Eyebrow({ children, style }) {
  * ====================================================================== */
 function AccountRow({ acc, all, accent, accountId, setAccountId, totalUnread, compact }) {
   const [hover, setHover] = useState(false);
-  const isActive = accountId === (all ? "__all" : acc.id);
+  const accKey = acc?.id || acc?.name;
+  const isActive = accountId === (all ? "__all" : accKey);
   const color = all ? accent : (acc?.color || accent);
   const count = all ? totalUnread : acc?.unread;
   const Icon = ACCOUNT_ICON[acc?.icon] || (all ? Inbox : Mail);
@@ -91,7 +116,7 @@ function AccountRow({ acc, all, accent, accountId, setAccountId, totalUnread, co
   return (
     <button
       type="button"
-      onClick={() => setAccountId(all ? "__all" : acc.id)}
+      onClick={() => setAccountId(all ? "__all" : accKey)}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -308,9 +333,11 @@ function Sidebar({
           <Eyebrow style={{ marginBottom: 8 }}>Shortcuts</Eyebrow>
           <div style={{ display: "grid", rowGap: 6, fontSize: 10, color: "rgba(205,214,244,0.5)" }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>J</Kbd><Kbd>K</Kbd><span>Navigate</span></div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>E</Kbd><span>Archive</span></div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>E</Kbd><span>Trash</span></div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>R</Kbd><span>Reply</span></div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>S</Kbd><span>Snooze</span></div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>P</Kbd><span>Pin</span></div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>⌘F</Kbd><span>Find</span></div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>⌘K</Kbd><span>Command</span></div>
           </div>
         </div>
@@ -623,7 +650,7 @@ function InboxList({
   accent, emails, accountsById,
   selectedId, onOpen, density, layout, showPreview, pinnedIds,
   searchQuery, onSearchChange, onMarkAllRead, onRefresh,
-  totalCount, unreadCount, briefingAgoLabel,
+  totalCount, unreadCount, briefingAgoLabel, briefingGeneratedAt, searchRef,
 }) {
   const [collapsed, setCollapsed] = useState({});
   const toggleLane = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
@@ -648,7 +675,7 @@ function InboxList({
       density={density}
       showPreview={showPreview}
       accent={accent}
-      pinned={pinnedIds?.has?.(email.id)}
+      pinned={!!(pinnedIds?.has?.(email.uid) || pinnedIds?.has?.(email.id))}
     />
   ));
 
@@ -677,15 +704,55 @@ function InboxList({
         >
           <Search size={12} color="rgba(205,214,244,0.4)" />
           <input
+            ref={searchRef}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                if (searchQuery) onSearchChange("");
+                e.currentTarget.blur();
+              }
+            }}
             placeholder='Search or ask Claude — "bills due this week"'
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none",
               fontSize: 12, color: "#cdd6f4", fontFamily: "inherit",
             }}
           />
-          <Kbd>⌘K</Kbd>
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => onSearchChange("")}
+              title="Clear search"
+              style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 18, height: 18, padding: 0,
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 4, cursor: "pointer",
+                color: "rgba(205,214,244,0.7)", fontFamily: "inherit",
+                transition: "all 120ms",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(243,139,168,0.14)";
+                e.currentTarget.style.borderColor = "rgba(243,139,168,0.32)";
+                e.currentTarget.style.color = "#f38ba8";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                e.currentTarget.style.color = "rgba(205,214,244,0.7)";
+              }}
+            >
+              <X size={10} />
+            </button>
+          ) : (
+            <Kbd>⌘F</Kbd>
+          )}
         </div>
         <IconBtn onClick={onMarkAllRead} title="Mark all read"><CheckCheck size={11} /></IconBtn>
         <IconBtn onClick={onRefresh} title="Refresh"><RefreshCw size={11} /></IconBtn>
@@ -768,7 +835,7 @@ function InboxList({
                         textTransform: "uppercase", color: "#89b4fa",
                       }}
                     >
-                      Since this morning's briefing
+                      {briefingPhaseLabel(briefingGeneratedAt)}
                     </span>
                     <span
                       style={{
@@ -899,12 +966,141 @@ function LaneIcon({ laneKey }) {
 /* ======================================================================
  * READER (right pane)
  * ====================================================================== */
-function QuickAction({ icon: Icon, label, onClick, primary, danger, hint, accent = "#cba6da" }) {
+// Build snooze presets from "now". Filters out any preset already in the past
+// (e.g. "Tonight 7pm" after 7pm) so the picker never offers a no-op.
+function buildSnoozePresets() {
+  const now = new Date();
+  const nowTs = now.getTime();
+  const tonight7 = new Date(now); tonight7.setHours(19, 0, 0, 0);
+  const tomorrow9 = new Date(now); tomorrow9.setDate(now.getDate() + 1); tomorrow9.setHours(9, 0, 0, 0);
+  const weekendSat = new Date(now);
+  const daysToSat = (6 - now.getDay() + 7) % 7 || 7;
+  weekendSat.setDate(now.getDate() + daysToSat); weekendSat.setHours(9, 0, 0, 0);
+  const nextMon = new Date(now);
+  const daysToMon = (8 - now.getDay()) % 7 || 7;
+  nextMon.setDate(now.getDate() + daysToMon); nextMon.setHours(9, 0, 0, 0);
+  return [
+    { label: "1 hour", at: nowTs + 3600_000 },
+    { label: "3 hours", at: nowTs + 3 * 3600_000 },
+    tonight7.getTime() > nowTs ? { label: "Tonight 7pm", at: tonight7.getTime() } : null,
+    { label: "Tomorrow 9am", at: tomorrow9.getTime() },
+    { label: "This weekend", at: weekendSat.getTime() },
+    { label: "Next Monday", at: nextMon.getTime() },
+  ].filter(Boolean);
+}
+
+// Floating picker anchored to the Snooze button. Follows the project's
+// "Floating Panel Pattern" — portal, fixed positioning, isolated stacking,
+// click-outside dismiss, and wheel-boundary capture so scroll inside the
+// picker can't leak to the page.
+function SnoozePicker({ anchorRef, onSelect, onClose }) {
+  const panelRef = useRef(null);
+  const [pos, setPos] = useState(null);
+
+  useEffect(() => {
+    function updatePos() {
+      const r = anchorRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const panelW = 220, panelH = 260;
+      setPos({
+        top: Math.min(r.bottom + 6, window.innerHeight - panelH - 10),
+        left: Math.max(10, Math.min(r.left, window.innerWidth - panelW - 10)),
+      });
+    }
+    updatePos();
+    window.addEventListener("scroll", updatePos, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", updatePos, true);
+      window.removeEventListener("resize", updatePos);
+    };
+  }, [anchorRef]);
+
+  useEffect(() => {
+    function onDown(e) {
+      if (panelRef.current?.contains(e.target)) return;
+      if (anchorRef.current?.contains(e.target)) return;
+      onClose();
+    }
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [onClose, anchorRef]);
+
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return undefined;
+    function onWheel(e) {
+      const atTop = el.scrollTop === 0;
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+      if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) e.preventDefault();
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [pos]);
+
+  if (!pos) return null;
+  const presets = buildSnoozePresets();
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      role="menu"
+      style={{
+        position: "fixed", top: pos.top, left: pos.left,
+        width: 220, maxHeight: 260, overflowY: "auto",
+        overscrollBehavior: "contain", isolation: "isolate",
+        background: "#16161e",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 8,
+        boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+        padding: 6,
+        zIndex: 9999,
+        fontFamily: "inherit",
+      }}
+    >
+      <div
+        style={{
+          padding: "6px 10px 8px",
+          fontSize: 10, color: "rgba(205,214,244,0.4)",
+          textTransform: "uppercase", letterSpacing: 0.5,
+        }}
+      >
+        Snooze until
+      </div>
+      {presets.map((p) => (
+        <button
+          key={p.label}
+          type="button"
+          onClick={() => { onSelect(p.at); onClose(); }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            width: "100%", padding: "8px 10px",
+            background: "transparent", border: "none", cursor: "pointer",
+            color: "rgba(205,214,244,0.85)", fontSize: 12, fontFamily: "inherit",
+            borderRadius: 6, textAlign: "left",
+          }}
+        >
+          <span>{p.label}</span>
+          <span style={{ fontSize: 10, color: "rgba(205,214,244,0.4)" }}>
+            {new Date(p.at).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
+          </span>
+        </button>
+      ))}
+    </div>,
+    document.body,
+  );
+}
+
+function QuickAction({ icon: Icon, label, onClick, primary, danger, hint, accent = "#cba6da", buttonRef, title }) {
   const [hover, setHover] = useState(false);
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onClick}
+      title={title}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
@@ -1048,10 +1244,131 @@ function TriagePanel({ email, accent }) {
   );
 }
 
-function Reader({ email, account, accent, pinned, onAction, onClose, showTriage, showDraft }) {
+function EmailBodyPane({ state, fallback }) {
+  const { loading, body, error } = state;
+  if (loading) {
+    return (
+      <div style={{ padding: "22px 24px", display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            width: 12, height: 12, borderRadius: "50%",
+            border: "1.5px solid rgba(255,255,255,0.06)",
+            borderTopColor: "rgba(205,214,244,0.6)",
+            animation: "spin 0.8s linear infinite",
+          }}
+        />
+        <span style={{ fontSize: 11, color: "rgba(205,214,244,0.5)" }}>Loading email…</span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div style={{ padding: "22px 24px", fontSize: 12, color: "#f38ba8" }}>{error}</div>
+    );
+  }
+  const text = body || fallback;
+  if (!text) {
+    return (
+      <div style={{ padding: "22px 24px", fontSize: 12, color: "rgba(205,214,244,0.45)" }}>
+        Email body unavailable.
+      </div>
+    );
+  }
+  const isHtml = /<[a-z!/]/i.test(text);
+  if (isHtml) {
+    // Iframe handles its own scroll; outer wrapper just clips and tints.
+    return (
+      <div
+        style={{
+          flex: 1, minHeight: 0, display: "flex", padding: "12px 16px 16px",
+        }}
+      >
+        <div
+          style={{
+            flex: 1, minHeight: 0, borderRadius: 8, overflow: "hidden",
+            background: "#fff",
+            border: "1px solid rgba(255,255,255,0.04)",
+          }}
+        >
+          <EmailIframe html={text} />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "22px 24px 28px" }}>
+      <div
+        style={{
+          fontSize: 13.5, lineHeight: 1.7, color: "rgba(205,214,244,0.88)",
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function Reader({ email, account, accent, pinned, onAction, onClose, showTriage, showDraft, billOpen, setBillOpen }) {
+  const snoozeBtnRef = useRef(null);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
   // Parent re-keys this component on email.id change so `drafting` resets
   // automatically — no setState-in-effect reconciliation needed.
   const [drafting, setDrafting] = useState(false);
+  // Lazy-mount the bill form. Once the user has opened it for this email we
+  // keep it mounted (the form state + Actual metadata is cheap to hold) so
+  // the drawer can close-animate smoothly without the content flashing out.
+  const [billMounted, setBillMounted] = useState(billOpen);
+  useEffect(() => {
+    if (billOpen) setBillMounted(true);
+  }, [billOpen]);
+  const emailKey = email?.uid || email?.id;
+  // Seed from cache (or props) so flipping back to a previously-viewed email
+  // renders the body synchronously instead of flashing the spinner. The
+  // cache lives in api.js with a 5-minute TTL.
+  const [bodyState, setBodyState] = useState(() => {
+    if (!email) return { loading: false, body: null, error: null };
+    if (email.fullBody) return { loading: false, body: email.fullBody, error: null };
+    const cached = peekEmailBody(emailKey);
+    if (cached) {
+      return { loading: false, body: cached.html_body || cached.body || "", error: null };
+    }
+    return { loading: true, body: null, error: null };
+  });
+
+  // Intentionally NOT depending on the whole `email` object — when
+  // markEmailRead flips `read` to true, the parent rebuilds the email object
+  // (deep clone), which would re-fire this effect and re-fetch the body
+  // (causing the load-twice flicker the user reported). Keying off uid/id
+  // and the synchronously-known fullBody flag is enough.
+  const hasFullBody = !!email?.fullBody;
+  useEffect(() => {
+    if (!emailKey) return undefined;
+    if (hasFullBody) {
+      setBodyState({ loading: false, body: email.fullBody, error: null });
+      return undefined;
+    }
+    const cached = peekEmailBody(emailKey);
+    if (cached) {
+      setBodyState({ loading: false, body: cached.html_body || cached.body || "", error: null });
+      return undefined;
+    }
+    let cancelled = false;
+    setBodyState({ loading: true, body: null, error: null });
+    getEmailBody(emailKey)
+      .then((res) => {
+        if (cancelled) return;
+        setBodyState({ loading: false, body: res.html_body || res.body || "", error: null });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setBodyState({ loading: false, body: null, error: err.message || "Failed to load email" });
+      });
+    return () => { cancelled = true; };
+    // email.fullBody captured via hasFullBody flag; full email object
+    // intentionally omitted to avoid re-fetch on read-state mutation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailKey, hasFullBody]);
 
   if (!email) {
     return (
@@ -1092,15 +1409,51 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
         <QuickAction icon={ArrowUp} hint="K" onClick={() => onAction("prev")} accent={accent} />
         <QuickAction icon={ArrowDown} hint="J" onClick={() => onAction("next")} accent={accent} />
         <span style={{ flex: 1 }} />
+        {(email._untriaged || email.hasBill) && (
+          <QuickAction
+            icon={CreditCard}
+            label={billOpen ? "Hide bill" : "Pay bill"}
+            primary={!billOpen}
+            onClick={() => setBillOpen((v) => !v)}
+            accent="#a6e3a1"
+          />
+        )}
         <QuickAction
           icon={Pin}
           label={pinned ? "Pinned" : "Pin"}
+          hint="P"
           onClick={() => onAction("pin")}
           accent={accent}
         />
-        <QuickAction icon={Clock} label="Snooze" hint="S" onClick={() => onAction("snooze")} accent={accent} />
-        <QuickAction icon={Archive} label="Archive" hint="E" onClick={() => onAction("archive")} accent={accent} />
-        <QuickAction icon={Trash2} label="Trash" danger onClick={() => onAction("trash")} accent={accent} />
+        <QuickAction
+          icon={Clock}
+          label="Snooze"
+          hint="S"
+          buttonRef={snoozeBtnRef}
+          onClick={() => setSnoozeOpen((v) => !v)}
+          accent={accent}
+        />
+        {snoozeOpen && (
+          <SnoozePicker
+            anchorRef={snoozeBtnRef}
+            onSelect={(untilTs) => onAction("snooze", untilTs)}
+            onClose={() => setSnoozeOpen(false)}
+          />
+        )}
+        {(() => {
+          const url = getGmailUrl(email);
+          if (!url) return null;
+          return (
+            <QuickAction
+              icon={ExternalLink}
+              label="Open in Gmail"
+              title="Open in Gmail"
+              onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+              accent={accent}
+            />
+          );
+        })()}
+        <QuickAction icon={Trash2} label="Trash" hint="E" danger onClick={() => onAction("trash")} accent={accent} />
         <button
           type="button"
           onClick={onClose}
@@ -1114,8 +1467,8 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
         </button>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-        <div style={{ padding: "22px 24px 8px" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div style={{ padding: "22px 24px 8px", flexShrink: 0 }}>
           <h1
             className="ea-display"
             style={{
@@ -1156,7 +1509,7 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
                 <span style={{ opacity: 0.4 }}>·</span>
                 <span>{timeClock(email.date)}</span>
                 <span style={{ opacity: 0.4 }}>·</span>
-                <span>{timeAgo(email.date)} ago</span>
+                <span>{timeSince(email.date)}</span>
                 {account?.name && (
                   <>
                     <span style={{ opacity: 0.4 }}>·</span>
@@ -1168,31 +1521,155 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
           </div>
         </div>
 
-        {showTriage && email.claude && <TriagePanel email={email} accent={accent} />}
+        {showTriage && email.claude && (
+          <div style={{ flexShrink: 0 }}>
+            <TriagePanel email={email} accent={accent} />
+          </div>
+        )}
 
-        <div style={{ padding: "22px 24px 28px" }}>
+        {email._untriaged && (
           <div
             style={{
-              fontSize: 13.5, lineHeight: 1.7, color: "rgba(205,214,244,0.88)",
-              whiteSpace: "pre-wrap",
+              margin: "16px 20px 0",
+              borderRadius: 12, padding: "10px 14px",
+              background: "linear-gradient(135deg, rgba(137,180,250,0.06), rgba(137,180,250,0.02))",
+              border: "1px dashed rgba(137,180,250,0.28)",
+              display: "flex", alignItems: "center", gap: 10,
+              flexShrink: 0,
             }}
           >
-            {email.body || email.preview || (
-              <span style={{ color: "rgba(205,214,244,0.45)" }}>
-                No body preview available. Open in the full reader overlay for the rendered email.
-              </span>
+            <span
+              style={{
+                position: "relative", display: "inline-flex",
+                alignItems: "center", justifyContent: "center",
+                width: 22, height: 22, borderRadius: 6,
+                background: "rgba(137,180,250,0.12)",
+              }}
+            >
+              <span
+                style={{
+                  position: "absolute", inset: 4, borderRadius: 999,
+                  background: "#89b4fa", opacity: 0.3,
+                  animation: "livepulse 2s ease-out infinite",
+                }}
+              />
+              <span style={{ width: 5, height: 5, borderRadius: 999, background: "#89b4fa", boxShadow: "0 0 6px #89b4fa", position: "relative" }} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: 2,
+                  textTransform: "uppercase", color: "#89b4fa",
+                }}
+              >
+                Live · not yet triaged
+              </div>
+              <div
+                className="ea-display"
+                style={{
+                  fontSize: 11, color: "rgba(205,214,244,0.7)", marginTop: 3,
+                  fontStyle: "italic",
+                }}
+              >
+                Arrived after this morning's briefing. Claude hasn't weighed in.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Body split: email fills remaining space on the left; when the user
+           opens Pay bill, the drawer slides in from the right via a max-width
+           transition on its outer wrapper so the email iframe visibly
+           narrows alongside the drawer's reveal (no jump). The inner aside
+           stays at a fixed 360px width; the wrapper's overflow:hidden clips
+           it while max-width animates. */}
+        <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <EmailBodyPane state={bodyState} fallback={email.body || email.preview} />
+          </div>
+          <div
+            style={{
+              maxWidth: billOpen ? 360 : 0,
+              flexShrink: 0,
+              overflow: "hidden",
+              transition: "max-width 320ms cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            {billMounted && (
+              <aside
+                style={{
+                  width: 360,
+                  height: "100%",
+                  display: "flex", flexDirection: "column",
+                  borderLeft: "1px solid rgba(203,166,218,0.12)",
+                  background: "rgba(22,22,30,0.55)",
+                  overflowY: "auto",
+                  overscrollBehavior: "contain",
+                  isolation: "isolate",
+                  opacity: billOpen ? 1 : 0,
+                  transition: "opacity 200ms ease",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "11px 16px",
+                    display: "flex", alignItems: "center", gap: 8,
+                    borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: 2,
+                      textTransform: "uppercase", color: "#cba6da",
+                    }}
+                  >
+                    Pay bill
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <button
+                    type="button"
+                    onClick={() => setBillOpen(false)}
+                    aria-label="Close bill pay"
+                    style={{
+                      background: "transparent", border: "none", cursor: "pointer",
+                      color: "rgba(205,214,244,0.5)", padding: 4, borderRadius: 4,
+                      display: "inline-flex", fontFamily: "inherit",
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+                <div style={{ padding: "14px 16px 18px" }}>
+                  <BillBadge
+                    layout="drawer"
+                    bill={email.extractedBill || {
+                      payee: "",
+                      amount: null,
+                      due_date: "",
+                      type: "expense",
+                    }}
+                    model={email.billModel}
+                    emailSubject={email.subject}
+                    emailFrom={email.from}
+                    emailBody={email.body || email.preview}
+                  />
+                </div>
+              </aside>
             )}
           </div>
         </div>
 
         {showDraft && email.claude?.draftReply && (
-          <DraftReply
-            key={email.id}
-            email={email}
-            accent={accent}
-            onSend={() => { setDrafting(false); onAction("archive"); }}
-            onDiscard={() => setDrafting(false)}
-          />
+          <div style={{ flexShrink: 0, maxHeight: "45%", overflowY: "auto" }}>
+            <DraftReply
+              key={email.id}
+              email={email}
+              accent={accent}
+              onSend={() => { setDrafting(false); onAction("trash"); }}
+              onDiscard={() => setDrafting(false)}
+            />
+          </div>
         )}
       </div>
 
@@ -1301,7 +1778,10 @@ export default function InboxView({
   emailAccounts,
   briefingSummary,
   briefingGeneratedAt,
+  liveEmails = [],
   pinnedIds,
+  pinnedSnapshots = [],
+  snoozedEntries = [],
   onOpenDashboard,
   onRefresh,
   seedSelectedId,
@@ -1309,11 +1789,38 @@ export default function InboxView({
   const [accountId, setAccountId] = useState("__all");
   const [lane, setLane] = useState("__all");
   const [search, setSearch] = useState("");
+  const searchRef = useRef(null);
   // Reconcile external seed/pinned props by re-keying the inner view below.
   const [selectedId, setSelectedId] = useState(seedSelectedId || null);
   const [pinnedSet, setPinnedSet] = useState(() => new Set(pinnedIds || []));
-  // snoozed is tracked locally-only for this session — we don't persist yet
-  const [, setSnoozedSet] = useState(() => new Set());
+  // Snapshots are keyed by uid and merged into flatEmails so pinned rows keep
+  // rendering even when they've aged out of the current briefing window.
+  const [pinnedSnapshotMap, setPinnedSnapshotMap] = useState(
+    () => new Map((pinnedSnapshots || []).map((e) => [e.uid || e.id, e])),
+  );
+  // Snoozes: uid → until_ts (epoch ms). Emails with an active snooze are
+  // hidden from visibleEmails until the timestamp passes. Snapshots aren't
+  // kept client-side: when a snooze expires the server-side /api/live/all
+  // poll naturally drops it (SELECT filters by until_ts > now), and the
+  // email re-enters the inbox via its original briefing/live source.
+  const [snoozedMap, setSnoozedMap] = useState(
+    () => new Map((snoozedEntries || []).map((s) => [s.uid, s.until_ts])),
+  );
+  // Ticks every 30s so snoozes expiring mid-session re-enter the list without
+  // requiring a full live refresh.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  // Session-local overrides for live (untriaged) emails. These aren't part
+  // of the briefing, so the context handlers can't track them — we mirror
+  // Gmail/iCloud mutations here until the next live poll refreshes the list.
+  const [liveReadUids, setLiveReadUids] = useState(() => new Set());
+  const [liveTrashedUids, setLiveTrashedUids] = useState(() => new Set());
+  // Pay-bill drawer open/close. Lifted here (instead of inside Reader) so the
+  // inbox list can shrink in coordination with the drawer sliding in.
+  const [billOpen, setBillOpen] = useState(false);
   const { markEmailRead, markAccountEmailsRead, handleDismiss } = useDashboard();
 
   // Sync external seedSelectedId and pinnedIds changes into local state.
@@ -1327,6 +1834,14 @@ export default function InboxView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPinnedSet(new Set(pinnedIds || []));
   }, [pinnedIds]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPinnedSnapshotMap(new Map((pinnedSnapshots || []).map((e) => [e.uid || e.id, e])));
+  }, [pinnedSnapshots]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSnoozedMap(new Map((snoozedEntries || []).map((s) => [s.uid, s.until_ts])));
+  }, [snoozedEntries]);
 
   const accountsById = useMemo(() => {
     const map = {};
@@ -1337,24 +1852,25 @@ export default function InboxView({
   }, [emailAccounts]);
 
   const flatEmails = useMemo(() => {
-    const briefingCutoff = briefingGeneratedAt ? new Date(briefingGeneratedAt).getTime() : null;
     const out = [];
+    const seenUids = new Set();
+    const pushEmail = (entry) => {
+      const key = entry.uid || entry.id;
+      if (key) seenUids.add(key);
+      out.push(entry);
+    };
     for (const acc of emailAccounts) {
       for (const e of acc.important || []) {
-        const lane_ = deriveLane(e);
-        const untriaged = briefingCutoff && e.date
-          ? new Date(e.date).getTime() > briefingCutoff
-          : false;
-        out.push({
+        pushEmail({
           ...e,
           _accountKey: acc.id || acc.name,
           _account: acc,
-          _lane: untriaged ? null : lane_,
-          _untriaged: untriaged,
+          _lane: deriveLane(e),
+          _untriaged: false,
         });
       }
       for (const e of acc.noise || []) {
-        out.push({
+        pushEmail({
           ...e,
           _accountKey: acc.id || acc.name,
           _account: acc,
@@ -1363,11 +1879,61 @@ export default function InboxView({
         });
       }
     }
+    // Merge live emails from /api/live/all (arrived after last briefing,
+    // not yet triaged by Claude). Match to an existing briefing account by
+    // label when possible so the account sidebar groups them correctly;
+    // fall back to a synthesized account from the email's own fields.
+    const accountByName = new Map(emailAccounts.map((a) => [a.name, a]));
+    const synthAccount = (e) => accountByName.get(e.account_label) || {
+      name: e.account_label || "Live",
+      color: e.account_color || "#89b4fa",
+      icon: e.account_icon || "Mail",
+      important: [],
+      noise: [],
+    };
+    for (const e of liveEmails) {
+      if (liveTrashedUids.has(e.uid)) continue;
+      const acc = synthAccount(e);
+      pushEmail({
+        ...e,
+        id: e.id || e.uid,
+        preview: e.preview || e.body_preview || "",
+        fromEmail: e.fromEmail || e.from_email,
+        read: e.read || liveReadUids.has(e.uid),
+        _accountKey: acc.id || acc.name,
+        _account: acc,
+        _lane: null,
+        _untriaged: true,
+        _live: true,
+      });
+    }
+    // Merge pin snapshots for emails that have aged out of the briefing/live
+    // window. Dedup on uid — if the email is already in the list, the live
+    // version wins (fresher read state, full body).
+    for (const snap of pinnedSnapshotMap.values()) {
+      const key = snap.uid || snap.id;
+      if (!key || seenUids.has(key)) continue;
+      const acc = synthAccount(snap);
+      pushEmail({
+        ...snap,
+        id: snap.id || snap.uid,
+        preview: snap.preview || snap.body_preview || "",
+        fromEmail: snap.fromEmail || snap.from_email,
+        _accountKey: acc.id || acc.name,
+        _account: acc,
+        _lane: snap._lane || deriveLane(snap),
+        _untriaged: false,
+        _fromPinSnapshot: true,
+      });
+    }
     return out;
-  }, [emailAccounts, briefingGeneratedAt]);
+  }, [emailAccounts, liveEmails, liveReadUids, liveTrashedUids, pinnedSnapshotMap]);
 
   const visibleEmails = useMemo(() => {
     return flatEmails.filter((e) => {
+      const uid = e.uid || e.id;
+      const snoozeUntil = snoozedMap.get(uid);
+      if (snoozeUntil && snoozeUntil > nowTick) return false;
       if (accountId !== "__all" && e._accountKey !== accountId) return false;
       if (lane !== "__all" && e._lane !== lane) return false;
       if (search) {
@@ -1376,13 +1942,17 @@ export default function InboxView({
       }
       return true;
     }).sort((a, b) => {
+      // Pinned emails stick to the top regardless of lane/untriaged state.
+      const aPin = pinnedSet.has(a.uid || a.id);
+      const bPin = pinnedSet.has(b.uid || b.id);
+      if (aPin !== bPin) return aPin ? -1 : 1;
       const order = { action: 0, fyi: 1, noise: 2 };
       if (a._untriaged && !b._untriaged) return -1;
       if (!a._untriaged && b._untriaged) return 1;
       if (order[a._lane] !== order[b._lane]) return (order[a._lane] ?? 3) - (order[b._lane] ?? 3);
       return new Date(b.date) - new Date(a.date);
     });
-  }, [flatEmails, accountId, lane, search]);
+  }, [flatEmails, accountId, lane, search, snoozedMap, nowTick, pinnedSet]);
 
   const laneCounts = useMemo(() => {
     const c = { action: 0, fyi: 0, noise: 0 };
@@ -1411,13 +1981,38 @@ export default function InboxView({
     return flatEmails.find((e) => e.id === selectedId) || null;
   }, [selectedId, flatEmails]);
 
+  // Close the pay-bill drawer when moving to a different email so the user
+  // always starts from a clean collapsed state — avoids the "did I already
+  // open it?" confusion and the form visibly re-seeding with the new email's
+  // extractedBill fields. React 19 flags setState-in-effect; this is a pure
+  // prop-driven reset with no derived source, so we suppress the rule to
+  // match the other seed/prop sync effects in this file.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBillOpen(false);
+  }, [selectedId]);
+
   useEffect(() => {
     if (!selectedId) return undefined;
+    const email = flatEmails.find((e) => e.id === selectedId);
+    if (!email) return undefined;
     const t = setTimeout(() => {
-      markEmailRead(selectedId);
+      if (email._live) {
+        // Live emails aren't in the briefing — mark on Gmail/iCloud directly
+        // and mirror locally so the row dims without waiting for the next poll.
+        setLiveReadUids((prev) => {
+          if (prev.has(email.uid)) return prev;
+          const next = new Set(prev);
+          next.add(email.uid);
+          return next;
+        });
+        markEmailAsRead(email.uid).catch(() => {});
+      } else {
+        markEmailRead(selectedId);
+      }
     }, 500);
     return () => clearTimeout(t);
-  }, [selectedId, markEmailRead]);
+  }, [selectedId, flatEmails, markEmailRead]);
 
   const moveBy = useCallback((dir) => {
     const idx = visibleEmails.findIndex((e) => e.id === selectedId);
@@ -1426,33 +2021,139 @@ export default function InboxView({
     if (next) setSelectedId(next.id);
   }, [visibleEmails, selectedId]);
 
-  const onAction = useCallback((kind) => {
+  // Build a durable email snapshot for server-side pin/snooze storage. Strips
+  // the transient _-prefixed fields that flatEmails attaches (account refs,
+  // lane, live/untriaged flags) and keeps only what a row needs to render.
+  const buildEmailSnapshot = useCallback((email) => {
+    if (!email) return null;
+    const acc = email._account;
+    return {
+      uid: email.uid || email.id,
+      id: email.id || email.uid,
+      subject: email.subject,
+      from: email.from,
+      fromEmail: email.fromEmail || email.from_email,
+      from_email: email.from_email || email.fromEmail,
+      preview: email.preview || email.body_preview || "",
+      body_preview: email.body_preview || email.preview || "",
+      date: email.date,
+      read: !!email.read,
+      account_id: email.account_id || acc?.account_id || acc?.id,
+      account_email: email.account_email || acc?.email,
+      account_label: email.account_label || acc?.name,
+      account_color: email.account_color || acc?.color,
+      account_icon: email.account_icon || acc?.icon,
+      urgency: email.urgency,
+      hasBill: email.hasBill,
+      extractedBill: email.extractedBill,
+      claude: email.claude,
+      aiSummary: email.aiSummary,
+    };
+  }, []);
+
+  const onAction = useCallback((kind, payload) => {
     if (!selectedEmail) return;
     const id = selectedEmail.id;
+    const uid = selectedEmail.uid || id;
     if (kind === "next") moveBy(1);
     else if (kind === "prev") moveBy(-1);
-    else if (kind === "archive" || kind === "trash") {
-      handleDismiss(id);
+    else if (kind === "trash") {
+      if (selectedEmail._live) {
+        // Live emails: hide locally + trash on the mail server.
+        setLiveTrashedUids((prev) => {
+          const n = new Set(prev);
+          n.add(uid);
+          return n;
+        });
+        trashEmail(uid).catch(() => {});
+      } else {
+        handleDismiss(id);
+        // Briefing-path emails use the in-memory dismiss flow; still trash on
+        // the mail server so the source is gone, matching the live path.
+        trashEmail(uid).catch(() => {});
+      }
+      // Trash supersedes pin/snooze — clear both locally. Server mirrors this
+      // in the trash endpoint so the next live poll agrees.
+      setPinnedSet((p) => {
+        if (!p.has(uid) && !p.has(id)) return p;
+        const n = new Set(p); n.delete(uid); n.delete(id); return n;
+      });
+      setSnoozedMap((p) => {
+        if (!p.has(uid)) return p;
+        const n = new Map(p); n.delete(uid); return n;
+      });
       moveBy(1);
     } else if (kind === "snooze") {
-      setSnoozedSet((p) => { const n = new Set(p); n.add(id); return n; });
+      const untilTs = Number(payload);
+      if (!Number.isFinite(untilTs) || untilTs <= Date.now()) return;
+      setSnoozedMap((p) => {
+        const n = new Map(p); n.set(uid, untilTs); return n;
+      });
+      const snapshot = buildEmailSnapshot(selectedEmail);
+      snoozeEmail(uid, untilTs, snapshot).catch(() => {
+        // Roll back on failure so the email reappears instead of silently
+        // vanishing from the inbox.
+        setSnoozedMap((p) => {
+          const n = new Map(p); n.delete(uid); return n;
+        });
+      });
+      moveBy(1);
     } else if (kind === "pin") {
+      const key = uid;
+      const isPinned = pinnedSet.has(key) || pinnedSet.has(id);
       setPinnedSet((p) => {
         const n = new Set(p);
-        if (n.has(id)) n.delete(id); else n.add(id);
+        if (isPinned) { n.delete(key); n.delete(id); } else { n.add(key); }
         return n;
       });
+      if (isPinned) {
+        setPinnedSnapshotMap((p) => {
+          if (!p.has(key)) return p;
+          const n = new Map(p); n.delete(key); return n;
+        });
+        unpinEmail(key).catch(() => {
+          // Restore on failure.
+          setPinnedSet((p) => { const n = new Set(p); n.add(key); return n; });
+        });
+      } else {
+        const snapshot = buildEmailSnapshot(selectedEmail);
+        setPinnedSnapshotMap((p) => {
+          const n = new Map(p); n.set(key, snapshot); return n;
+        });
+        pinEmail(key, snapshot).catch(() => {
+          setPinnedSet((p) => { const n = new Set(p); n.delete(key); return n; });
+          setPinnedSnapshotMap((p) => {
+            const n = new Map(p); n.delete(key); return n;
+          });
+        });
+      }
     }
-  }, [selectedEmail, moveBy, handleDismiss]);
+  }, [selectedEmail, moveBy, handleDismiss, pinnedSet, buildEmailSnapshot]);
 
   useEffect(() => {
     function onKey(e) {
+      // Cmd+F / Ctrl+F → focus inbox search (intercept browser find)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        e.stopPropagation();
+        searchRef.current?.focus();
+        searchRef.current?.select?.();
+        return;
+      }
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "j") { e.preventDefault(); moveBy(1); }
-      else if (e.key === "k") { e.preventDefault(); moveBy(-1); }
-      else if (e.key === "e") { e.preventDefault(); onAction("archive"); }
-      else if (e.key === "s") { e.preventDefault(); onAction("snooze"); }
+      if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); moveBy(1); }
+      else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); moveBy(-1); }
+      else if (e.key === "e") { e.preventDefault(); onAction("trash"); }
+      else if (e.key === "s") {
+        // Default snooze: tomorrow 9am local. Click the Snooze button in the
+        // reader for the full picker.
+        e.preventDefault();
+        const t = new Date();
+        t.setDate(t.getDate() + 1);
+        t.setHours(9, 0, 0, 0);
+        onAction("snooze", t.getTime());
+      }
       else if (e.key === "p") { e.preventDefault(); onAction("pin"); }
     }
     window.addEventListener("keydown", onKey);
@@ -1472,7 +2173,7 @@ export default function InboxView({
   const grouping = customize.inboxGrouping;
 
   const briefingAgoLabel = briefingGeneratedAt
-    ? `Triaged ${timeAgo(briefingGeneratedAt)} ago`
+    ? `Triaged ${timeSince(briefingGeneratedAt)}`
     : null;
 
   return (
@@ -1483,15 +2184,13 @@ export default function InboxView({
         background: "transparent", color: "#cdd6f4",
       }}
     >
-      {accountId === "__all" && lane === "__all" && (
-        <DigestStrip
-          accent={accent}
-          counts={laneCounts}
-          liveCount={liveCount}
-          summary={briefingSummary}
-          onJumpLane={(k) => setLane(k)}
-        />
-      )}
+      <DigestStrip
+        accent={accent}
+        counts={laneCounts}
+        liveCount={liveCount}
+        summary={briefingSummary}
+        onJumpLane={(k) => setLane(k)}
+      />
 
       <div style={{ flex: 1, display: "flex", minHeight: 0, padding: "14px 18px 18px", gap: 14 }}>
         <Sidebar
@@ -1516,35 +2215,52 @@ export default function InboxView({
             boxShadow: "0 20px 40px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.03)",
           }}
         >
-          <InboxList
-            accent={accent}
-            emails={visibleEmails}
-            accountsById={accountsById}
-            selectedId={selectedId}
-            onOpen={(e) => setSelectedId(e.id)}
-            density={density}
-            layout={grouping}
-            showPreview={showPreview}
-            pinnedIds={pinnedSet}
-            searchQuery={search}
-            onSearchChange={setSearch}
-            onMarkAllRead={markAccountEmailsRead}
-            onRefresh={onRefresh}
-            totalCount={visibleEmails.length}
-            unreadCount={unreadInView}
-            briefingAgoLabel={briefingAgoLabel}
-          />
+          {/* List column — shrinks to a narrower rail when the pay-bill
+             drawer is open so the Reader (+ drawer) can claim more space. */}
+          <div
+            style={{
+              flexGrow: 0, flexShrink: 0,
+              flexBasis: billOpen ? "28%" : "43%",
+              minWidth: 260,
+              display: "flex", flexDirection: "column",
+              minHeight: 0, overflow: "hidden",
+              transition: "flex-basis 320ms cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            <InboxList
+              accent={accent}
+              emails={visibleEmails}
+              accountsById={accountsById}
+              selectedId={selectedId}
+              onOpen={(e) => setSelectedId(e.id)}
+              density={density}
+              layout={grouping}
+              showPreview={showPreview}
+              pinnedIds={pinnedSet}
+              searchQuery={search}
+              onSearchChange={setSearch}
+              onMarkAllRead={markAccountEmailsRead}
+              onRefresh={onRefresh}
+              totalCount={visibleEmails.length}
+              unreadCount={unreadInView}
+              briefingAgoLabel={briefingAgoLabel}
+              briefingGeneratedAt={briefingGeneratedAt}
+              searchRef={searchRef}
+            />
+          </div>
           {layout !== "list-only" && (
             <Reader
               key={selectedEmail?.id || "empty"}
               email={selectedEmail}
               account={selectedAccount}
               accent={accent}
-              pinned={selectedEmail && pinnedSet.has(selectedEmail.id)}
+              pinned={!!selectedEmail && (pinnedSet.has(selectedEmail.uid) || pinnedSet.has(selectedEmail.id))}
               onAction={onAction}
               onClose={() => setSelectedId(null)}
               showTriage={showTriage}
               showDraft={showDraft}
+              billOpen={billOpen}
+              setBillOpen={setBillOpen}
             />
           )}
         </div>
