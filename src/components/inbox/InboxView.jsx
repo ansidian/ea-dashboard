@@ -1024,6 +1024,13 @@ function LaneIcon({ laneKey }) {
 /* ======================================================================
  * READER (right pane)
  * ====================================================================== */
+function defaultSnoozeTs() {
+  const t = new Date();
+  t.setDate(t.getDate() + 1);
+  t.setHours(9, 0, 0, 0);
+  return t.getTime();
+}
+
 // Build snooze presets from "now". Filters out any preset already in the past
 // (e.g. "Tonight 7pm" after 7pm) so the picker never offers a no-op.
 function buildSnoozePresets() {
@@ -1384,7 +1391,7 @@ function EmailBodyPane({ state, fallback }) {
   );
 }
 
-function Reader({ email, account, accent, pinned, onAction, onClose, showTriage, showDraft, billOpen, setBillOpen, trashHoldProgress = 0, snoozeHoldProgress: _snoozeHoldProgress = 0 }) {
+function Reader({ email, account, accent, pinned, onAction, onClose, showTriage, showDraft, billOpen, setBillOpen, trashHoldProgress = 0, snoozeHoldProgress = 0 }) {
   const snoozeBtnRef = useRef(null);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   // Parent re-keys this component on email.id change so `drafting` resets
@@ -1507,6 +1514,8 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
           buttonRef={snoozeBtnRef}
           onClick={() => setSnoozeOpen((v) => !v)}
           accent={accent}
+          holdProgress={snoozeHoldProgress}
+          holdColor="#f97316"
         />
         {snoozeOpen && (
           <SnoozePicker
@@ -2072,6 +2081,13 @@ export default function InboxView({
     onComplete: () => onAction("trash"),
   });
 
+  const snoozeHold = useKeyHold({
+    key: "s",
+    durationMs: 750,
+    enabled: !!selectedEmail,
+    onComplete: () => onAction("snooze", defaultSnoozeTs()),
+  });
+
   // Close the pay-bill drawer when moving to a different email so the user
   // always starts from a clean collapsed state — avoids the "did I already
   // open it?" confusion and the form visibly re-seeding with the new email's
@@ -2235,15 +2251,6 @@ export default function InboxView({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); moveBy(1); }
       else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); moveBy(-1); }
-      else if (e.key === "s") {
-        // Default snooze: tomorrow 9am local. Click the Snooze button in the
-        // reader for the full picker.
-        e.preventDefault();
-        const t = new Date();
-        t.setDate(t.getDate() + 1);
-        t.setHours(9, 0, 0, 0);
-        onAction("snooze", t.getTime());
-      }
       else if (e.key === "p") { e.preventDefault(); onAction("pin"); }
     }
     window.addEventListener("keydown", onKey);
@@ -2352,6 +2359,7 @@ export default function InboxView({
               billOpen={billOpen}
               setBillOpen={setBillOpen}
               trashHoldProgress={trashHold.progress}
+              snoozeHoldProgress={snoozeHold.progress}
             />
           )}
         </div>
