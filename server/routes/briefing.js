@@ -497,14 +497,42 @@ router.post("/complete-task/:taskId", async (req, res) => {
 
     // Sync completions to external services
     const todoistId = ctmTask?.todoist_id || (todoistTask ? taskId : null);
+    const isRecurringTodoist = !!(todoistTask && todoistTask.is_recurring && !ctmTask);
+
     if (todoistId) {
       await completeTodoistTask(userId, todoistId).catch(err =>
         console.error("[Briefing] Todoist completion failed:", err.message)
       );
-      await db.execute({
-        sql: "INSERT OR IGNORE INTO ea_completed_tasks (user_id, todoist_id) VALUES (?, ?)",
-        args: [userId, todoistId],
-      });
+      if (isRecurringTodoist) {
+        // Recurring: persist a tombstone snapshot. The task will reappear on
+        // next briefing as the advanced next occurrence; the tombstone keeps
+        // today's completed row visible until due_date < today.
+        const snapshot = {
+          id: todoistTask.id,
+          title: todoistTask.title,
+          due_date: todoistTask.due_date,
+          due_time: todoistTask.due_time ?? null,
+          class_name: todoistTask.class_name,
+          class_color: todoistTask.class_color,
+          url: todoistTask.url,
+          priority: todoistTask.priority ?? null,
+          labels: todoistTask.labels ?? [],
+          description: todoistTask.description ?? "",
+          source: "todoist",
+          is_recurring: true,
+        };
+        await db.execute({
+          sql: `INSERT OR REPLACE INTO ea_completed_tasks
+                (user_id, todoist_id, completed_at, due_date, snapshot_json)
+                VALUES (?, ?, datetime('now'), ?, ?)`,
+          args: [userId, todoistId, todoistTask.due_date, JSON.stringify(snapshot)],
+        });
+      } else {
+        await db.execute({
+          sql: "INSERT OR IGNORE INTO ea_completed_tasks (user_id, todoist_id) VALUES (?, ?)",
+          args: [userId, todoistId],
+        });
+      }
     }
     if (ctmTask) {
       await updateCTMEventStatus(ctmTask.id, "complete").catch(err =>
@@ -512,8 +540,10 @@ router.post("/complete-task/:taskId", async (req, res) => {
       );
     }
 
-    // Remove from stored briefing
-    if (briefing) {
+    // For recurring Todoist, leave the stored briefing alone — the tombstone
+    // injection path on the next fetch handles visibility. For everything
+    // else, strip the task from the stored briefing (existing behavior).
+    if (briefing && !isRecurringTodoist) {
       const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
       const today = fmt.format(new Date());
       const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
