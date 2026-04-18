@@ -152,20 +152,20 @@ export async function loadCompletedTaskIds(userId, todoistTasks) {
   return completedIds;
 }
 
-// Separate CTM and Todoist tasks, deduplicating by todoist_id (CTM wins), filtering completed
+// Separate CTM and Todoist tasks, deduplicating by todoist_id (CTM wins).
+// CTM is the source of truth for completion (the API now returns complete
+// tasks too), so completedIds only filter Todoist — Todoist's API doesn't
+// return completed tasks, but ea_completed_tasks remembers in-app completions
+// so we can drop a CTM-linked task that was completed via Todoist mirror.
 export function separateDeadlines(ctmDeadlines, todoistTasks, completedIds) {
   // CTM items with a todoist_id suppress the matching Todoist task
   const ctmTodoistIds = new Set(ctmDeadlines.filter(d => d.todoist_id).map(d => d.todoist_id));
   const uniqueTodoist = todoistTasks.filter(t => !ctmTodoistIds.has(t.id));
 
-  let ctm = ctmDeadlines;
+  const ctm = ctmDeadlines;
   let todoist = uniqueTodoist;
 
   if (completedIds?.size) {
-    ctm = ctm.filter(t => {
-      const tid = t.todoist_id;
-      return !tid || !completedIds.has(tid);
-    });
     todoist = todoist.filter(t => !completedIds.has(t.id));
   }
 
@@ -180,14 +180,16 @@ export function computeDeadlineStats(deadlines) {
   let totalPoints = 0;
   let dueToday = 0;
   let dueThisWeek = 0;
+  let incomplete = 0;
 
   for (const d of deadlines) {
+    if (d.status !== "complete") incomplete++;
     if (d.due_date === today) dueToday++;
     if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
     if (d.points_possible) totalPoints += d.points_possible;
   }
 
-  return { incomplete: deadlines.length, dueToday, dueThisWeek, totalPoints };
+  return { incomplete, dueToday, dueThisWeek, totalPoints };
 }
 
 // Fix email accounts: re-group triaged emails by their original account_label,
@@ -265,12 +267,26 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
     grouped.get(accountLabel).important.push(email);
   }
 
-  // Preserve noise emails and noise_count from Claude's response
+  // Preserve noise emails and noise_count from Claude's response.
+  // Drop any noise entry whose id is already in important — Claude occasionally
+  // returns the same email in both arrays, which renders as duplicate rows
+  // (one per lane) sharing a key, breaking selection and reconciliation.
+  const allImportantIds = new Set();
+  for (const g of grouped.values()) {
+    for (const e of g.important) {
+      const id = e.id || e.uid;
+      if (id) allImportantIds.add(id);
+    }
+  }
   for (const acct of briefingJson.emails.accounts) {
     const g = grouped.get(acct.name);
     if (!g) continue;
     if (acct.noise_count) g.noise_count = acct.noise_count;
-    if (acct.noise?.length) g.noise.push(...acct.noise);
+    for (const n of acct.noise || []) {
+      const nid = n.id || n.uid;
+      if (nid && allImportantIds.has(nid)) continue;
+      g.noise.push(n);
+    }
   }
 
   // Replace accounts with corrected grouping, fix unread counts
@@ -368,14 +384,6 @@ async function loadPinnedIds(userId) {
     args: [userId],
   });
   return new Set(result.rows.map(r => r.email_id));
-}
-
-// Clear consumed pins after a briefing processes them
-async function clearPinnedIds(userId) {
-  await db.execute({
-    sql: "DELETE FROM ea_pinned_emails WHERE user_id = ?",
-    args: [userId],
-  });
 }
 
 // Load previously triaged email IDs from the last ready briefing
@@ -679,12 +687,9 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
       args: [JSON.stringify(briefingJson), elapsed, briefingId],
     });
 
-    // Clear consumed pins — these emails have now been sent through Claude
-    if (pinnedIds.size > 0) {
-      clearPinnedIds(userId).catch(err =>
-        console.error("[EA] Failed to clear pinned emails:", err.message)
-      );
-    }
+    // Pins are now sticky (kept visible across briefings + bias the next
+    // triage). We intentionally do not clear them here — the user manages
+    // pin/unpin explicitly, and trashing an email clears its pin server-side.
 
     // Async: embed this briefing's chunks for future RAG (fire-and-forget)
     const sourceDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });

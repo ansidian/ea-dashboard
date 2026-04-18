@@ -2,7 +2,7 @@ import { Router } from "express";
 import db from "../db/connection.js";
 import { requireAuth } from "../middleware/auth.js";
 import { loadUserConfig } from "../briefing/index.js";
-import { fetchEmails as fetchGmailEmails } from "../briefing/gmail.js";
+import { fetchEmails as fetchGmailEmails, isMessageRead as isGmailMessageRead } from "../briefing/gmail.js";
 import { fetchEmails as fetchIcloudEmails } from "../briefing/icloud.js";
 import { fetchCalendar, getNextWeekRange, getTomorrowRange } from "../briefing/calendar.js";
 import { fetchWeather } from "../briefing/weather.js";
@@ -105,16 +105,51 @@ router.get("/all", async (_req, res) => {
       hoursBack = Math.max(1, Math.min(24, Math.ceil((Date.now() - lastTime) / 3600000)));
     }
 
-    // Build important senders list (auto + manual) + load pinned email IDs
-    const [autoSenders, manualSendersRaw, pinnedResult] = await Promise.all([
+    // Build important senders list (auto + manual) + load pinned + active snoozes.
+    // Snapshots travel with pins/snoozes so the inbox can render pinned emails
+    // that have aged out of the current briefing window, and expose "waking"
+    // snoozes without waiting for the next briefing.
+    const nowTs = Date.now();
+    const [autoSenders, manualSendersRaw, pinnedResult, snoozedResult, resurfacedResult] = await Promise.all([
       getAutoImportantSenders(userId),
       Promise.resolve(settings.important_senders_json),
       db.execute({
-        sql: "SELECT email_id FROM ea_pinned_emails WHERE user_id = ?",
+        sql: "SELECT email_id, email_snapshot FROM ea_pinned_emails WHERE user_id = ?",
+        args: [userId],
+      }),
+      db.execute({
+        sql: "SELECT email_id, until_ts, email_snapshot FROM ea_snoozed_emails WHERE user_id = ? AND status = 'snoozed' AND until_ts > ?",
+        args: [userId, nowTs],
+      }),
+      // Resurfaced = snooze woke up and the email is supposed to reappear as a
+      // fresh live/untriaged email. These rows live 48h (see snooze-waker TTL)
+      // before being cleaned up, which is why we pull all of them here — the
+      // cleanup cron bounds the set size, not a time filter in this query.
+      db.execute({
+        sql: "SELECT email_id, resurfaced_at, email_snapshot FROM ea_snoozed_emails WHERE user_id = ? AND status = 'resurfaced'",
         args: [userId],
       }),
     ]);
+    const parseSnapshot = (raw) => {
+      if (!raw) return null;
+      try { return JSON.parse(raw); } catch { return null; }
+    };
     const pinnedIds = pinnedResult.rows.map(r => r.email_id);
+    const pinnedSnapshots = pinnedResult.rows
+      .map(r => parseSnapshot(r.email_snapshot))
+      .filter(Boolean);
+    const snoozedEntries = snoozedResult.rows.map(r => ({
+      uid: r.email_id,
+      until_ts: Number(r.until_ts),
+      snapshot: parseSnapshot(r.email_snapshot),
+    }));
+    const resurfacedEntries = resurfacedResult.rows
+      .map(r => ({
+        uid: r.email_id,
+        resurfaced_at: Number(r.resurfaced_at),
+        snapshot: parseSnapshot(r.email_snapshot),
+      }))
+      .filter(r => r.snapshot); // drop rows missing a snapshot — nothing to render
 
     let manualSenders = [];
     try {
@@ -135,6 +170,21 @@ router.get("/all", async (_req, res) => {
     const icloudAccounts = accounts.filter(a => a.type === "icloud");
     const calendarAccounts = gmailAccounts.filter(a => a.calendar_enabled);
 
+    // Re-query Gmail for each resurfaced row's UNREAD label so rows reflect
+    // the user's current Gmail state even if they triaged the email outside
+    // the dashboard. Runs in parallel with emailPromises below — `isMessageRead`
+    // returns null on any error, which we treat as "leave snapshot `read` alone".
+    const resurfacedReadStatePromise = Promise.all(
+      resurfacedEntries.map(async (entry) => {
+        const snap = entry.snapshot;
+        const acct = gmailAccounts.find(
+          a => a.id === snap?.account_id || a.email === snap?.account_email,
+        );
+        if (!acct) return null;
+        return isGmailMessageRead(acct, entry.uid);
+      }),
+    );
+
     const emailPromises = [
       ...gmailAccounts.map(a =>
         fetchGmailEmails(a, hoursBack).catch(err => {
@@ -153,7 +203,7 @@ router.get("/all", async (_req, res) => {
       }),
     ];
 
-    const [emailArrays, calendar, nextWeekCalendar, tomorrowCalendar, weather, bills, recentTransactions, actualMeta] = await Promise.all([
+    const [emailArrays, calendar, nextWeekCalendar, tomorrowCalendar, weather, bills, recentTransactions, actualMeta, resurfacedReadStates] = await Promise.all([
       Promise.all(emailPromises).then(arrays => arrays.flat()),
       fetchCalendar(calendarAccounts).catch(err => {
         console.error("[Live] Calendar fetch failed:", err.message);
@@ -195,7 +245,17 @@ router.get("/all", async (_req, res) => {
             return { schedules: [], payeeMap: {} };
           })
         : Promise.resolve({ schedules: [], payeeMap: {} }),
+      resurfacedReadStatePromise,
     ]);
+
+    // Apply Gmail's current read state to resurfaced entries. `null` means the
+    // probe failed (auth/network/etc.) — fall through to the snapshot's own
+    // `read` field so the row still renders sensibly.
+    for (let i = 0; i < resurfacedEntries.length; i++) {
+      const probed = resurfacedReadStates[i];
+      const snapshotRead = !!resurfacedEntries[i].snapshot?.read;
+      resurfacedEntries[i].read = probed === null ? snapshotRead : probed;
+    }
 
     // Capture read status for briefing emails before filtering them out
     const briefingReadStatus = {};
@@ -292,6 +352,9 @@ router.get("/all", async (_req, res) => {
       briefingGeneratedAt,
       briefingReadStatus,
       pinnedIds,
+      pinnedSnapshots,
+      snoozedEntries,
+      resurfacedEntries,
       fetchedAt: new Date().toISOString(),
     });
   } catch (err) {

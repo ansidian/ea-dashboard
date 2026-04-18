@@ -125,6 +125,35 @@ describe("fixEmailAccounts", () => {
     expect(personal.important[0].id).toBe("e2");
   });
 
+  it("drops noise entries whose id is already in important (Claude double-classify)", () => {
+    const inputEmails = [
+      { uid: "e1", account_label: "Gmail", account_icon: "G", account_color: "#red" },
+      { uid: "e2", account_label: "Gmail", account_icon: "G", account_color: "#red" },
+    ];
+    const briefingJson = {
+      emails: {
+        accounts: [{
+          name: "Gmail",
+          important: [
+            { id: "e1", from: "Sender", subject: "Real" },
+            { id: "e2", from: "Other", subject: "Other" },
+          ],
+          noise: [
+            { id: "e1", from: "Sender", subject: "Real" }, // duplicate of important
+            { id: "n1", from: "Spam", subject: "Promo" },  // genuine noise
+          ],
+          noise_count: 2,
+        }],
+      },
+    };
+
+    fixEmailAccounts(briefingJson, inputEmails);
+
+    const gmail = briefingJson.emails.accounts.find((a) => a.name === "Gmail");
+    expect(gmail.important.map((e) => e.id).sort()).toEqual(["e1", "e2"]);
+    expect(gmail.noise.map((e) => e.id)).toEqual(["n1"]);
+  });
+
   it("preserves duplicate email IDs without deduplication", () => {
     const inputEmails = [
       { uid: "e1", account_label: "Gmail", account_icon: "G", account_color: "#red" },

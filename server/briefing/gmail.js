@@ -292,6 +292,26 @@ function extractMessageId(account, uid) {
   return uid.startsWith(prefix) ? uid.slice(prefix.length) : uid;
 }
 
+// Returns `true` if the message currently has no UNREAD label, `false` if it
+// still does, or `null` on any error (caller treats null as "don't know, leave
+// the cached read state alone"). Metadata-only fetch — no body/headers —
+// keeps this cheap enough to run per resurfaced row on every live poll.
+export async function isMessageRead(account, uid) {
+  try {
+    const messageId = extractMessageId(account, uid);
+    const token = await getValidToken(account);
+    const res = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata&fields=labelIds`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) return null;
+    const msg = await res.json();
+    return !msg.labelIds?.includes("UNREAD");
+  } catch {
+    return null;
+  }
+}
+
 export async function markAsRead(account, uid) {
   const messageId = extractMessageId(account, uid);
   const token = await getValidToken(account);
@@ -359,6 +379,91 @@ export async function unarchiveMessage(account, uid) {
     },
   );
   if (!res.ok) throw new Error(`Gmail unarchive failed: ${res.status}`);
+}
+
+// --- EA/Snoozed label (used for native-parity snooze) ---
+// Gmail API exposes SNOOZED as read-only for third parties, so we apply our
+// own label instead. Cached per-account-id so repeated snooze/wake calls don't
+// re-list or recreate the label.
+const SNOOZE_LABEL_NAME = "EA/Snoozed";
+const labelIdCache = new Map(); // accountId → { [name]: labelId }
+
+async function getOrCreateLabel(account, name) {
+  const cache = labelIdCache.get(account.id) || {};
+  if (cache[name]) return cache[name];
+
+  const token = await getValidToken(account);
+  const listRes = await fetch(
+    "https://www.googleapis.com/gmail/v1/users/me/labels",
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!listRes.ok) throw new Error(`Gmail labels.list failed: ${listRes.status}`);
+  const { labels = [] } = await listRes.json();
+  const found = labels.find((l) => l.name === name);
+  if (found) {
+    cache[name] = found.id;
+    labelIdCache.set(account.id, cache);
+    return found.id;
+  }
+
+  const createRes = await fetch(
+    "https://www.googleapis.com/gmail/v1/users/me/labels",
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        labelListVisibility: "labelShow",
+        messageListVisibility: "show",
+      }),
+    },
+  );
+  if (!createRes.ok) throw new Error(`Gmail labels.create failed: ${createRes.status}`);
+  const created = await createRes.json();
+  cache[name] = created.id;
+  labelIdCache.set(account.id, cache);
+  return created.id;
+}
+
+// Apply the EA/Snoozed label and archive (remove INBOX) in a single modify call
+// so the email disappears from Gmail's inbox but remains locatable under the
+// EA/Snoozed label.
+export async function snoozeAtGmail(account, uid) {
+  const messageId = extractMessageId(account, uid);
+  const labelId = await getOrCreateLabel(account, SNOOZE_LABEL_NAME);
+  const token = await getValidToken(account);
+  const res = await fetch(
+    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        addLabelIds: [labelId],
+        removeLabelIds: ["INBOX"],
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(`Gmail snooze-modify failed: ${res.status}`);
+}
+
+// Reverse of snoozeAtGmail: remove EA/Snoozed, add INBOX + UNREAD so the email
+// re-enters the inbox as a fresh unread (matching Gmail native-snooze parity).
+export async function wakeAtGmail(account, uid) {
+  const messageId = extractMessageId(account, uid);
+  const labelId = await getOrCreateLabel(account, SNOOZE_LABEL_NAME);
+  const token = await getValidToken(account);
+  const res = await fetch(
+    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        addLabelIds: ["INBOX", "UNREAD"],
+        removeLabelIds: [labelId],
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(`Gmail wake-modify failed: ${res.status}`);
 }
 
 export async function batchMarkAsRead(account, uids) {

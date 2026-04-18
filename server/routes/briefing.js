@@ -9,8 +9,8 @@ import {
   markAsUnread as gmailMarkAsUnread,
   trashMessage as gmailTrash,
   batchMarkAsRead as gmailBatchMarkAsRead,
-  archiveMessage as gmailArchive,
-  unarchiveMessage as gmailUnarchive,
+  snoozeAtGmail,
+  wakeAtGmail,
 } from "../briefing/gmail.js";
 import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, markAsUnread as icloudMarkAsUnread, trashMessage as icloudTrash, batchMarkAsRead as icloudBatchMarkAsRead } from "../briefing/icloud.js";
 import { decrypt } from "../briefing/encryption.js";
@@ -404,9 +404,11 @@ router.post("/email/:uid/snooze", async (req, res) => {
       args: [userId, uid, untilTs, snapshot],
     });
 
-    // Best-effort: if this is a Gmail account, archive at the source so the
-    // email disappears from Gmail's inbox too (not just the client). iCloud
-    // accounts keep client-only snooze for now.
+    // If this is a Gmail account, apply the EA/Snoozed label and remove INBOX
+    // in a single modify call. The label keeps the email visible in Gmail's
+    // sidebar so users can locate snoozed mail from any client, and the wake
+    // path (snooze-waker) can reverse this deterministically. iCloud accounts
+    // keep client-only snooze for now.
     const parsedSnap = req.body?.snapshot;
     const accountId = parsedSnap?.account_id;
     if (accountId) {
@@ -414,10 +416,10 @@ router.post("/email/:uid/snooze", async (req, res) => {
         const { accounts } = await loadUserConfig(userId);
         const acc = accounts.find((a) => a.id === accountId || a.email === parsedSnap?.account_email);
         if (acc?.type === "gmail") {
-          await gmailArchive(acc, uid);
+          await snoozeAtGmail(acc, uid);
         }
       } catch (archiveErr) {
-        console.error("[EA Snooze] Gmail archive failed, rolling back DB row:", archiveErr.message);
+        console.error("[EA Snooze] Gmail snooze-modify failed, rolling back DB row:", archiveErr.message);
         try {
           await db.execute({
             sql: "DELETE FROM ea_snoozed_emails WHERE user_id = ? AND email_id = ?",
@@ -426,7 +428,7 @@ router.post("/email/:uid/snooze", async (req, res) => {
         } catch (rollbackErr) {
           console.error("[EA Snooze] Rollback DELETE failed:", rollbackErr.message);
         }
-        return res.status(502).json({ message: "Failed to archive on Gmail" });
+        return res.status(502).json({ message: "Failed to snooze on Gmail" });
       }
     }
 
@@ -460,11 +462,11 @@ router.delete("/email/:uid/snooze", async (req, res) => {
       try {
         const { accounts } = await loadUserConfig(userId);
         const acc = accounts.find((a) => a.id === snap.account_id || a.email === snap.account_email);
-        if (acc?.type === "gmail") await gmailUnarchive(acc, uid);
+        if (acc?.type === "gmail") await wakeAtGmail(acc, uid);
       } catch (unarchiveErr) {
-        console.error("[EA Snooze] Gmail unarchive failed:", unarchiveErr.message);
-        // Don't fail the request — the DB state is correct; user can manually
-        // locate the email in Gmail's "All Mail".
+        console.error("[EA Snooze] Gmail wake-modify failed:", unarchiveErr.message);
+        // Don't fail the request — the DB state is correct; user can find the
+        // email under the EA/Snoozed label in Gmail and remove it manually.
       }
     }
 

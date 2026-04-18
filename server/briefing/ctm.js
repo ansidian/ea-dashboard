@@ -74,8 +74,11 @@ export async function fetchCTMDeadlines() {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
   const weekOut = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
 
+  // Include "complete" so tasks completed externally (in CTM directly) stay
+  // visible until their due date passes. The due_after: today filter naturally
+  // drops them once the day rolls over.
   const params = new URLSearchParams({
-    status: "incomplete,in_progress",
+    status: "incomplete,in_progress,complete",
     due_after: today,
     due_before: weekOut,
     exclude_source: "todoist",
