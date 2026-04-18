@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, X, CornerDownLeft } from "lucide-react";
+import { ChevronDown, X, CornerDownLeft, Trash2 } from "lucide-react";
 import {
   getTodoistProjects,
   getTodoistLabels,
   createTodoistTask,
   updateTodoistTask,
+  deleteTodoistTask,
 } from "../../api";
 
 // --- Token parsing (regex + guardrails) ---
@@ -564,7 +565,7 @@ function TokenAutocomplete({ cursorPos, input, items, type, onSelect }) {
 
 // --- Main panel ---
 
-export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingTask, onTaskUpdated }) {
+export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingTask, onTaskUpdated, onTaskDeleted }) {
   const isEdit = !!editingTask;
   const [input, setInput] = useState(() => (editingTask?.title || ""));
   const [description, setDescription] = useState(() => (editingTask?.description || ""));
@@ -616,6 +617,18 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
   }, [editingTask?.due_date, editingTask?.due_time]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  // Hold-to-delete: left-button pointer-hold for DELETE_HOLD_MS fires the
+  // delete. Mirrors the Reader's trash-hold pattern (progress fill sweeps
+  // left-to-right, danger tint) but owns its own timer since QuickAction's
+  // keyboard-driven `holdProgress` prop doesn't fit a pointer gesture.
+  const [deleteProgress, setDeleteProgress] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+  const deleteStartRef = useRef(null);
+  const deleteTimerRef = useRef(null);
+  const deleteIntervalRef = useRef(null);
+  const DELETE_HOLD_MS = 500;
+  const [saveHover, setSaveHover] = useState(false);
+  const [deleteHover, setDeleteHover] = useState(false);
   const [pos, setPos] = useState(null);
   const [autocompleteType, setAutocompleteType] = useState(null);
   const [cursorPos, setCursorPos] = useState(0);
@@ -640,6 +653,42 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
   }, []);
+
+  const cancelDelete = useCallback(() => {
+    if (deleteTimerRef.current) { clearTimeout(deleteTimerRef.current); deleteTimerRef.current = null; }
+    if (deleteIntervalRef.current) { clearInterval(deleteIntervalRef.current); deleteIntervalRef.current = null; }
+    deleteStartRef.current = null;
+    setDeleteProgress(0);
+  }, []);
+
+  useEffect(() => () => cancelDelete(), [cancelDelete]);
+
+  const startDelete = useCallback(() => {
+    if (!isEdit || deleting || deleteTimerRef.current || !editingTask?.id) return;
+    setError(null);
+    deleteStartRef.current = Date.now();
+    setDeleteProgress(0);
+    deleteIntervalRef.current = setInterval(() => {
+      const p = Math.min((Date.now() - deleteStartRef.current) / DELETE_HOLD_MS, 1);
+      setDeleteProgress(p);
+    }, 16);
+    deleteTimerRef.current = setTimeout(async () => {
+      clearInterval(deleteIntervalRef.current);
+      deleteIntervalRef.current = null;
+      deleteTimerRef.current = null;
+      setDeleteProgress(0);
+      setDeleting(true);
+      try {
+        await deleteTodoistTask(editingTask.id);
+        onTaskDeleted?.(editingTask.id);
+        requestClose();
+      } catch (err) {
+        setError(err.message || "Failed to delete task");
+        setDeleting(false);
+      }
+    }, DELETE_HOLD_MS);
+  }, [isEdit, deleting, editingTask, onTaskDeleted, requestClose]);
+
   const inputRef = useRef(null);
 
   // Fetch projects and labels on mount
@@ -1164,14 +1213,12 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
           <input
             type="text"
             value={manualDue}
-            onChange={(e) => {
-              setManualDue(e.target.value);
-              setOverrides((prev) => ({ ...prev, due: true }));
-            }}
+            readOnly
+            tabIndex={-1}
             placeholder={
               parsed.dateFormatted || seededDueDisplay
                 ? ""
-                : "e.g. tomorrow, next monday at 8am"
+                : "Set via task input — e.g. tomorrow, next monday at 8am"
             }
             style={{
               width: "100%",
@@ -1190,6 +1237,8 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
               outline: "none",
               boxSizing: "border-box",
               transition: "all 0.2s",
+              cursor: "default",
+              pointerEvents: "none",
             }}
           />
           {!manualDue && (parsed.dateFormatted || seededDueDisplay) && (
@@ -1348,29 +1397,85 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
         <div style={{ color: "rgba(205,214,244,0.4)", fontSize: 10.5, display: "flex", alignItems: "center", gap: 4 }}>
           <CornerDownLeft size={10} /> Enter to {isEdit ? "save" : "add"} · Esc to cancel
         </div>
-        <button
-          onClick={handleSubmit}
-          disabled={!canSubmit || submitting}
-          style={{
-            background:
-              canSubmit && !submitting ? "rgba(166,227,161,0.14)" : "rgba(255,255,255,0.03)",
-            borderRadius: 8,
-            padding: "7px 14px",
-            color: canSubmit && !submitting ? "#a6e3a1" : "rgba(205,214,244,0.35)",
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: 0.2,
-            cursor: canSubmit && !submitting ? "pointer" : "default",
-            border: `1px solid ${canSubmit && !submitting ? "rgba(166,227,161,0.32)" : "rgba(255,255,255,0.06)"}`,
-            transition: "all 0.2s",
-            fontFamily: "inherit",
-            display: "inline-flex", alignItems: "center", gap: 5,
-          }}
-        >
-          {submitting
-            ? isEdit ? "Saving…" : "Adding…"
-            : isEdit ? "Save" : "Add task"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {isEdit && (
+            <button
+              type="button"
+              onPointerDown={startDelete}
+              onPointerUp={(e) => { cancelDelete(); setDeleteHover(e.currentTarget.matches(":hover")); }}
+              onPointerEnter={() => setDeleteHover(true)}
+              onPointerLeave={() => { cancelDelete(); setDeleteHover(false); }}
+              onPointerCancel={() => { cancelDelete(); setDeleteHover(false); }}
+              disabled={deleting || submitting}
+              title="Hold to delete"
+              style={{
+                position: "relative", overflow: "hidden",
+                display: "inline-flex", alignItems: "center", gap: 5,
+                padding: "7px 14px", borderRadius: 8,
+                fontSize: 11, fontWeight: 600, fontFamily: "inherit", letterSpacing: 0.2,
+                cursor: deleting ? "wait" : "pointer",
+                background: deleteHover && !deleting ? "rgba(243,139,168,0.14)" : "rgba(243,139,168,0.08)",
+                border: `1px solid ${deleteHover && !deleting ? "rgba(243,139,168,0.48)" : "rgba(243,139,168,0.32)"}`,
+                color: "#f38ba8",
+                userSelect: "none",
+                boxShadow: deleteHover && !deleting ? "0 2px 8px rgba(243,139,168,0.22)" : "none",
+                transform: deleteHover && !deleting ? "translateY(-1px)" : "translateY(0)",
+                transition: "background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s",
+              }}
+            >
+              {deleteProgress > 0 && (
+                <span
+                  aria-hidden
+                  style={{
+                    position: "absolute", left: 0, top: 0, bottom: 0,
+                    width: `${deleteProgress * 100}%`,
+                    background: "linear-gradient(90deg, rgba(243,139,168,0.38), rgba(243,139,168,0.15))",
+                    pointerEvents: "none",
+                    transition: "width 40ms linear",
+                  }}
+                />
+              )}
+              <Trash2 size={11} style={{ position: "relative" }} />
+              <span style={{ position: "relative" }}>
+                {deleting ? "Deleting…" : "Delete"}
+              </span>
+            </button>
+          )}
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit || submitting || deleting}
+            onMouseEnter={() => setSaveHover(true)}
+            onMouseLeave={() => setSaveHover(false)}
+            style={{
+              background: canSubmit && !submitting && !deleting
+                ? (saveHover ? "rgba(166,227,161,0.22)" : "rgba(166,227,161,0.14)")
+                : "rgba(255,255,255,0.03)",
+              borderRadius: 8,
+              padding: "7px 14px",
+              color: canSubmit && !submitting && !deleting ? "#a6e3a1" : "rgba(205,214,244,0.35)",
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: 0.2,
+              cursor: canSubmit && !submitting && !deleting ? "pointer" : "default",
+              border: `1px solid ${canSubmit && !submitting && !deleting
+                ? (saveHover ? "rgba(166,227,161,0.5)" : "rgba(166,227,161,0.32)")
+                : "rgba(255,255,255,0.06)"}`,
+              boxShadow: canSubmit && !submitting && !deleting && saveHover
+                ? "0 2px 8px rgba(166,227,161,0.22)"
+                : "none",
+              transform: canSubmit && !submitting && !deleting && saveHover
+                ? "translateY(-1px)"
+                : "translateY(0)",
+              transition: "all 0.2s",
+              fontFamily: "inherit",
+              display: "inline-flex", alignItems: "center", gap: 5,
+            }}
+          >
+            {submitting
+              ? isEdit ? "Saving…" : "Adding…"
+              : isEdit ? "Save" : "Add task"}
+          </button>
+        </div>
       </div>
       </div>
     </div>,

@@ -171,10 +171,34 @@ export async function fetchTodoistTasksAll(userId) {
     .map(t => mapTodoistTask(t, projects));
 }
 
+// Lean full-horizon id probe used by tombstone orphan detection. Returns a
+// Set of id strings for every non-deleted, non-checked task within the next
+// year — wide enough to cover weekly/monthly recurrences whose advanced
+// next occurrence sits past the briefing's +8 day window. Returns null when
+// Todoist isn't configured; callers must treat null as "can't verify" and
+// skip pruning rather than wiping every tombstone.
+export async function fetchTodoistTaskIdSet(userId) {
+  const token = await getToken(userId);
+  if (!token) return null;
+  const tasks = await fetchTodoistFiltered(token, "due before: +365 days");
+  return new Set(
+    tasks
+      .filter(t => !t.is_deleted && !t.checked)
+      .map(t => String(t.id)),
+  );
+}
+
 export async function completeTodoistTask(userId, taskId) {
   const token = await getToken(userId);
   if (!token) throw new Error("Todoist not configured");
   await todoistFetch(token, `/tasks/${taskId}/close`, { method: "POST" });
+}
+
+export async function deleteTodoistTask(userId, taskId) {
+  const token = await getToken(userId);
+  if (!token) throw new Error("Todoist not configured");
+  if (!taskId) throw new Error("Task id is required");
+  await todoistFetch(token, `/tasks/${taskId}`, { method: "DELETE" });
 }
 
 export async function fetchTodoistProjects(userId) {
@@ -259,6 +283,9 @@ export async function updateTodoistTask(userId, taskId, { content, description, 
 
   const projects = await fetchProjects(token);
   const proj = projects.get(task.project_id);
+  // Intentionally omit `status` — the client merges this over the existing
+  // row, and the UI's completion state (including tombstone/_completing flags)
+  // must survive an edit.
   return {
     id: task.id,
     title: task.content,
@@ -267,7 +294,6 @@ export async function updateTodoistTask(userId, taskId, { content, description, 
     class_name: proj?.name || "Todoist",
     class_color: proj ? mapColor(proj.color) : "#cba6da",
     points_possible: null,
-    status: "incomplete",
     source: "todoist",
     description: task.description || "",
     url: todoistTaskUrl(task.content, task.id),

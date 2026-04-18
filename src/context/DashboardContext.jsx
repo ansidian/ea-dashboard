@@ -92,8 +92,6 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
   }, [setBriefing, setCalendarDeadlines]);
 
   const handleCompleteTask = useCallback(async (taskId) => {
-    completeTask(taskId).catch(() => {});
-
     const flagCompleting = (root) => {
       if (!root) return root;
       const updated = JSON.parse(JSON.stringify(root));
@@ -107,10 +105,33 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
     };
     setBriefing(prev => flagCompleting(prev));
     setCalendarDeadlines?.(prev => (prev ? flagCompleting(prev) : prev));
-
-    // Remove after animation
-    setTimeout(() => removeCompletedTask(taskId), 600);
     if (expandedTask === taskId) setExpandedTask(null);
+
+    // Await the server so we can revert the optimistic flag on failure.
+    // Swallowing this caused the "marked complete, refresh flips back" bug
+    // upstream — if Todoist close fails, the row must return to its pre-click
+    // state instead of lingering as half-complete until the next refresh.
+    try {
+      await completeTask(taskId);
+    } catch (err) {
+      console.error("[Briefing] Complete task failed:", err.message);
+      const clearCompleting = (root) => {
+        if (!root) return root;
+        const updated = JSON.parse(JSON.stringify(root));
+        for (const section of ["ctm", "todoist"]) {
+          const task = updated[section]?.upcoming?.find(
+            t => !t._tombstone && (String(t.id) === String(taskId) || t.todoist_id === String(taskId))
+          );
+          if (task) delete task._completing;
+        }
+        return updated;
+      };
+      setBriefing(prev => clearCompleting(prev));
+      setCalendarDeadlines?.(prev => (prev ? clearCompleting(prev) : prev));
+      return;
+    }
+
+    setTimeout(() => removeCompletedTask(taskId), 600);
   }, [expandedTask, setBriefing, setCalendarDeadlines, removeCompletedTask]);
 
   const handleDismissGhost = useCallback((todoistId) => {
@@ -147,10 +168,19 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
       if (!root) return root;
       const updated = JSON.parse(JSON.stringify(root));
       if (!updated.todoist?.upcoming) return updated;
+      // Only match live rows — tombstones share the id with their live
+      // next-occurrence and must be left alone by edits to the live row.
       const idx = updated.todoist.upcoming.findIndex(
-        t => String(t.id) === String(updatedTask.id),
+        t => !t._tombstone && String(t.id) === String(updatedTask.id),
       );
-      if (idx >= 0) updated.todoist.upcoming[idx] = updatedTask;
+      // Merge (don't replace) so local-only fields — status, _completing —
+      // survive the edit. The server response intentionally omits `status`.
+      if (idx >= 0) {
+        updated.todoist.upcoming[idx] = {
+          ...updated.todoist.upcoming[idx],
+          ...updatedTask,
+        };
+      }
 
       const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
       const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
@@ -165,6 +195,35 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
     setBriefing(prev => applyUpdate(prev));
     setCalendarDeadlines?.(prev => (prev ? applyUpdate(prev) : prev));
   }, [setBriefing, setCalendarDeadlines]);
+
+  // State-only: the panel owns the network call (matching create/update) so
+  // it can surface "Failed to delete" inline without a second roundtrip.
+  const handleDeleteTask = useCallback((taskId) => {
+    const applyDelete = (root) => {
+      if (!root?.todoist?.upcoming) return root;
+      const updated = JSON.parse(JSON.stringify(root));
+      updated.todoist.upcoming = updated.todoist.upcoming.filter(
+        (t) => t._tombstone || String(t.id) !== String(taskId),
+      );
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+      const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+      let dueToday = 0, dueThisWeek = 0;
+      for (const d of updated.todoist.upcoming) {
+        if (d.due_date === today) dueToday++;
+        if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+      }
+      updated.todoist.stats = {
+        incomplete: updated.todoist.upcoming.filter((t) => !t._tombstone && t.status !== "complete").length,
+        dueToday,
+        dueThisWeek,
+        totalPoints: 0,
+      };
+      return updated;
+    };
+    setBriefing((prev) => applyDelete(prev));
+    setCalendarDeadlines?.((prev) => (prev ? applyDelete(prev) : prev));
+    if (String(expandedTask) === String(taskId)) setExpandedTask(null);
+  }, [expandedTask, setBriefing, setCalendarDeadlines]);
 
   const handleAddTask = useCallback((task) => {
     setBriefing(prev => {
@@ -262,6 +321,7 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
       handleDismissGhost,
       handleAddTask,
       handleUpdateTask,
+      handleDeleteTask,
       handleUpdateTaskStatus,
       markAccountEmailsRead,
       markEmailRead,

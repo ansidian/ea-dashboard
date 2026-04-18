@@ -62,7 +62,7 @@ function buildTaskMenu(task, { onEdit, onComplete, onStatusChange, onDismissGhos
 }
 
 export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, className }) {
-  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus, handleAddTask, handleUpdateTask, handleDismissGhost } = useDashboard();
+  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus, handleAddTask, handleUpdateTask, handleDeleteTask, handleDismissGhost } = useDashboard();
   const [addPanelOpen, setAddPanelOpen] = useState(false);
   const [addBtnHover, setAddBtnHover] = useState(false);
   const addBtnRef = useRef(null);
@@ -213,6 +213,10 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
           editingTask={editingTask.task}
           onClose={() => setEditingTask(null)}
           onTaskUpdated={(task) => handleUpdateTask(task)}
+          onTaskDeleted={(taskId) => {
+            handleDeleteTask(taskId);
+            setEditingTask(null);
+          }}
         />
       )}
       {menuState && (

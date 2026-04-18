@@ -16,7 +16,7 @@ import { fetchEmailBody as fetchIcloudBody, markAsRead as icloudMarkAsRead, mark
 import { decrypt } from "../briefing/encryption.js";
 import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual, createQuickTxn } from "../briefing/actual.js";
 import { trimBillBody } from "../briefing/bill-extract.js";
-import { completeTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask, updateTodoistTask } from "../briefing/todoist.js";
+import { completeTodoistTask, deleteTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask, updateTodoistTask } from "../briefing/todoist.js";
 import { buildSnapshot } from "../briefing/tombstones.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
@@ -492,22 +492,31 @@ router.post("/complete-task/:taskId", async (req, res) => {
     });
     const briefing = latest.rows.length ? JSON.parse(latest.rows[0].briefing_json) : null;
 
-    // Find the task in CTM or Todoist lists
+    // Find the task in CTM or Todoist lists. Skip tombstone rows — they
+    // share the id with their live next-occurrence for recurring tasks,
+    // and letting find() return one here would close the ghost row.
     const ctmTask = briefing?.ctm?.upcoming?.find(t => String(t.id) === taskId || t.todoist_id === taskId);
-    const todoistTask = briefing?.todoist?.upcoming?.find(t => t.id === taskId);
+    const todoistTask = briefing?.todoist?.upcoming?.find(t => !t._tombstone && t.id === taskId);
 
-    // Sync completions to external services
     const todoistId = ctmTask?.todoist_id || (todoistTask ? taskId : null);
     const isRecurringTodoist = !!(todoistTask && todoistTask.is_recurring && !ctmTask);
+    const isTodoistOnly = !!todoistTask && !ctmTask;
 
     if (todoistId) {
-      await completeTodoistTask(userId, todoistId).catch(err =>
-        console.error("[Briefing] Todoist completion failed:", err.message)
-      );
+      // Close must succeed before we persist local completion state —
+      // swallowing failures silently caused the "marked complete, then
+      // refresh flips back to incomplete" bug.
+      try {
+        await completeTodoistTask(userId, todoistId);
+      } catch (err) {
+        console.error("[Briefing] Todoist completion failed:", err.message);
+        return res.status(502).json({
+          message: `Todoist close failed: ${err.message}`,
+        });
+      }
       if (isRecurringTodoist) {
-        // Recurring: persist a tombstone snapshot. The task will reappear on
-        // next briefing as the advanced next occurrence; the tombstone keeps
-        // today's completed row visible until due_date < today.
+        // Tombstone snapshot keeps the previous occurrence visible after
+        // Todoist advances the task to the next due_date.
         await db.execute({
           sql: `INSERT OR REPLACE INTO ea_completed_tasks
                 (user_id, todoist_id, completed_at, due_date, snapshot_json)
@@ -515,6 +524,8 @@ router.post("/complete-task/:taskId", async (req, res) => {
           args: [userId, todoistId, todoistTask.due_date, JSON.stringify(buildSnapshot(todoistTask))],
         });
       } else {
+        // Legacy dedupe row (due_date NULL). Used by loadCompletedTaskIds
+        // reconciliation for CTM-linked completions during propagation.
         await db.execute({
           sql: "INSERT OR IGNORE INTO ea_completed_tasks (user_id, todoist_id) VALUES (?, ?)",
           args: [userId, todoistId],
@@ -527,30 +538,52 @@ router.post("/complete-task/:taskId", async (req, res) => {
       );
     }
 
-    // For recurring Todoist, leave the stored briefing alone — the tombstone
-    // injection path on the next fetch handles visibility. For everything
-    // else, strip the task from the stored briefing (existing behavior).
+    // Stored-briefing update policy:
+    //   - Recurring Todoist: leave alone — tombstone injection on next
+    //     refresh handles visibility.
+    //   - Non-recurring Todoist-only: flip status=complete in place. The
+    //     carry-forward step in generateBriefing/quickRefresh preserves this
+    //     row across refreshes until its due_date slips past the gate.
+    //   - CTM / CTM-linked: strip (no visibility-preservation path).
     if (briefing && !isRecurringTodoist) {
       const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
       const today = fmt.format(new Date());
       const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
       let changed = false;
 
-      for (const section of ["ctm", "todoist"]) {
-        if (!briefing[section]?.upcoming) continue;
-        const before = briefing[section].upcoming.length;
-        briefing[section].upcoming = briefing[section].upcoming.filter(
-          t => String(t.id) !== taskId && t.todoist_id !== taskId
+      if (isTodoistOnly) {
+        const task = briefing.todoist?.upcoming?.find(
+          t => !t._tombstone && t.id === taskId,
         );
-        if (briefing[section].upcoming.length !== before) {
-          let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
-          for (const d of briefing[section].upcoming) {
+        if (task && task.status !== "complete") {
+          task.status = "complete";
+          let totalPoints = 0, dueToday = 0, dueThisWeek = 0, incomplete = 0;
+          for (const d of briefing.todoist.upcoming) {
+            if (d.status !== "complete") incomplete++;
             if (d.due_date === today) dueToday++;
             if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
             if (d.points_possible) totalPoints += d.points_possible;
           }
-          briefing[section].stats = { incomplete: briefing[section].upcoming.length, dueToday, dueThisWeek, totalPoints };
+          briefing.todoist.stats = { incomplete, dueToday, dueThisWeek, totalPoints };
           changed = true;
+        }
+      } else {
+        for (const section of ["ctm", "todoist"]) {
+          if (!briefing[section]?.upcoming) continue;
+          const before = briefing[section].upcoming.length;
+          briefing[section].upcoming = briefing[section].upcoming.filter(
+            t => String(t.id) !== taskId && t.todoist_id !== taskId
+          );
+          if (briefing[section].upcoming.length !== before) {
+            let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
+            for (const d of briefing[section].upcoming) {
+              if (d.due_date === today) dueToday++;
+              if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+              if (d.points_possible) totalPoints += d.points_possible;
+            }
+            briefing[section].stats = { incomplete: briefing[section].upcoming.length, dueToday, dueThisWeek, totalPoints };
+            changed = true;
+          }
         }
       }
 
@@ -1211,10 +1244,52 @@ router.get("/todoist/labels", async (req, res) => {
   }
 });
 
+// Mirror a freshly-created or just-edited Todoist task into the latest stored
+// briefing. Without this, /complete-task can't find the task in briefing JSON
+// (since handleAddTask only updates client state), so its todoist close call
+// is skipped and the first completion silently no-ops on Todoist's side.
+async function mirrorTodoistTaskIntoStoredBriefing(userId, task, { replace }) {
+  const latest = await db.execute({
+    sql: `SELECT id, briefing_json FROM ea_briefings
+          WHERE user_id = ? AND status = 'ready'
+          ORDER BY generated_at DESC LIMIT 1`,
+    args: [userId],
+  });
+  if (!latest.rows.length) return;
+
+  const briefing = JSON.parse(latest.rows[0].briefing_json);
+  if (!briefing.todoist) briefing.todoist = { upcoming: [], stats: {} };
+  if (!Array.isArray(briefing.todoist.upcoming)) briefing.todoist.upcoming = [];
+
+  // Seed downstream fields the rest of the pipeline expects. The task returned
+  // from createTodoistTask omits `status` after the bug-1 fix; default it here
+  // for freshly-inserted rows. Skip tombstone rows when matching by id.
+  const newTask = { status: "incomplete", ...task };
+  const idx = briefing.todoist.upcoming.findIndex(
+    (t) => !t._tombstone && String(t.id) === String(task.id),
+  );
+
+  if (idx >= 0) {
+    if (!replace) return; // create path dedupes — don't double-insert
+    briefing.todoist.upcoming[idx] = {
+      ...briefing.todoist.upcoming[idx],
+      ...task,
+    };
+  } else {
+    briefing.todoist.upcoming.push(newTask);
+  }
+
+  await db.execute({
+    sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+    args: [JSON.stringify(briefing), latest.rows[0].id],
+  });
+}
+
 router.post("/todoist/tasks", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const task = await createTodoistTask(userId, req.body);
+    await mirrorTodoistTaskIntoStoredBriefing(userId, task, { replace: false });
     res.json(task);
   } catch (err) {
     console.error("Error creating Todoist task:", err.message);
@@ -1226,11 +1301,52 @@ router.post("/todoist/tasks/:id", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const task = await updateTodoistTask(userId, req.params.id, req.body);
+    await mirrorTodoistTaskIntoStoredBriefing(userId, task, { replace: true });
     res.json(task);
   } catch (err) {
     console.error("Error updating Todoist task:", err.message);
     res.status(400).json({ message: err.message });
   }
 });
+
+router.delete("/todoist/tasks/:id", async (req, res) => {
+  const userId = process.env.EA_USER_ID;
+  try {
+    await deleteTodoistTask(userId, req.params.id);
+    await removeTodoistTaskFromStoredBriefing(userId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Error deleting Todoist task:", err.message);
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// Inverse of mirrorTodoistTaskIntoStoredBriefing — prunes the deleted task
+// from the persisted briefing so a reload doesn't resurrect it. Tombstones
+// share their id with the live next-occurrence of a recurring task; the
+// `!t._tombstone` guard keeps those rows intact when the live row is deleted.
+async function removeTodoistTaskFromStoredBriefing(userId, taskId) {
+  const latest = await db.execute({
+    sql: `SELECT id, briefing_json FROM ea_briefings
+          WHERE user_id = ? AND status = 'ready'
+          ORDER BY generated_at DESC LIMIT 1`,
+    args: [userId],
+  });
+  if (!latest.rows.length) return;
+
+  const briefing = JSON.parse(latest.rows[0].briefing_json);
+  if (!briefing?.todoist?.upcoming?.length) return;
+
+  const before = briefing.todoist.upcoming.length;
+  briefing.todoist.upcoming = briefing.todoist.upcoming.filter(
+    (t) => t._tombstone || String(t.id) !== String(taskId),
+  );
+  if (briefing.todoist.upcoming.length === before) return;
+
+  await db.execute({
+    sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
+    args: [JSON.stringify(briefing), latest.rows[0].id],
+  });
+}
 
 export default router;

@@ -20,7 +20,7 @@ const mockDb = {
       return { rows: [] };
     }
     if (/UPDATE ea_briefings SET briefing_json/.test(sql)) {
-      dbState.briefings[0].briefing_json = args[0];
+      if (dbState.briefings[0]) dbState.briefings[0].briefing_json = args[0];
       return { rows: [] };
     }
     return { rows: [] };
@@ -35,6 +35,7 @@ vi.mock("../briefing/todoist.js", () => ({
   fetchTodoistLabels: vi.fn(),
   createTodoistTask: vi.fn(),
   updateTodoistTask: vi.fn(),
+  fetchTodoistTaskIdSet: vi.fn(),
 }));
 vi.mock("../briefing/ctm.js", () => ({ updateCTMEventStatus: vi.fn() }));
 vi.mock("../briefing/index.js", () => ({
@@ -137,13 +138,101 @@ describe("POST /complete-task/:taskId — recurring Todoist tombstone branch", (
     expect(snap.title).toBe("Empty dishwasher");
     expect(snap.is_recurring).toBe(true);
 
+    // Recurring: stored briefing left untouched — the tombstone injection
+    // on next fetch handles visibility (separate row for the old occurrence).
     const updateCalls = mockDb.execute.mock.calls.filter(
       ([arg]) => arg.sql?.startsWith("UPDATE ea_briefings"),
     );
     expect(updateCalls).toHaveLength(0);
   });
 
-  it("uses legacy path (no due_date, strips briefing) for non-recurring Todoist", async () => {
+  it("returns 502 and does NOT insert a dedupe row when Todoist close fails", async () => {
+    const todoistModule = await import("../briefing/todoist.js");
+    todoistModule.completeTodoistTask.mockRejectedValueOnce(new Error("Todoist API 401: bad token"));
+
+    const task = {
+      id: "td-fail",
+      title: "One-off",
+      due_date: "2026-04-18",
+      source: "todoist",
+      is_recurring: false,
+      status: "incomplete",
+    };
+    dbState.briefings = [{
+      id: 1,
+      briefing_json: JSON.stringify({
+        todoist: { upcoming: [task], stats: {} },
+        ctm: { upcoming: [], stats: {} },
+      }),
+    }];
+
+    const handler = findHandler("post", "/complete-task/:taskId");
+    const req = { params: { taskId: "td-fail" }, body: {} };
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(502);
+    // No dedupe row — else reconciliation would incorrectly treat this as
+    // completed on next refresh, masking the real (still-open) Todoist state.
+    expect(dbState.completedTasks).toHaveLength(0);
+    // Stored briefing must be untouched so the task remains visible.
+    const stored = JSON.parse(dbState.briefings[0].briefing_json);
+    expect(stored.todoist.upcoming).toHaveLength(1);
+  });
+
+  it("create-then-complete without refresh: created task lands in stored briefing so close isn't skipped", async () => {
+    const todoistModule = await import("../briefing/todoist.js");
+    todoistModule.createTodoistTask.mockResolvedValueOnce({
+      id: "td-new",
+      title: "Pick up milk",
+      due_date: "2026-04-18",
+      source: "todoist",
+      is_recurring: false,
+    });
+
+    // Stored briefing exists but does NOT contain the just-created task —
+    // this mirrors the real client state: handleAddTask only updates local
+    // React state, and the stored briefing stays stale until next refresh.
+    dbState.briefings = [{
+      id: 1,
+      briefing_json: JSON.stringify({
+        todoist: { upcoming: [], stats: {} },
+        ctm: { upcoming: [], stats: {} },
+      }),
+    }];
+
+    // Step 1: Create the task via the POST /todoist/tasks endpoint.
+    const createHandler = findHandler("post", "/todoist/tasks");
+    const createReq = { params: {}, body: { content: "Pick up milk" } };
+    const createRes = makeRes();
+    await createHandler(createReq, createRes);
+    expect(createRes.statusCode).toBe(200);
+
+    // Sanity: the mirror wrote the new task into the stored briefing.
+    const afterCreate = JSON.parse(dbState.briefings[0].briefing_json);
+    expect(afterCreate.todoist.upcoming).toHaveLength(1);
+    expect(afterCreate.todoist.upcoming[0].id).toBe("td-new");
+
+    // Step 2: Complete the task. Without the mirror, todoistTask would be
+    // undefined, todoistId null, and completeTodoistTask NEVER called —
+    // which is the bug you reported. Verify close DOES get called.
+    const completeHandler = findHandler("post", "/complete-task/:taskId");
+    const completeReq = { params: { taskId: "td-new" }, body: {} };
+    const completeRes = makeRes();
+    await completeHandler(completeReq, completeRes);
+
+    expect(completeRes.statusCode).toBe(200);
+    expect(todoistModule.completeTodoistTask).toHaveBeenCalledWith("user-1", "td-new");
+    expect(dbState.completedTasks).toHaveLength(1);
+    expect(dbState.completedTasks[0].todoist_id).toBe("td-new");
+  });
+
+  it("non-recurring Todoist-only: legacy dedupe row + flips status (does NOT strip)", async () => {
+    // Non-recurring uses the legacy dedupe row (no snapshot) — tombstones
+    // are a recurring-only concern. The stored briefing retains the row
+    // with status=complete so page reload shows strikethrough, and the
+    // carry-forward step in refresh preserves it until its due_date slips
+    // past the view gate.
     const task = {
       id: "td-one",
       title: "One-off",
@@ -172,6 +261,7 @@ describe("POST /complete-task/:taskId — recurring Todoist tombstone branch", (
     expect(row.snapshot_json).toBeNull();
 
     const updated = JSON.parse(dbState.briefings[0].briefing_json);
-    expect(updated.todoist.upcoming).toHaveLength(0);
+    expect(updated.todoist.upcoming).toHaveLength(1);
+    expect(updated.todoist.upcoming[0].status).toBe("complete");
   });
 });
