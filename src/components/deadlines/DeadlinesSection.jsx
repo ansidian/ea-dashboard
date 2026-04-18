@@ -12,10 +12,19 @@ function openInNewTab(url) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
-function buildTaskMenu(task, { onEdit, onComplete, onStatusChange }) {
+function buildTaskMenu(task, { onEdit, onComplete, onStatusChange, onDismissGhost }) {
+  const isTombstone = task._tombstone === true;
   const isTodoist = task.source === "todoist";
   const isCanvas = task.source === "canvas";
   const isComplete = task.status === "complete";
+
+  if (isTombstone) {
+    return [
+      task.url && { label: "Open in Todoist", onSelect: () => openInNewTab(task.url) },
+      { type: "separator" },
+      { label: "Dismiss", onSelect: onDismissGhost },
+    ].filter(Boolean);
+  }
 
   if (isTodoist) {
     return [
@@ -53,7 +62,7 @@ function buildTaskMenu(task, { onEdit, onComplete, onStatusChange }) {
 }
 
 export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, className }) {
-  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus, handleAddTask, handleUpdateTask } = useDashboard();
+  const { expandedTask, setExpandedTask, handleCompleteTask, handleUpdateTaskStatus, handleAddTask, handleUpdateTask, handleDismissGhost } = useDashboard();
   const [addPanelOpen, setAddPanelOpen] = useState(false);
   const [addBtnHover, setAddBtnHover] = useState(false);
   const addBtnRef = useRef(null);
@@ -160,7 +169,7 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
         {allItems.map((item) => {
           if (item._type === "ctm") {
             return (
-              <MotionItem key={`ctm-${item.id}`}>
+              <MotionItem key={item._tombstone ? `ctm-${item.id}-ghost` : `ctm-${item.id}-${item.status}`}>
                 <CTMCard
                   task={item}
                   expanded={expandedTask === item.id}
@@ -217,6 +226,7 @@ export default function DeadlinesSection({ ctm, todoist, loaded, delay, style, c
             onComplete: () => handleCompleteTask(menuState.task.id),
             onStatusChange: (status) =>
               handleUpdateTaskStatus(menuState.task.id, status),
+            onDismissGhost: () => handleDismissGhost(menuState.task.id),
           })}
         />
       )}
