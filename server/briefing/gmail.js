@@ -333,6 +333,34 @@ export async function trashMessage(account, uid) {
   if (!res.ok) throw new Error(`Gmail trash failed: ${res.status}`);
 }
 
+export async function archiveMessage(account, uid) {
+  const messageId = extractMessageId(account, uid);
+  const token = await getValidToken(account);
+  const res = await fetch(
+    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ removeLabelIds: ["INBOX"] }),
+    },
+  );
+  if (!res.ok) throw new Error(`Gmail archive failed: ${res.status}`);
+}
+
+export async function unarchiveMessage(account, uid) {
+  const messageId = extractMessageId(account, uid);
+  const token = await getValidToken(account);
+  const res = await fetch(
+    `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ addLabelIds: ["INBOX"] }),
+    },
+  );
+  if (!res.ok) throw new Error(`Gmail unarchive failed: ${res.status}`);
+}
+
 export async function batchMarkAsRead(account, uids) {
   const token = await getValidToken(account);
   const ids = uids.map(uid => extractMessageId(account, uid));

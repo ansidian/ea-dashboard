@@ -1,9 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// mock encryption before module load so getValidToken doesn't need real credentials
+vi.mock("./encryption.js", () => ({
+  decrypt: () => JSON.stringify({
+    access_token: "tok",
+    refresh_token: "rtok",
+    expires_at: Date.now() + 3600_000,
+  }),
+  encrypt: (s) => s,
+}));
+
 // We need to stub global fetch before importing the module
 vi.stubGlobal("fetch", vi.fn());
 
-const { chunkArray, fetchMessages } = await import("./gmail.js");
+const { chunkArray, fetchMessages, archiveMessage, unarchiveMessage } = await import("./gmail.js");
 
 describe("gmail", () => {
   describe("chunkArray", () => {
@@ -92,5 +102,39 @@ describe("gmail", () => {
       expect(results[0].id).toBe("msg0");
       expect(results[11].id).toBe("msg11");
     });
+  });
+});
+
+describe("archiveMessage / unarchiveMessage", () => {
+  const fakeAccount = {
+    id: "acc-1",
+    email: "andy@example.com",
+    credentials_encrypted: "stub", // decrypt is mocked above
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("archiveMessage POSTs /modify with removeLabelIds INBOX", async () => {
+    fetch.mockResolvedValue({ ok: true });
+    await archiveMessage(fakeAccount, "18c4e7ab1234");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toMatch(/\/messages\/18c4e7ab1234\/modify$/);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ removeLabelIds: ["INBOX"] });
+  });
+
+  it("unarchiveMessage POSTs /modify with addLabelIds INBOX", async () => {
+    fetch.mockResolvedValue({ ok: true });
+    await unarchiveMessage(fakeAccount, "18c4e7ab1234");
+    const [, init] = fetch.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({ addLabelIds: ["INBOX"] });
+  });
+
+  it("archiveMessage throws when Gmail returns non-OK", async () => {
+    fetch.mockResolvedValue({ ok: false, status: 403 });
+    await expect(archiveMessage(fakeAccount, "18c4e7ab1234")).rejects.toThrow(/Gmail archive failed: 403/);
   });
 });
