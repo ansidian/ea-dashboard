@@ -274,6 +274,11 @@ function RedesignShell({
 
   const nextBriefingLabel = formatNextBriefingLabel(bd.schedules);
 
+  // Unread-live count surfaced on the Inbox tab. Drives the little blue pill
+  // next to the tab label so the user notices new untriaged email without
+  // first switching away from the dashboard.
+  const liveUnreadCount = (liveData.liveEmails || []).filter((e) => !e.read).length;
+
   return (
     <div
       style={{
@@ -295,6 +300,7 @@ function RedesignShell({
         onOpenHistory={() => setHistoryOpen((v) => !v)}
         onOpenCalendar={() => openCalendar()}
         nextBriefingLabel={nextBriefingLabel}
+        liveUnreadCount={liveUnreadCount}
         refreshHold={refreshHold}
         refreshing={bd.refreshing}
         generating={bd.generating}
@@ -455,7 +461,6 @@ function DashboardBody({
       density={density}
       events={events}
       deadlines={deadlines}
-      bills={bills}
       onJump={handleRailJump}
     />
   );

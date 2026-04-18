@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Video, Plane, Calendar, Coffee, Users,
-  Circle, CircleDashed, CheckCircle2, CreditCard, Flag,
+  Circle, CircleDashed, CheckCircle2, Flag,
 } from "lucide-react";
 import {
   buildTimeline, dayBucket, dayBucketLabel,
   eventState, formatEventTime, formatEventDuration,
   urgencyForDays, pacificClock,
 } from "../../lib/redesign-helpers";
-import { daysUntil, formatAmount } from "../../lib/bill-utils";
+import { daysUntil } from "../../lib/bill-utils";
 
 // Matches Rails.jsx. Todoist priority: 1=urgent, 2=high, 3=medium, 4=low; we
 // only surface 1–3 because "no flag" is the expected baseline.
@@ -130,16 +130,6 @@ function TimelineRow({ item, now, accent, onJump }) {
       priorityLevel = d.priority;
     }
     jumpPayload = { kind: "deadline", id: d.id, data: d };
-  } else if (item.kind === "bill") {
-    const b = item.data;
-    const days = daysUntil(b.next_date);
-    urgency = urgencyForDays(days, accent).key;
-    Icon = CreditCard;
-    leftLabel = "3:00p";
-    title = b.name;
-    sub = b.payee || "";
-    meta = formatAmount(b.amount);
-    jumpPayload = { kind: "bill", id: b.id, data: b };
   } else {
     return null;
   }
@@ -254,7 +244,7 @@ function TimelineRow({ item, now, accent, onJump }) {
 }
 
 /**
- * TodayTimeline — merges events + deadlines + bills onto one chronological rail.
+ * TodayTimeline — merges events + deadlines onto one chronological rail.
  * Now marker is anchored between the last-past and first-future item so the
  * user sees "where they are" without scrolling.
  */
@@ -263,10 +253,9 @@ export default function TodayTimeline({
   density = "comfortable",
   events = [],
   deadlines = [],
-  bills = [],
   onJump,
 }) {
-  const [filter, setFilter] = useState("all");
+  const [filters, setFilters] = useState({ events: true, deadlines: true });
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -275,16 +264,14 @@ export default function TodayTimeline({
   }, []);
 
   const items = useMemo(
-    () => buildTimeline({ events, deadlines, bills }),
-    [events, deadlines, bills],
+    () => buildTimeline({ events, deadlines }),
+    [events, deadlines],
   );
 
   const filtered = items.filter((it) => {
-    if (filter === "all") return true;
-    if (filter === "meetings") return it.kind === "event";
-    if (filter === "deadlines") return it.kind === "deadline";
-    if (filter === "bills") return it.kind === "bill";
-    return true;
+    if (it.kind === "event") return filters.events;
+    if (it.kind === "deadline") return filters.deadlines;
+    return false;
   });
 
   const groups = useMemo(() => {
@@ -304,6 +291,8 @@ export default function TodayTimeline({
         title="Today"
         right={
           <div
+            role="group"
+            aria-label="Timeline filters"
             style={{
               display: "flex", gap: 2, padding: 2, borderRadius: 8,
               background: "rgba(255,255,255,0.03)",
@@ -311,25 +300,47 @@ export default function TodayTimeline({
             }}
           >
             {[
-              { id: "all", label: "All" },
-              { id: "meetings", label: "Meetings" },
+              { id: "events", label: "Events" },
               { id: "deadlines", label: "Deadlines" },
-              { id: "bills", label: "Bills" },
-            ].map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFilter(f.id)}
-                style={{
-                  padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
-                  fontSize: 10.5, fontFamily: "inherit", letterSpacing: 0.2,
-                  background: filter === f.id ? "rgba(255,255,255,0.06)" : "transparent",
-                  color: filter === f.id ? "#cdd6f4" : "rgba(205,214,244,0.5)",
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
+            ].map((f) => {
+              const active = !!filters[f.id];
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="switch"
+                  aria-checked={active}
+                  onClick={() => setFilters((prev) => ({ ...prev, [f.id]: !prev[f.id] }))}
+                  style={{
+                    padding: "4px 10px", borderRadius: 6, cursor: "pointer",
+                    fontSize: 10.5, fontFamily: "inherit", letterSpacing: 0.2,
+                    background: active ? `${accent}1f` : "transparent",
+                    border: `1px solid ${active ? `${accent}38` : "transparent"}`,
+                    color: active ? accent : "rgba(205,214,244,0.5)",
+                    transition: "background 130ms, color 130ms, border-color 130ms",
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) e.currentTarget.style.color = "rgba(205,214,244,0.8)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) e.currentTarget.style.color = "rgba(205,214,244,0.5)";
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 6, height: 6, borderRadius: 99,
+                      background: active ? accent : "transparent",
+                      border: `1px solid ${active ? accent : "rgba(205,214,244,0.35)"}`,
+                      boxShadow: active ? `0 0 6px ${accent}80` : "none",
+                      transition: "all 130ms",
+                    }}
+                  />
+                  {f.label}
+                </button>
+              );
+            })}
           </div>
         }
       />
@@ -365,14 +376,17 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
   const label = dayBucketLabel(day, now);
   const hideHeader = isFirst && day === 0;
 
-  function shouldShowNowLine(i) {
-    if (day !== 0) return false;
-    const it = items[i];
-    const itMs = it.startMs ?? it.dueAtMs;
-    const prev = items[i - 1];
-    if (!prev) return now < itMs;
-    const prevMs = prev.endMs ?? prev.startMs ?? prev.dueAtMs;
-    return prevMs < now && now < itMs;
+  // Compute the index where "now" falls among today's items. Rendering the
+  // marker from this index — rather than probing each adjacent pair for a
+  // past/future boundary — keeps the marker visible when the filter narrows
+  // to a lane where every item is either all past or all future.
+  let nowIdx = -1;
+  if (day === 0) {
+    nowIdx = items.length;
+    for (let i = 0; i < items.length; i++) {
+      const itMs = items[i].startMs ?? items[i].dueAtMs;
+      if (now < itMs) { nowIdx = i; break; }
+    }
   }
 
   return (
@@ -403,10 +417,13 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
         />
         {items.map((it, i) => (
           <div key={`${it.kind}-${i}`}>
-            {shouldShowNowLine(i) && <NowLine accent={accent} now={now} />}
+            {i === nowIdx && <NowLine accent={accent} now={now} />}
             <TimelineRow item={it} now={now} accent={accent} onJump={onJump} />
           </div>
         ))}
+        {day === 0 && nowIdx === items.length && items.length > 0 && (
+          <NowLine accent={accent} now={now} />
+        )}
       </div>
     </div>
   );

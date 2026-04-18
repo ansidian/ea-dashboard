@@ -93,7 +93,7 @@ export function MotionList({
         hidden: {},
       }}
     >
-      {children}
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
     </motion.div>
   );
 }
