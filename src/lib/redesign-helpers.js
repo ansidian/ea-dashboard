@@ -23,6 +23,30 @@ export function daysLabel(d) {
   return `${d}d`;
 }
 
+export function phaseIndex(date = new Date()) {
+  const hour = parseInt(date.toLocaleTimeString("en-US", {
+    timeZone: "America/Los_Angeles", hour: "numeric", hour12: false,
+  }), 10);
+  if (hour < 5)  return 0; // late night
+  if (hour < 12) return 1; // morning
+  if (hour < 17) return 2; // afternoon
+  if (hour < 21) return 3; // evening
+  return 4;                // night
+}
+
+const BRIEFING_PHASE_PHRASES = [
+  "Since last night's briefing",
+  "Since this morning's briefing",
+  "Since this afternoon's briefing",
+  "Since this evening's briefing",
+  "Since tonight's briefing",
+];
+
+export function briefingPhaseLabel(ts) {
+  if (ts == null) return "Since last briefing";
+  return BRIEFING_PHASE_PHRASES[phaseIndex(new Date(ts))];
+}
+
 export function greetingFor(date = new Date(), name = "") {
   const hour = parseInt(date.toLocaleTimeString("en-US", {
     timeZone: "America/Los_Angeles", hour: "numeric", hour12: false,
