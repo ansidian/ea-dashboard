@@ -128,11 +128,15 @@ function nowPacific() {
   });
 }
 
-// Load todoist IDs completed from the dashboard, reconciling against live Todoist tasks.
-// If a task was un-completed in Todoist (reappears in the API), remove it from the table.
+// Load todoist IDs from legacy dedupe rows (due_date IS NULL) only.
+// Tombstone rows (due_date IS NOT NULL) are handled separately by
+// hydrateRecurringTombstones and must not participate in the Todoist
+// suppression filter, or the live next-occurrence row would be dropped.
+// Reconciliation (un-complete in Todoist → reappears in the API) also
+// scopes to legacy rows so tombstones survive.
 export async function loadCompletedTaskIds(userId, todoistTasks) {
   const result = await db.execute({
-    sql: "SELECT todoist_id FROM ea_completed_tasks WHERE user_id = ?",
+    sql: "SELECT todoist_id FROM ea_completed_tasks WHERE user_id = ? AND due_date IS NULL",
     args: [userId],
   });
   const completedIds = new Set(result.rows.map(r => r.todoist_id));
@@ -142,7 +146,7 @@ export async function loadCompletedTaskIds(userId, todoistTasks) {
     if (reopened.length) {
       console.log(`[Briefing] Reconciling ${reopened.length} un-completed Todoist task(s)`);
       await db.execute({
-        sql: `DELETE FROM ea_completed_tasks WHERE user_id = ? AND todoist_id IN (${reopened.map(() => "?").join(",")})`,
+        sql: `DELETE FROM ea_completed_tasks WHERE user_id = ? AND due_date IS NULL AND todoist_id IN (${reopened.map(() => "?").join(",")})`,
         args: [userId, ...reopened],
       });
       for (const id of reopened) completedIds.delete(id);
