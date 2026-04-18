@@ -1,6 +1,8 @@
 // Helpers shared across the redesigned shell, hero, timeline, rails, and inbox.
 // Kept small and pure so they can be unit-tested without a React tree.
 
+import { greetingPools } from "./dashboard-helpers";
+
 export const URGENCY_COLORS = {
   high: "#f38ba8",
   medium: "#f9e2af",
@@ -47,16 +49,22 @@ export function briefingPhaseLabel(ts) {
   return BRIEFING_PHASE_PHRASES[phaseIndex(new Date(ts))];
 }
 
+function stableIndex(date, len) {
+  const day = date.toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+  const key = `${day}-${phaseIndex(date)}`;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return Math.abs(h) % len;
+}
+
+const PHASE_LABELS = ["Late night", "Good morning", "Good afternoon", "Good evening", "Tonight"];
+
+// eslint-disable-next-line no-unused-vars
 export function greetingFor(date = new Date(), name = "") {
-  const hour = parseInt(date.toLocaleTimeString("en-US", {
-    timeZone: "America/Los_Angeles", hour: "numeric", hour12: false,
-  }), 10);
-  const suffix = name ? `, ${name}` : "";
-  if (hour < 5)  return { label: "Late night",     text: `Still up${suffix}?` };
-  if (hour < 12) return { label: "Good morning",   text: `Morning${suffix}` };
-  if (hour < 17) return { label: "Good afternoon", text: `Afternoon${suffix}` };
-  if (hour < 21) return { label: "Good evening",   text: `Evening${suffix}` };
-  return              { label: "Tonight",          text: `Wind down${suffix}` };
+  const idx = phaseIndex(date);
+  const pool = greetingPools[idx] ?? greetingPools[0];
+  const text = pool.greetings[stableIndex(date, pool.greetings.length)];
+  return { label: PHASE_LABELS[idx], text };
 }
 
 export function pacificClock(date = new Date()) {

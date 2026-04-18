@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { phaseIndex, briefingPhaseLabel } from "./redesign-helpers";
+import { phaseIndex, briefingPhaseLabel, greetingFor } from "./redesign-helpers";
+import { greetingPools } from "./dashboard-helpers";
 
 // Helper: construct a Pacific-time Date at a given hour on a fixed day.
 function atHourPacific(hour) {
@@ -51,5 +52,39 @@ describe("briefingPhaseLabel", () => {
   });
   it("night briefing → 'Since tonight's briefing'", () => {
     expect(briefingPhaseLabel(atHourPacific(22).getTime())).toBe("Since tonight's briefing");
+  });
+});
+
+describe("greetingFor — personable pools", () => {
+  it("returns a phrase from the correct pool for the hour", () => {
+    const { text } = greetingFor(atHourPacific(8));
+    expect(greetingPools[1].greetings).toContain(text); // morning pool
+  });
+
+  it("returns the right label for each phase", () => {
+    expect(greetingFor(atHourPacific(2)).label).toBe("Late night");
+    expect(greetingFor(atHourPacific(8)).label).toBe("Good morning");
+    expect(greetingFor(atHourPacific(14)).label).toBe("Good afternoon");
+    expect(greetingFor(atHourPacific(19)).label).toBe("Good evening");
+    expect(greetingFor(atHourPacific(22)).label).toBe("Tonight");
+  });
+
+  it("is stable for the same phase on the same day", () => {
+    const a = greetingFor(atHourPacific(8));
+    const b = greetingFor(atHourPacific(10));
+    expect(a.text).toBe(b.text);
+  });
+
+  it("may change when the phase changes", () => {
+    // Not strictly guaranteed (different pools), but label must differ:
+    const morning = greetingFor(atHourPacific(8));
+    const afternoon = greetingFor(atHourPacific(14));
+    expect(morning.label).not.toBe(afternoon.label);
+  });
+
+  it("ignores the name argument (pool phrases are complete sentences)", () => {
+    const a = greetingFor(atHourPacific(8), "");
+    const b = greetingFor(atHourPacific(8), "Andy");
+    expect(a.text).toBe(b.text);
   });
 });

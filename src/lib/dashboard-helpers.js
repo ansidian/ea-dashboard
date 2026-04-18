@@ -103,7 +103,7 @@ export function formatShortTime(isoString) {
   });
 }
 
-const greetingPools = [
+export const greetingPools = [
   { name: "Late Night", max: 5, greetings: [
     "Burning the midnight oil.", "The world sleeps, but not you.", "Night owl mode activated.",
     "Stars are out, and so are you.", "Late nights build empires.", "Silence is productive.",
