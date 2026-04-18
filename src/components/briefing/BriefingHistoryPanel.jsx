@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { cn } from "@/lib/utils";
+import { Clock, ClipboardList, Trash2, Check } from "lucide-react";
 import { getBriefingHistory, getBriefingById } from "../../api";
 import { transformBriefing } from "../../transform";
 import { timeAgo } from "../../lib/dashboard-helpers";
 import useIsMobile from "../../hooks/useIsMobile";
 import BottomSheet from "../ui/BottomSheet";
-import { ClipboardList } from "lucide-react";
 
 const TZ = "America/Los_Angeles";
 const dateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });
+const ACCENT = "#cba6da";
 
 function groupByDate(items) {
   const groups = [];
@@ -20,7 +20,6 @@ function groupByDate(items) {
   let currentItems = [];
 
   for (const item of items) {
-    // generated_at from SQLite: "2026-04-03 14:30:00", "2026-04-03T14:30:00", or "2026-04-03"
     const raw = (item.generated_at || "").replace(" ", "T");
     const d = new Date(raw.includes("T") ? raw + (raw.endsWith("Z") ? "" : "Z") : raw + "T00:00:00Z");
     const itemDateStr = dateFmt.format(d);
@@ -42,6 +41,147 @@ function groupByDate(items) {
   return groups;
 }
 
+function HistoryRow({ item, active, loading, confirming, deleting, isMobile, onSelect, onDelete }) {
+  const [hover, setHover] = useState(false);
+  const time = item._date.toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", hour12: true, timeZone: TZ,
+  });
+  const genTime = item.generation_time_ms
+    ? `${(item.generation_time_ms / 1000).toFixed(1)}s`
+    : null;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelect(); }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: "relative", margin: "0 8px",
+        padding: "10px 14px", borderRadius: 8,
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+        cursor: active ? "default" : loading ? "wait" : "pointer",
+        background: active
+          ? `${ACCENT}12`
+          : hover
+          ? "rgba(255,255,255,0.035)"
+          : "transparent",
+        border: `1px solid ${active ? `${ACCENT}30` : "transparent"}`,
+        transition: "background 150ms, border-color 150ms",
+      }}
+    >
+      {active && (
+        <div
+          style={{
+            position: "absolute", left: 0, top: 8, bottom: 8, width: 3,
+            background: ACCENT, borderRadius: 2,
+            boxShadow: `0 0 8px ${ACCENT}60`,
+          }}
+        />
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <div
+          style={{
+            width: 7, height: 7, borderRadius: 99, flexShrink: 0,
+            background: active ? ACCENT : "rgba(255,255,255,0.18)",
+            boxShadow: active ? `0 0 8px ${ACCENT}70` : "none",
+            transition: "all 200ms",
+          }}
+        />
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 13, fontWeight: 500, fontVariantNumeric: "tabular-nums",
+              color: active ? "#e2d0eb" : "rgba(205,214,244,0.9)",
+              lineHeight: 1.2,
+            }}
+          >
+            {time}
+          </div>
+          <div
+            style={{
+              fontSize: 10, marginTop: 2, color: "rgba(205,214,244,0.45)",
+              lineHeight: 1.2,
+            }}
+          >
+            {timeAgo(item._date)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {loading && (
+          <div
+            style={{
+              width: 13, height: 13, borderRadius: 99,
+              border: `1.5px solid ${ACCENT}30`,
+              borderTopColor: ACCENT,
+              animation: "spin 600ms linear infinite",
+            }}
+          />
+        )}
+        {genTime && !loading && (!hover || confirming || isMobile) && (
+          <span
+            style={{
+              fontSize: 9.5, fontWeight: 600, letterSpacing: 0.3,
+              fontVariantNumeric: "tabular-nums",
+              color: active ? `${ACCENT}cc` : "rgba(180,190,254,0.55)",
+              background: active ? `${ACCENT}14` : "rgba(180,190,254,0.08)",
+              padding: "2px 7px", borderRadius: 6,
+              opacity: confirming ? 0 : 1,
+              transition: "opacity 150ms",
+            }}
+          >
+            {genTime}{item.skipped_ai ? " · no AI" : ""}
+          </span>
+        )}
+        {!active && !loading && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title={confirming ? "Click again to confirm" : "Delete briefing"}
+            style={{
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              gap: 4, padding: confirming ? "3px 8px" : 0,
+              width: confirming ? "auto" : 22, height: 22,
+              borderRadius: 6, border: "none", cursor: "pointer",
+              fontFamily: "inherit",
+              background: confirming
+                ? "rgba(243,139,168,0.18)"
+                : hover
+                ? "rgba(243,139,168,0.10)"
+                : "transparent",
+              color: confirming ? "#f38ba8" : hover ? "#f38ba8" : "rgba(205,214,244,0.4)",
+              opacity: isMobile || hover || confirming ? 1 : 0,
+              transition: "all 150ms",
+            }}
+          >
+            {deleting ? (
+              <div
+                style={{
+                  width: 11, height: 11, borderRadius: 99,
+                  border: "1.5px solid rgba(243,139,168,0.25)",
+                  borderTopColor: "#f38ba8",
+                  animation: "spin 600ms linear infinite",
+                }}
+              />
+            ) : confirming ? (
+              <>
+                <Check size={10} />
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5 }}>delete?</span>
+              </>
+            ) : (
+              <Trash2 size={12} />
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, onClose, onDelete }) {
   const isMobile = useIsMobile();
@@ -55,7 +195,6 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
 
-  // Position below trigger, recalc on scroll/resize
   const updatePos = useCallback(() => {
     if (!triggerRef?.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
@@ -72,7 +211,6 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
     };
   }, [updatePos]);
 
-  // Trap scroll inside panel — prevent page from scrolling when cursor is over it
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -94,7 +232,6 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
       .catch((err) => setError(err.message));
   }, []);
 
-  // Click outside to close (ignore clicks on the trigger button)
   useEffect(() => {
     function handleClick(e) {
       if (panelRef.current && !panelRef.current.contains(e.target) &&
@@ -121,8 +258,7 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
     }
   }
 
-  function handleDeleteClick(e, item) {
-    e.stopPropagation();
+  function handleDeleteClick(item) {
     if (deletingId || item.id === activeId) return;
     if (confirmId === item.id) {
       clearTimeout(confirmTimer.current);
@@ -153,192 +289,86 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
   }, []);
 
   const groups = history ? groupByDate(history.filter((h) => h.status === "ready")) : [];
+  const totalBriefings = groups.reduce((sum, g) => sum + g.items.length, 0);
 
   const content = (
-    <>
-      {/* Scrollable content */}
-      <div ref={scrollRef} className="overflow-y-auto overscroll-contain flex-1">
+    <div ref={scrollRef} style={{ overflowY: "auto", overscrollBehavior: "contain", flex: 1 }}>
+      {!history && !error && (
+        <div style={{ padding: "40px 20px", textAlign: "center" }}>
+          <div
+            style={{
+              width: 16, height: 16, borderRadius: 99, margin: "0 auto 12px",
+              border: `2px solid ${ACCENT}26`,
+              borderTopColor: ACCENT,
+              animation: "spin 600ms linear infinite",
+            }}
+          />
+          <div style={{ fontSize: 11, color: "rgba(205,214,244,0.5)" }}>Loading history…</div>
+        </div>
+      )}
 
-        {/* Loading state */}
-        {!history && !error && (
-          <div className="py-10 px-5 text-center">
-            <div className="w-4 h-4 border-2 border-white/[0.06] border-t-primary rounded-full animate-spin mx-auto mb-3" />
-            <div className="text-[11px] max-sm:text-xs text-muted-foreground">Loading history...</div>
-          </div>
-        )}
+      {error && (
+        <div
+          style={{
+            margin: "14px 16px", padding: "10px 12px", borderRadius: 8,
+            fontSize: 11, color: "#f38ba8",
+            background: "rgba(243,139,168,0.08)",
+            border: "1px solid rgba(243,139,168,0.22)",
+            textAlign: "center", lineHeight: 1.5,
+          }}
+        >
+          {error}
+        </div>
+      )}
 
-        {/* Error state */}
-        {error && (
-          <div className="py-6 px-5 text-[11px] max-sm:text-xs text-destructive text-center leading-relaxed">
-            {error}
-          </div>
-        )}
+      {history && groups.length === 0 && (
+        <div style={{ padding: "40px 20px", textAlign: "center" }}>
+          <ClipboardList size={22} color="rgba(205,214,244,0.25)" style={{ marginBottom: 10 }} />
+          <div style={{ fontSize: 11, color: "rgba(205,214,244,0.5)" }}>No past briefings yet</div>
+        </div>
+      )}
 
-        {/* Empty state */}
-        {history && groups.length === 0 && (
-          <div className="py-10 px-5 text-center">
-            <div className="mb-2 opacity-60 flex justify-center"><ClipboardList size={24} /></div>
-            <div className="text-[11px] max-sm:text-xs text-muted-foreground">No past briefings yet</div>
-          </div>
-        )}
-
-        {/* Briefing list grouped by date */}
-        <div className="py-1.5">
+      <div style={{ padding: "6px 0" }}>
         {groups.map((group, gi) => (
           <div key={group.label}>
-            {/* Date group header with rule line */}
-            <div className="flex items-center gap-3 px-5 pt-4 pb-2">
-              <span className="text-[10px] max-sm:text-xs tracking-[1.5px] uppercase text-muted-foreground/70 font-semibold whitespace-nowrap">
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "14px 20px 6px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: 2,
+                  textTransform: "uppercase", color: "rgba(205,214,244,0.5)",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 {group.label}
               </span>
               {gi > 0 && (
-                <div className="flex-1 h-px bg-white/[0.04]" />
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.04)" }} />
               )}
             </div>
-            {group.items.map((item) => {
-              const isActive = item.id === activeId;
-              const isLoading = loadingId === item.id;
-              const time = item._date.toLocaleTimeString("en-US", {
-                hour: "numeric", minute: "2-digit", hour12: true, timeZone: TZ,
-              });
-              const genTime = item.generation_time_ms
-                ? `${(item.generation_time_ms / 1000).toFixed(1)}s`
-                : null;
-
-              return (
-                <div
-                  key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleSelect(item)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleSelect(item); }}
-                  className={cn(
-                    "group relative flex items-center justify-between gap-3 mx-2 rounded-lg transition-all duration-200",
-                    isActive
-                      ? "cursor-default"
-                      : isLoading
-                        ? "cursor-wait"
-                        : "cursor-pointer active:scale-[0.98]",
-                  )}
-                  style={{
-                    padding: "12px 16px",
-                    background: isActive
-                      ? "rgba(203,166,218,0.08)"
-                      : undefined,
-                  }}
-                >
-                  {/* Active glow edge */}
-                  {isActive && (
-                    <div
-                      className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
-                      style={{
-                        background: "linear-gradient(180deg, #cba6da 0%, #b4befe 100%)",
-                        boxShadow: "0 0 10px rgba(203,166,218,0.3)",
-                      }}
-                    />
-                  )}
-
-                  {/* Hover bg — separate element for smooth transition */}
-                  {!isActive && !isLoading && (
-                    <div className="absolute inset-0 rounded-lg bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
-                  )}
-
-                  <div className="relative flex items-center gap-3">
-                    {/* Status dot */}
-                    <div
-                      className={cn(
-                        "w-[7px] h-[7px] rounded-full shrink-0 transition-all duration-300",
-                      )}
-                      style={{
-                        background: isActive
-                          ? "#cba6da"
-                          : "rgba(255,255,255,0.10)",
-                        boxShadow: isActive
-                          ? "0 0 8px rgba(203,166,218,0.45)"
-                          : "none",
-                      }}
-                    />
-                    <div>
-                      <div className={cn(
-                        "text-[13px] font-medium leading-tight tabular-nums",
-                        isActive ? "text-[#e2d0eb]" : "text-foreground/90 group-hover:text-foreground",
-                      )}>
-                        {time}
-                      </div>
-                      <div className={cn(
-                        "text-[10px] max-sm:text-xs mt-0.5 leading-tight transition-colors duration-200",
-                        isActive ? "text-muted-foreground/60" : "text-muted-foreground/50 group-hover:text-muted-foreground/70",
-                      )}>
-                        {timeAgo(item._date)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative flex items-center gap-2">
-                    {isLoading && (
-                      <div className="w-3.5 h-3.5 border-[1.5px] border-primary/20 border-t-primary rounded-full animate-spin" />
-                    )}
-                    {genTime && !isLoading && (
-                      <span
-                        className={cn(
-                          "text-[9px] max-sm:text-xs font-semibold tracking-wide tabular-nums transition-opacity duration-200",
-                          !isActive && !isMobile && "group-hover:opacity-0",
-                          confirmId === item.id && !isMobile && "!opacity-0",
-                        )}
-                        style={{
-                          color: isActive ? "rgba(203,166,218,0.7)" : "rgba(180,190,254,0.5)",
-                          background: isActive ? "rgba(203,166,218,0.08)" : "rgba(180,190,254,0.06)",
-                          padding: "2px 8px",
-                          borderRadius: 8,
-                        }}
-                      >
-                        {genTime}{item.skipped_ai ? " · no AI" : ""}
-                      </span>
-                    )}
-                    {!isActive && !isLoading && (
-                      <button
-                        onClick={(e) => handleDeleteClick(e, item)}
-                        className={cn(
-                          "flex items-center justify-center rounded-md transition-all duration-200",
-                          confirmId === item.id
-                            ? "opacity-100 bg-destructive/[0.12] px-2 py-0.5 gap-1"
-                            : isMobile
-                              ? "opacity-70 w-8 h-8 bg-transparent"
-                              : "absolute right-0 opacity-0 group-hover:opacity-100 w-6 h-6 bg-transparent hover:bg-destructive/[0.12]",
-                          "active:scale-90",
-                          deletingId === item.id && "opacity-100 pointer-events-none",
-                        )}
-                        title={confirmId === item.id ? "Click again to confirm" : "Delete briefing"}
-                      >
-                        {deletingId === item.id ? (
-                          <div className="w-3 h-3 border-[1.5px] border-destructive/20 border-t-destructive rounded-full animate-spin" />
-                        ) : confirmId === item.id ? (
-                          <>
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-destructive">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            <span className="text-[9px] max-sm:text-xs font-semibold text-destructive">delete?</span>
-                          </>
-                        ) : (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/50 hover:text-destructive transition-colors duration-200">
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                          </svg>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {group.items.map((item) => (
+              <HistoryRow
+                key={item.id}
+                item={item}
+                active={item.id === activeId}
+                loading={loadingId === item.id}
+                confirming={confirmId === item.id}
+                deleting={deletingId === item.id}
+                isMobile={isMobile}
+                onSelect={() => handleSelect(item)}
+                onDelete={() => handleDeleteClick(item)}
+              />
+            ))}
           </div>
         ))}
       </div>
-      </div>
-    </>
+    </div>
   );
 
-  // Mobile: bottom sheet
   if (isMobile) {
     return (
       <BottomSheet open onClose={onClose} title="Briefing History">
@@ -347,48 +377,69 @@ export default function BriefingHistoryPanel({ activeId, triggerRef, onSelect, o
     );
   }
 
-  // Desktop: fixed position portal
   if (!pos) return null;
 
   return createPortal(
     <div
       ref={panelRef}
-      className="z-[9999] isolate flex flex-col overflow-hidden w-[360px] animate-in fade-in slide-in-from-top-2 duration-250"
+      className="isolate animate-in fade-in slide-in-from-top-2 duration-250"
       style={{
         position: "fixed",
         top: pos.top,
         right: pos.right,
-        maxHeight: `min(420px, calc(100vh - ${pos.top + 16}px))`,
-        background: "linear-gradient(180deg, #24243a 0%, #1e1e2e 100%)",
+        width: 340,
+        maxHeight: `min(460px, calc(100vh - ${pos.top + 16}px))`,
+        zIndex: 9999,
+        display: "flex", flexDirection: "column",
+        background: "radial-gradient(ellipse at top left, #1a1a2a, #0d0d15 70%)",
         borderRadius: 12,
-        border: "1px solid rgba(255,255,255,0.08)",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.55), 0 2px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        boxShadow: "0 30px 80px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.04)",
+        overflow: "hidden",
+        isolation: "isolate",
       }}
     >
       {/* Header */}
       <div
-        className="shrink-0 flex justify-between items-center"
         style={{
-          padding: "14px 20px 12px",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "rgba(255,255,255,0.015)",
+          flexShrink: 0,
+          padding: "14px 18px 12px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          background: `linear-gradient(135deg, ${ACCENT}0e, transparent 60%)`,
         }}
       >
-        <div className="flex items-center gap-2">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-          <span className="text-[11px] tracking-[1.5px] uppercase text-muted-foreground font-semibold">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              width: 22, height: 22, borderRadius: 6,
+              background: `${ACCENT}18`,
+              display: "grid", placeItems: "center",
+            }}
+          >
+            <Clock size={11} color={ACCENT} />
+          </div>
+          <span
+            style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: 2,
+              textTransform: "uppercase", color: ACCENT,
+            }}
+          >
             History
           </span>
         </div>
         {history && (
-          <span className="text-[10px] text-muted-foreground/60 font-medium tabular-nums">
-            {groups.reduce((sum, g) => sum + g.items.length, 0)} briefings
+          <span
+            style={{
+              fontSize: 10, fontWeight: 500, fontVariantNumeric: "tabular-nums",
+              color: "rgba(205,214,244,0.55)",
+            }}
+          >
+            {totalBriefings} briefing{totalBriefings === 1 ? "" : "s"}
           </span>
         )}
       </div>
+
       {content}
     </div>,
     document.body

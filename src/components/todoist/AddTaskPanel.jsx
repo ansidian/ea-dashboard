@@ -763,16 +763,36 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
     [input],
   );
 
-  // Position panel below anchor
+  // Position panel: prefer below anchor, but flip above if it would overflow
+  // and clamp horizontally to keep the whole panel inside the viewport.
   const updatePos = useCallback(() => {
     if (!anchorRef?.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
-    const panelWidth = 340;
+    const panelWidth = 360;
+    // Use measured height if rendered, else a generous estimate.
+    const measuredH = panelRef.current?.offsetHeight;
+    const panelHeight = measuredH && measuredH > 80 ? measuredH : 520;
+    const margin = 12;
+
+    // Horizontal: anchor-aligned, then clamp.
     let left = rect.left;
-    if (left + panelWidth > window.innerWidth - 16) {
-      left = window.innerWidth - panelWidth - 16;
+    if (left + panelWidth > window.innerWidth - margin) {
+      left = Math.max(margin, window.innerWidth - panelWidth - margin);
     }
-    setPos({ top: rect.bottom + 8, left, width: panelWidth });
+    if (left < margin) left = margin;
+
+    // Vertical: below first; if it would overflow, try above; otherwise clamp.
+    let top = rect.bottom + 8;
+    if (top + panelHeight > window.innerHeight - margin) {
+      const aboveTop = rect.top - panelHeight - 8;
+      if (aboveTop > margin) {
+        top = aboveTop;
+      } else {
+        top = Math.max(margin, window.innerHeight - panelHeight - margin);
+      }
+    }
+
+    setPos({ top, left, width: panelWidth });
   }, [anchorRef]);
 
   useEffect(() => {
@@ -783,6 +803,17 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
       window.removeEventListener("resize", updatePos);
       window.removeEventListener("scroll", updatePos, true);
     };
+  }, [updatePos]);
+
+  // Re-anchor whenever the panel's own height changes (autocomplete opens,
+  // error appears, label list grows). Keeps the flip-above behaviour correct
+  // as content shifts.
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(() => updatePos());
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [updatePos]);
 
   // Focus input on mount, flip visible on next frame so the enter
@@ -898,15 +929,17 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
         top: pos.top,
         left: pos.left,
         width: pos.width,
-        background: "#16161e",
-        border: "1px solid rgba(205,214,244,0.12)",
+        maxHeight: "calc(100vh - 24px)",
+        overflowY: "auto",
+        background: "radial-gradient(ellipse at top left, #1a1a2a, #0d0d15 70%)",
+        border: "1px solid rgba(255,255,255,0.06)",
         borderRadius: 12,
-        padding: 16,
+        padding: 0,
         zIndex: 9999,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+        boxShadow: "0 30px 80px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.04)",
         isolation: "isolate",
         overscrollBehavior: "contain",
-        fontFamily: "system-ui, -apple-system, sans-serif",
+        fontFamily: "inherit",
         opacity: active ? 1 : 0,
         transform: active ? "translateY(0)" : "translateY(-6px)",
         transition:
@@ -914,15 +947,59 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
         transformOrigin: "top left",
       }}
     >
-      {/* Task input */}
-      <div style={{ marginBottom: 8, position: "relative" }}>
+      {/* Eyebrow header strip — matches the calendar/inbox redesign language */}
+      <div
+        style={{
+          padding: "12px 16px 10px",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          background: "linear-gradient(135deg, rgba(203,166,218,0.06), transparent 70%)",
+          display: "flex", alignItems: "center", gap: 8,
+        }}
+      >
         <div
           style={{
-            color: "rgba(205,214,244,0.4)",
+            width: 22, height: 22, borderRadius: 6,
+            background: "rgba(203,166,218,0.15)",
+            display: "grid", placeItems: "center",
+          }}
+        >
+          <CornerDownLeft size={11} color="#cba6da" />
+        </div>
+        <div
+          style={{
+            fontSize: 9.5, fontWeight: 700, letterSpacing: 2,
+            textTransform: "uppercase", color: "#cba6da",
+          }}
+        >
+          {isEdit ? "Edit Todoist task" : "New Todoist task"}
+        </div>
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          onClick={requestClose}
+          aria-label="Close"
+          style={{
+            background: "transparent", border: "none", cursor: "pointer",
+            color: "rgba(205,214,244,0.5)", padding: 4, borderRadius: 4,
+            display: "inline-flex", fontFamily: "inherit",
+          }}
+        >
+          <X size={12} />
+        </button>
+      </div>
+
+      <div style={{ padding: 16 }}>
+
+      {/* Task input */}
+      <div style={{ marginBottom: 10, position: "relative" }}>
+        <div
+          style={{
+            color: "rgba(205,214,244,0.55)",
             fontSize: 10,
+            fontWeight: 600,
             textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            marginBottom: 4,
+            letterSpacing: "2.2px",
+            marginBottom: 5,
           }}
         >
           Task
@@ -936,18 +1013,19 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
           placeholder="e.g. Buy groceries tomorrow ! #Shopping @errand"
           style={{
             width: "100%",
-            background: "rgba(205,214,244,0.06)",
+            background: "rgba(255,255,255,0.03)",
             border: input
-              ? "1px solid rgba(99,102,241,0.4)"
-              : "1px solid rgba(205,214,244,0.12)",
+              ? "1px solid rgba(203,166,218,0.4)"
+              : "1px solid rgba(255,255,255,0.06)",
             borderRadius: 8,
             padding: "10px 12px",
             color: "#cdd6f4",
             fontSize: 13,
             outline: "none",
             boxSizing: "border-box",
-            boxShadow: input ? "0 0 0 1px rgba(99,102,241,0.15)" : "none",
+            boxShadow: input ? "0 0 0 1px rgba(203,166,218,0.15)" : "none",
             transition: "border-color 0.2s, box-shadow 0.2s",
+            fontFamily: "inherit",
           }}
         />
         {autocompleteType === "project" && (
@@ -973,23 +1051,25 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
       {/* NLP hint */}
       <div
         style={{
-          color: "rgba(205,214,244,0.25)",
-          fontSize: 11,
-          marginBottom: 8,
+          color: "rgba(205,214,244,0.35)",
+          fontSize: 10.5,
+          marginBottom: 10,
+          lineHeight: 1.5,
         }}
       >
-        Supports: dates, ! or !1-!4, #project, @label
+        Supports dates · <span style={{ color: "#f38ba8" }}>!1-!4</span> priority · <span style={{ color: "#cba6da" }}>#project</span> · <span style={{ color: "#a6e3a1" }}>@label</span>
       </div>
 
       {/* Description */}
       <div style={{ marginBottom: 8 }}>
         <div
           style={{
-            color: "rgba(205,214,244,0.4)",
+            color: "rgba(205,214,244,0.55)",
             fontSize: 10,
+            fontWeight: 600,
             textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            marginBottom: 4,
+            letterSpacing: "2.2px",
+            marginBottom: 5,
           }}
         >
           Description
@@ -1070,11 +1150,12 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
       <div style={{ marginBottom: 8 }}>
         <div
           style={{
-            color: "rgba(205,214,244,0.4)",
+            color: "rgba(205,214,244,0.55)",
             fontSize: 10,
+            fontWeight: 600,
             textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            marginBottom: 4,
+            letterSpacing: "2.2px",
+            marginBottom: 5,
           }}
         >
           Due
@@ -1153,11 +1234,12 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
       <div style={{ marginBottom: 12 }}>
         <div
           style={{
-            color: "rgba(205,214,244,0.4)",
+            color: "rgba(205,214,244,0.55)",
             fontSize: 10,
+            fontWeight: 600,
             textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            marginBottom: 4,
+            letterSpacing: "2.2px",
+            marginBottom: 5,
           }}
         >
           Labels
@@ -1258,31 +1340,38 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          marginTop: 4,
+          paddingTop: 12,
+          borderTop: "1px solid rgba(255,255,255,0.04)",
         }}
       >
-        <div style={{ color: "rgba(205,214,244,0.25)", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
-          <CornerDownLeft size={11} /> Enter to add &middot; Esc to cancel
+        <div style={{ color: "rgba(205,214,244,0.4)", fontSize: 10.5, display: "flex", alignItems: "center", gap: 4 }}>
+          <CornerDownLeft size={10} /> Enter to {isEdit ? "save" : "add"} · Esc to cancel
         </div>
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || submitting}
           style={{
             background:
-              canSubmit && !submitting ? "#6366f1" : "rgba(99,102,241,0.3)",
-            borderRadius: 6,
-            padding: "6px 16px",
-            color: canSubmit && !submitting ? "white" : "rgba(255,255,255,0.4)",
-            fontSize: 12,
+              canSubmit && !submitting ? "rgba(166,227,161,0.14)" : "rgba(255,255,255,0.03)",
+            borderRadius: 8,
+            padding: "7px 14px",
+            color: canSubmit && !submitting ? "#a6e3a1" : "rgba(205,214,244,0.35)",
+            fontSize: 11,
             fontWeight: 600,
+            letterSpacing: 0.2,
             cursor: canSubmit && !submitting ? "pointer" : "default",
-            border: "none",
+            border: `1px solid ${canSubmit && !submitting ? "rgba(166,227,161,0.32)" : "rgba(255,255,255,0.06)"}`,
             transition: "all 0.2s",
+            fontFamily: "inherit",
+            display: "inline-flex", alignItems: "center", gap: 5,
           }}
         >
           {submitting
-            ? isEdit ? "Saving..." : "Adding..."
+            ? isEdit ? "Saving…" : "Adding…"
             : isEdit ? "Save" : "Add task"}
         </button>
+      </div>
       </div>
     </div>,
     document.body,

@@ -1,12 +1,14 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState, forwardRef } from "react";
 import {
-  Sparkles, Flag, CalendarPlus, DollarSign, Zap,
-  AlertCircle, CreditCard, ArrowRight, Inbox,
+  Sparkles, AlertCircle, CreditCard, ArrowRight, Inbox, Plus,
+  Circle, CircleDashed, CheckCircle2, Check, Flag,
 } from "lucide-react";
 import { daysUntil, formatAmount } from "../../../lib/bill-utils";
 import { daysLabel, urgencyForDays, deriveLane } from "../../../lib/redesign-helpers";
-
-const INSIGHT_ICON = { Zap, Flag, CalendarPlus, DollarSign, Sparkles };
+import { resolveInsight } from "../../../lib/insight-resolver";
+import { Icon } from "@/lib/icons.jsx";
+import AddTaskPanel from "../../todoist/AddTaskPanel";
+import { useDashboard } from "../../../context/DashboardContext";
 
 function SectionHeader({ title, subtitle, right }) {
   return (
@@ -46,6 +48,66 @@ function UrgencyPill({ days, accent, compact }) {
   );
 }
 
+const AddTodoistButton = forwardRef(function AddTodoistButton({ accent, open, onClick }, ref) {
+  const [hover, setHover] = useState(false);
+  const active = open || hover;
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: "3px 8px", borderRadius: 6, cursor: "pointer",
+        fontFamily: "inherit", fontSize: 10, fontWeight: 600, letterSpacing: 0.3,
+        background: active ? `${accent}1c` : `${accent}0d`,
+        border: `1px solid ${active ? `${accent}55` : `${accent}28`}`,
+        color: active ? "#fff" : accent,
+        transition: "all 120ms",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Plus size={10} />
+      <span>Todoist</span>
+    </button>
+  );
+});
+
+function DeadlineStatusIcon({ status, size = 12 }) {
+  if (status === "complete") return <CheckCircle2 size={size} color="#a6e3a1" />;
+  if (status === "in_progress") return <CircleDashed size={size} color="#89dceb" />;
+  return <Circle size={size} color="rgba(205,214,244,0.45)" />;
+}
+
+// Todoist priority levels: 1 = urgent, 2 = high, 3 = medium, 4 = low (default).
+// We only surface 1–3 since "no flag" is the expected baseline and rendering
+// every P4 badge would add visual noise without adding information.
+const PRIORITY_COLOR = {
+  1: "#f38ba8",
+  2: "#f9e2af",
+  3: "#89b4fa",
+};
+
+function PriorityFlag({ level, size = 11 }) {
+  const color = PRIORITY_COLOR[level];
+  if (!color) return null;
+  return (
+    <span
+      title={`P${level}`}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: size + 4, height: size + 4, borderRadius: 4,
+        background: `${color}1e`, border: `1px solid ${color}38`,
+        flexShrink: 0,
+      }}
+    >
+      <Flag size={size - 2} color={color} strokeWidth={2.2} />
+    </span>
+  );
+}
+
 function CountBadge({ n }) {
   return (
     <div
@@ -59,13 +121,29 @@ function CountBadge({ n }) {
   );
 }
 
+const AI_GRADIENT = "linear-gradient(120deg, #c88fa0 0%, #c89b85 25%, #8fb8c8 55%, #a89bc4 80%, #c88fa0 100%)";
+
 export function InsightsRail({ accent, insights = [], onJump }) {
+  const [, forceTick] = useReducer((x) => x + 1, 0);
+  useEffect(() => {
+    const id = setInterval(forceTick, 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const now = new Date();
+
   return (
     <div data-sect="insights">
       <SectionHeader title="AI noticed" subtitle="Pattern-level signal across your data" />
       <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
         {insights.slice(0, 5).map((ins, i) => (
-          <InsightRow key={ins.id || i} insight={ins} accent={accent} onJump={onJump} />
+          <InsightRow
+            key={ins.id || i}
+            insight={ins}
+            accent={accent}
+            onJump={onJump}
+            now={now}
+            featured={i === 0}
+          />
         ))}
         {insights.length === 0 && (
           <div
@@ -84,139 +162,245 @@ export function InsightsRail({ accent, insights = [], onJump }) {
   );
 }
 
-function InsightRow({ insight, accent, onJump }) {
-  const severity = insight.tone === "priority" ? "high" : insight.tone === "warn" ? "medium" : "low";
-  const sc = severity === "high" ? "#f38ba8" : severity === "medium" ? "#f9e2af" : accent;
-  const Icon = INSIGHT_ICON[insight.icon] || Sparkles;
-  const title = insight.headline || insight.title;
-  const body = insight.body || insight.description || insight.summary;
-  const action = insight.related?.action || insight.action;
+function InsightRow({ insight, accent, onJump, now, featured }) {
+  const [hovered, setHovered] = useState(false);
+  const text = resolveInsight(insight, now);
+  if (!text) return null;
+
+  const handlers = {
+    role: "button",
+    tabIndex: 0,
+    onClick: () => onJump?.({ kind: "insight", insight }),
+    onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "insight", insight }); },
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => setHovered(false),
+  };
+
+  const innerBg = hovered ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)";
+
+  if (featured) {
+    // Wrap the row in a gradient "outline" — padding:1 creates a 1px band from
+    // the same animated gradient used by the "Extract with Haiku" button.
+    // The inner div needs an opaque fill so the gradient only shows in that
+    // 1px edge (translucent fills let it bleed through the whole card). We
+    // stack an opaque dark base matched to the dashboard's radial backdrop,
+    // then layer the usual translucent card tint on top so the card still
+    // brightens on hover like its neighbours.
+    // Use a linear-gradient() to express the translucent tint as an image
+    // layer — CSS only allows a raw color in the final layer of the shorthand.
+    const featuredInner = `linear-gradient(${innerBg}, ${innerBg}), #121220`;
+    return (
+      <div
+        {...handlers}
+        style={{
+          borderRadius: 10,
+          background: AI_GRADIENT,
+          backgroundSize: "240% 100%",
+          animation: "aiGradientShift 7s ease-in-out infinite",
+          padding: 1,
+          cursor: "pointer", position: "relative",
+        }}
+      >
+        <div
+          style={{
+            padding: "12px 14px", borderRadius: 9,
+            background: featuredInner,
+            display: "flex", alignItems: "flex-start", gap: 10,
+            transition: "background 130ms",
+          }}
+        >
+          <InsightRowContent accent={accent} insight={insight} text={text} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onJump?.({ kind: "insight", insight })}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "insight", insight }); }}
+      {...handlers}
       style={{
         padding: "12px 14px", borderRadius: 10,
-        background: "rgba(255,255,255,0.02)",
-        border: "1px solid rgba(255,255,255,0.05)",
+        background: innerBg,
+        border: hovered ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(255,255,255,0.05)",
         cursor: "pointer", position: "relative",
         transition: "all 130ms",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = "rgba(255,255,255,0.035)";
-        e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "rgba(255,255,255,0.02)";
-        e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)";
+        display: "flex", alignItems: "flex-start", gap: 10,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-        <div
-          style={{
-            width: 20, height: 20, borderRadius: 5,
-            background: `${sc}14`, display: "grid", placeItems: "center",
-          }}
-        >
-          <Icon size={10} color={sc} />
-        </div>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "#cdd6f4", letterSpacing: 0.1 }}>
-          {title}
-        </div>
-      </div>
-      {body && (
-        <div style={{ fontSize: 11.5, color: "rgba(205,214,244,0.6)", lineHeight: 1.45, textWrap: "pretty" }}>
-          {body}
-        </div>
-      )}
-      {action && (
-        <div
-          style={{
-            marginTop: 8, display: "flex", alignItems: "center", gap: 4,
-            fontSize: 10.5, color: accent, fontWeight: 500,
-          }}
-        >
-          {action} <ArrowRight size={10} color={accent} />
-        </div>
-      )}
+      <InsightRowContent accent={accent} insight={insight} text={text} />
     </div>
   );
 }
 
+function InsightRowContent({ accent, insight, text }) {
+  return (
+    <>
+      <div
+        style={{
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          background: `${accent}14`, display: "grid", placeItems: "center",
+          marginTop: 1,
+        }}
+      >
+        <Icon name={insight.icon || "Sparkles"} size={11} color={accent} />
+      </div>
+      <div
+        style={{
+          fontSize: 12, color: "rgba(205,214,244,0.85)",
+          lineHeight: 1.5, textWrap: "pretty", minWidth: 0,
+        }}
+      >
+        {text}
+      </div>
+    </>
+  );
+}
+
 export function DeadlinesRail({ accent, deadlines = [], onJump }) {
+  // Keep completed deadlines visible (strikethrough) only while the day isn't
+  // past — once today has rolled past their due date they belong on the
+  // calendar (which has its own visibility window), not on the dashboard.
+  // Incomplete/in-progress sort first by days-until; completed fall to the end.
   const sorted = useMemo(() => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
     return [...deadlines]
-      .filter((d) => d.status !== "complete")
+      .filter((d) => !(d.status === "complete" && d.due_date && d.due_date < today))
       .map((d) => ({ d, days: daysUntil(d.due_date) }))
       .sort((a, b) => {
+        const aDone = a.d.status === "complete" ? 1 : 0;
+        const bDone = b.d.status === "complete" ? 1 : 0;
+        if (aDone !== bDone) return aDone - bDone;
         if (a.days == null) return 1;
         if (b.days == null) return -1;
         return a.days - b.days;
       })
-      .slice(0, 5);
+      .slice(0, 6);
   }, [deadlines]);
+
+  const openCount = deadlines.filter((d) => d.status !== "complete").length;
+
+  const { handleAddTask } = useDashboard();
+  const [addOpen, setAddOpen] = useState(false);
+  const addBtnRef = useRef(null);
 
   return (
     <div data-sect="deadlines">
-      <SectionHeader title="Deadlines" right={<CountBadge n={deadlines.length} />} />
-      <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
-        {sorted.map(({ d, days }) => (
-          <div
-            key={d.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onJump?.({ kind: "deadline", id: d.id, data: d })}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }); }}
-            style={{
-              display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center",
-              padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
-              cursor: "pointer", transition: "background 150ms",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  marginBottom: 2,
-                }}
-              >
-                {d.title}
-              </div>
-              <div
-                style={{
-                  fontSize: 10.5, color: "rgba(205,214,244,0.45)",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}
-              >
-                {d.class_name || d.source}
-              </div>
-            </div>
-            <UrgencyPill days={days} accent={accent} />
+      <SectionHeader
+        title="Deadlines"
+        right={
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <CountBadge n={openCount} />
+            <AddTodoistButton
+              ref={addBtnRef}
+              accent={accent}
+              open={addOpen}
+              onClick={() => setAddOpen((v) => !v)}
+            />
           </div>
-        ))}
-        {sorted.length === 0 && <EmptyRow icon={AlertCircle} label="No open deadlines" />}
+        }
+      />
+      {addOpen && (
+        <AddTaskPanel
+          anchorRef={addBtnRef}
+          onClose={() => setAddOpen(false)}
+          onTaskAdded={(task) => { handleAddTask(task); setAddOpen(false); }}
+        />
+      )}
+      <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
+        {sorted.map(({ d, days }) => {
+          const isComplete = d.status === "complete";
+          const isTodoist = d.source === "todoist";
+          const showPriority = isTodoist && PRIORITY_COLOR[d.priority];
+          return (
+            <div
+              key={d.id}
+              role="button"
+              tabIndex={0}
+              onClick={(e) => onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget); }}
+              style={{
+                display: "grid",
+                gridTemplateColumns: showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
+                gap: 10, alignItems: "center",
+                padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                cursor: "pointer", transition: "background 150ms",
+                opacity: isComplete ? 0.55 : 1,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              <DeadlineStatusIcon status={d.status} />
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 12, color: "#cdd6f4", fontWeight: 500,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    marginBottom: 2,
+                    textDecoration: isComplete ? "line-through" : "none",
+                    textDecorationColor: "rgba(205,214,244,0.35)",
+                  }}
+                >
+                  {d.title}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10.5, color: "rgba(205,214,244,0.45)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}
+                >
+                  {d.class_name || d.source}
+                </div>
+              </div>
+              {showPriority && <PriorityFlag level={d.priority} />}
+              <UrgencyPill days={days} accent={accent} />
+            </div>
+          );
+        })}
+        {sorted.length === 0 && <EmptyRow icon={AlertCircle} label="No deadlines" />}
       </div>
+    </div>
+  );
+}
+
+function PaidChip() {
+  return (
+    <div
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 3,
+        fontSize: 9.5, fontWeight: 600,
+        padding: "2px 7px", borderRadius: 99,
+        background: "rgba(166,227,161,0.14)",
+        color: "#a6e3a1", letterSpacing: 0.2,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Check size={9} strokeWidth={3} />
+      Paid
     </div>
   );
 }
 
 export function BillsRail({ accent, bills = [], onJump }) {
+  // Show paid AND unpaid upcoming bills. Drop bills whose due date is strictly
+  // in the past (days < 0) — once overdue, they belong on the calendar's
+  // history, not the dashboard. Paid bills that are still upcoming remain
+  // visible with a "Paid" indicator so the user knows they're handled.
   const upcoming = useMemo(() => {
     return [...bills]
-      .filter((b) => !b.paid)
       .map((b) => ({ b, days: daysUntil(b.next_date) }))
-      .sort((a, b) => (a.days ?? 999) - (b.days ?? 999))
+      .filter((x) => x.days == null ? false : x.days >= 0)
+      .sort((a, b) => {
+        // Unpaid first within each day bucket so action items surface.
+        if (a.days !== b.days) return a.days - b.days;
+        const ap = a.b.paid ? 1 : 0;
+        const bp = b.b.paid ? 1 : 0;
+        return ap - bp;
+      })
       .slice(0, 5);
   }, [bills]);
 
   const nextWeekTotal = upcoming
-    .filter((x) => x.days != null && x.days <= 7)
+    .filter((x) => x.days != null && x.days <= 7 && !x.b.paid)
     .reduce((s, x) => s + (x.b.amount || 0), 0);
 
   return (
@@ -231,45 +415,54 @@ export function BillsRail({ accent, bills = [], onJump }) {
         }
       />
       <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
-        {upcoming.map(({ b, days }) => (
-          <div
-            key={b.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onJump?.({ kind: "bill", id: b.id, data: b })}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "bill", id: b.id, data: b }); }}
-            style={{
-              display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center",
-              padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
-              cursor: "pointer", transition: "background 150ms",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-          >
-            <div style={{ minWidth: 0 }}>
+        {upcoming.map(({ b, days }) => {
+          const paid = !!b.paid;
+          return (
+            <div
+              key={b.id}
+              role="button"
+              tabIndex={0}
+              onClick={(e) => onJump?.({ kind: "bill", id: b.id, data: b }, e.currentTarget)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "bill", id: b.id, data: b }, e.currentTarget); }}
+              style={{
+                display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center",
+                padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                cursor: "pointer", transition: "background 150ms",
+                opacity: paid ? 0.72 : 1,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 12, color: "#cdd6f4", fontWeight: 500,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    textDecoration: paid ? "line-through" : "none",
+                    textDecorationColor: "rgba(205,214,244,0.35)",
+                  }}
+                >
+                  {b.name}
+                </div>
+                <div style={{ fontSize: 10.5, color: "rgba(205,214,244,0.45)", marginTop: 2 }}>
+                  {b.payee || ""}
+                </div>
+              </div>
               <div
                 style={{
-                  fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  fontSize: 11.5, fontWeight: 500,
+                  color: paid ? "#a6e3a1" : "#cdd6f4",
+                  fontVariantNumeric: "tabular-nums",
+                  textDecoration: paid ? "line-through" : "none",
+                  textDecorationColor: paid ? "rgba(166,227,161,0.5)" : "transparent",
                 }}
               >
-                {b.name}
+                {formatAmount(b.amount)}
               </div>
-              <div style={{ fontSize: 10.5, color: "rgba(205,214,244,0.45)", marginTop: 2 }}>
-                {b.payee || ""}
-              </div>
+              {paid ? <PaidChip /> : <UrgencyPill days={days} accent={accent} compact />}
             </div>
-            <div
-              style={{
-                fontSize: 11.5, fontWeight: 500, color: "#cdd6f4",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {formatAmount(b.amount)}
-            </div>
-            <UrgencyPill days={days} accent={accent} compact />
-          </div>
-        ))}
+          );
+        })}
         {upcoming.length === 0 && <EmptyRow icon={CreditCard} label="No upcoming bills" />}
       </div>
     </div>

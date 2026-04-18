@@ -263,25 +263,31 @@ function renderDetail({ selectedDay, viewYear, viewMonth, items, data }) {
 }
 
 function renderFooter({ viewYear, viewMonth, computed }) {
+  // Vertical layout for the narrow side-rail context.
   return (
     <div
       style={{
-        marginTop: 12,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "14px 20px",
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.04)",
-        borderRadius: 8,
-        minHeight: 56,
-        boxSizing: "border-box",
+        padding: "12px 14px",
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        borderRadius: 10,
+        display: "flex", flexDirection: "column", gap: 4,
       }}
     >
-      <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
+      <span
+        style={{
+          fontSize: 10, fontWeight: 600, letterSpacing: 2.2, textTransform: "uppercase",
+          color: "rgba(205,214,244,0.5)",
+        }}
+      >
         {new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long" })} total
       </span>
-      <span style={{ fontSize: 16, fontWeight: 600, color: "#cdd6f4" }}>
+      <span
+        style={{
+          fontSize: 22, fontWeight: 500, color: "#fff",
+          fontVariantNumeric: "tabular-nums", letterSpacing: -0.3,
+        }}
+      >
         {formatAmount(computed?.monthTotal || 0)}
       </span>
     </div>
@@ -374,31 +380,32 @@ function UtilityStatusButton({ data, suppressOutsideClick }) {
           onClick={() => setOpen((v) => !v)}
           style={{
             position: "relative",
-            color: open ? "#cba6da" : "rgba(255,255,255,0.5)",
+            color: open ? "#cba6da" : "rgba(205,214,244,0.75)",
             cursor: "pointer",
-            width: 40,
-            height: 40,
+            width: 36,
+            height: 36,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 8,
-            background: open ? "rgba(203,166,218,0.08)" : "rgba(255,255,255,0.04)",
-            border: "none",
+            background: open ? "rgba(203,166,218,0.12)" : "rgba(255,255,255,0.03)",
+            border: `1px solid ${open ? "rgba(203,166,218,0.32)" : "rgba(255,255,255,0.06)"}`,
             fontFamily: "inherit",
+            transition: "all 120ms",
           }}
         >
-          <Zap size={18} strokeWidth={1.8} />
+          <Zap size={15} strokeWidth={1.8} />
           {anyStale && (
             <span
               style={{
                 position: "absolute",
-                top: 8,
-                right: 8,
+                top: -3,
+                right: -3,
                 width: 6,
                 height: 6,
                 borderRadius: "50%",
                 background: "#f97316",
-                boxShadow: "0 0 6px rgba(249,115,22,0.5)",
+                boxShadow: "0 0 6px rgba(249,115,22,0.5), 0 0 0 2px #16161e",
               }}
             />
           )}
@@ -406,8 +413,8 @@ function UtilityStatusButton({ data, suppressOutsideClick }) {
             <span
               style={{
                 position: "absolute",
-                top: 5,
-                right: 5,
+                top: -4,
+                right: -4,
                 width: 10,
                 height: 10,
                 borderRadius: "50%",
@@ -415,10 +422,10 @@ function UtilityStatusButton({ data, suppressOutsideClick }) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 0 6px rgba(166,227,161,0.5)",
+                boxShadow: "0 0 6px rgba(166,227,161,0.5), 0 0 0 2px #16161e",
               }}
             >
-              <Check size={8} color="#16161e" strokeWidth={3.5} />
+              <Check size={7} color="#16161e" strokeWidth={3.5} />
             </span>
           )}
         </button>

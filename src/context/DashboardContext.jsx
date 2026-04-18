@@ -61,41 +61,34 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
   const removeCompletedTask = useCallback((taskId) => {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
     const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
-    // Dashboard list: drop completed tasks entirely (out of sight).
-    setBriefing(prev => {
-      if (!prev) return prev;
-      const updated = JSON.parse(JSON.stringify(prev));
+    // Keep completed tasks visible everywhere (dashboard + calendar): flip
+    // status to "complete" and clear the transient _completing flash flag so
+    // the row renders with the strikethrough/dim treatment.
+    const finalizeComplete = (root) => {
+      if (!root) return root;
+      const updated = JSON.parse(JSON.stringify(root));
       for (const section of ["ctm", "todoist"]) {
         if (!updated[section]?.upcoming) continue;
-        updated[section].upcoming = updated[section].upcoming.filter(
-          t => String(t.id) !== String(taskId) && t.todoist_id !== String(taskId)
-        );
-        let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
-        for (const d of updated[section].upcoming) {
-          if (d.due_date === today) dueToday++;
-          if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
-          if (d.points_possible) totalPoints += d.points_possible;
-        }
-        updated[section].stats = { incomplete: updated[section].upcoming.length, dueToday, dueThisWeek, totalPoints };
-      }
-      return updated;
-    });
-    // Calendar modal: keep completed tasks visible; flip status and clear the
-    // dashboard-only flash flag so they render with the completed treatment.
-    setCalendarDeadlines?.(prev => {
-      if (!prev) return prev;
-      const updated = JSON.parse(JSON.stringify(prev));
-      for (const section of ["ctm", "todoist"]) {
-        const task = updated[section]?.upcoming?.find(
+        const task = updated[section].upcoming.find(
           t => String(t.id) === String(taskId) || t.todoist_id === String(taskId)
         );
         if (task) {
           task.status = "complete";
           delete task._completing;
         }
+        let totalPoints = 0, dueToday = 0, dueThisWeek = 0, incomplete = 0;
+        for (const d of updated[section].upcoming) {
+          if (d.status !== "complete") incomplete++;
+          if (d.due_date === today) dueToday++;
+          if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+          if (d.points_possible) totalPoints += d.points_possible;
+        }
+        updated[section].stats = { incomplete, dueToday, dueThisWeek, totalPoints };
       }
       return updated;
-    });
+    };
+    setBriefing(prev => finalizeComplete(prev));
+    setCalendarDeadlines?.(prev => (prev ? finalizeComplete(prev) : prev));
   }, [setBriefing, setCalendarDeadlines]);
 
   const handleCompleteTask = useCallback(async (taskId) => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Sparkles, Sun, Cloud, CloudSun, CloudRain, Snowflake, CloudFog, Moon, Calendar, Video, Plane, AlertCircle, CreditCard } from "lucide-react";
 import { greetingFor, pacificClock, pacificDate, urgencyForDays, daysLabel } from "../../lib/redesign-helpers";
 import { daysUntil } from "../../lib/bill-utils";
+import { resolveInsight } from "../../lib/insight-resolver";
 
 const WEATHER_ICONS = {
   Sun, Cloud, CloudSun, CloudRain, Snowflake, CloudFog, Moon,
@@ -53,6 +54,7 @@ function callouts({ events, deadlines, bills, now }) {
       title: b.name,
       sub: `$${Number(b.amount || 0).toFixed(2)} · ${b.payee || ""}`,
       urgency: urgencyForDays(days).key,
+      date: b.next_date,
     });
   }
   return out.slice(0, 3);
@@ -95,10 +97,10 @@ export default function DashboardHero({
   const stateOfDay = useMemo(() => {
     const insights = briefing?.aiInsights || [];
     const top = insights[0];
-    const headline = top?.headline || top?.title || briefing?.emails?.summary || "";
+    const headline = top ? resolveInsight(top, new Date(now)) : "";
     const summary = briefing?.emails?.summary || "";
     return { headline, summary };
-  }, [briefing]);
+  }, [briefing, now]);
 
   const theCallouts = useMemo(
     () => callouts({ events, deadlines, bills, now }),
@@ -284,7 +286,7 @@ export default function DashboardHero({
           }}
         >
           {theCallouts.map((c, i) => (
-            <Callout key={i} {...c} accent={accent} onJump={() => onJump?.(c)} />
+            <Callout key={i} {...c} accent={accent} onJump={(anchor) => onJump?.(c, anchor)} />
           ))}
         </div>
       )}
@@ -306,8 +308,8 @@ function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind }) {
     <div
       role="button"
       tabIndex={0}
-      onClick={onJump}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.(); }}
+      onClick={(e) => onJump?.(e.currentTarget)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.(e.currentTarget); }}
       style={{
         padding: "14px 16px", borderRadius: 11,
         background: "rgba(255,255,255,0.025)",

@@ -5,16 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useKeyHold from "../../hooks/useKeyHold";
 import {
   Inbox, Mail, Send, Trash2, Pin, Clock, Check, CheckCheck,
-  RefreshCw, Search, ChevronDown, ChevronRight, Zap, FileText, BellOff,
+  RefreshCw, Search, ChevronLeft, ChevronDown, ChevronRight, Zap, FileText, BellOff,
   Layers, Sparkles, X, Reply, ArrowUp, ArrowDown, Briefcase, GraduationCap,
-  DollarSign, AlertCircle, CreditCard, ExternalLink,
+  DollarSign, AlertCircle, CreditCard, ExternalLink, CalendarClock, MailOpen,
 } from "lucide-react";
 import { deriveLane, LANE, briefingPhaseLabel } from "../../lib/redesign-helpers";
 import { useDashboard } from "../../context/DashboardContext";
 import BillBadge from "../bills/BillBadge";
 import {
-  getEmailBody, peekEmailBody, markEmailAsRead, trashEmail,
-  pinEmail, unpinEmail, snoozeEmail,
+  getEmailBody, peekEmailBody, markEmailAsRead, markEmailAsUnread, trashEmail,
+  pinEmail, unpinEmail, snoozeEmail, markAllEmailsAsRead,
 } from "../../api";
 import { getGmailUrl } from "../../lib/email-links";
 import EmailIframe from "../email/EmailIframe";
@@ -584,7 +584,22 @@ function EmailRow({ email, account, selected, onOpen, density, showPreview, acce
           >
             {email.subject}
           </span>
-          {untriaged && (
+          {untriaged && email._resurfaced && (
+            <span
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase",
+                padding: "2px 6px", borderRadius: 4,
+                color: "#f97316", background: "rgba(249,115,22,0.08)",
+                border: "1px dashed rgba(249,115,22,0.32)",
+              }}
+              title="Resurfaced from snooze"
+            >
+              <Clock size={8} />
+              Snoozed
+            </span>
+          )}
+          {untriaged && !email._resurfaced && (
             <span
               style={{
                 display: "inline-flex", alignItems: "center", gap: 4,
@@ -667,7 +682,10 @@ function InboxList({
       else g[e._lane]?.push(e);
     }
     g.pinned.sort((a, b) => new Date(b.date) - new Date(a.date));
-    g.live.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Use resurfaced_at as the sort key for woken snooze emails so they land
+    // near the top of "live" alongside freshly-arrived mail.
+    const liveKey = (e) => e._resurfacedAt || new Date(e.date).getTime();
+    g.live.sort((a, b) => liveKey(b) - liveKey(a));
     return g;
   }, [emails, pinnedIds]);
 
@@ -769,7 +787,14 @@ function InboxList({
             <Kbd>⌘F</Kbd>
           )}
         </div>
-        <IconBtn onClick={onMarkAllRead} title="Mark all read"><CheckCheck size={11} /></IconBtn>
+        <IconBtn
+          onClick={onMarkAllRead}
+          title="Mark all read"
+          tinted={unreadCount > 0}
+          accent={accent}
+        >
+          <CheckCheck size={11} />
+        </IconBtn>
         <IconBtn onClick={onRefresh} title="Refresh"><RefreshCw size={11} /></IconBtn>
       </div>
 
@@ -990,8 +1015,17 @@ function InboxList({
   );
 }
 
-function IconBtn({ children, onClick, title }) {
+function IconBtn({ children, onClick, title, tinted, accent = "#cba6da" }) {
   const [hover, setHover] = useState(false);
+  const bg = tinted
+    ? (hover ? `${accent}22` : `${accent}14`)
+    : (hover ? "rgba(255,255,255,0.04)" : "transparent");
+  const color = tinted
+    ? accent
+    : (hover ? "rgba(205,214,244,0.9)" : "rgba(205,214,244,0.55)");
+  const border = tinted
+    ? (hover ? `${accent}60` : `${accent}38`)
+    : (hover ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)");
   return (
     <button
       type="button"
@@ -1004,9 +1038,9 @@ function IconBtn({ children, onClick, title }) {
         padding: "6px 10px", borderRadius: 8,
         fontSize: 11, fontWeight: 500, fontFamily: "inherit",
         cursor: "pointer", transition: "all 150ms",
-        background: hover ? "rgba(255,255,255,0.04)" : "transparent",
-        color: hover ? "rgba(205,214,244,0.9)" : "rgba(205,214,244,0.55)",
-        border: `1px solid ${hover ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"}`,
+        background: bg,
+        color,
+        border: `1px solid ${border}`,
         letterSpacing: 0.2, whiteSpace: "nowrap",
       }}
     >
@@ -1031,27 +1065,465 @@ function defaultSnoozeTs() {
   return t.getTime();
 }
 
-// Build snooze presets from "now". Filters out any preset already in the past
-// (e.g. "Tonight 7pm" after 7pm) so the picker never offers a no-op.
-function buildSnoozePresets() {
-  const now = new Date();
-  const nowTs = now.getTime();
-  const tonight7 = new Date(now); tonight7.setHours(19, 0, 0, 0);
-  const tomorrow9 = new Date(now); tomorrow9.setDate(now.getDate() + 1); tomorrow9.setHours(9, 0, 0, 0);
-  const weekendSat = new Date(now);
-  const daysToSat = (6 - now.getDay() + 7) % 7 || 7;
-  weekendSat.setDate(now.getDate() + daysToSat); weekendSat.setHours(9, 0, 0, 0);
-  const nextMon = new Date(now);
-  const daysToMon = (8 - now.getDay()) % 7 || 7;
-  nextMon.setDate(now.getDate() + daysToMon); nextMon.setHours(9, 0, 0, 0);
+// Build snooze presets from a caller-provided nowMs. The caller (SnoozePicker)
+// re-renders this every minute so the "+6h" / "+24h" preview labels stay
+// accurate while the picker is open — no stale times after the user leaves
+// the picker up for a while.
+function buildSnoozePresets(nowMs) {
   return [
-    { label: "1 hour", at: nowTs + 3600_000 },
-    { label: "3 hours", at: nowTs + 3 * 3600_000 },
-    tonight7.getTime() > nowTs ? { label: "Tonight 7pm", at: tonight7.getTime() } : null,
-    { label: "Tomorrow 9am", at: tomorrow9.getTime() },
-    { label: "This weekend", at: weekendSat.getTime() },
-    { label: "Next Monday", at: nextMon.getTime() },
-  ].filter(Boolean);
+    { key: "6h", label: "6 hours", at: nowMs + 6 * 3600_000 },
+    { key: "24h", label: "24 hours", at: nowMs + 24 * 3600_000 },
+  ];
+}
+
+// Canonical timezone for the dashboard — matches the default weather location
+// (El Monte, CA). Anchoring the snooze picker to a fixed TZ avoids drift if
+// the page is rendered from a non-local environment (cloud dev, proxy, etc.).
+const DASHBOARD_TZ = "America/Los_Angeles";
+
+// Read {year, month, day, hour, minute} of an epoch-ms value in DASHBOARD_TZ.
+// Month is 0-indexed to match JS Date conventions. Hour normalizes a rare
+// "24" result some locales emit at midnight with hour12:false.
+function laComponents(epochMs) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: DASHBOARD_TZ,
+    year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "numeric",
+    // h23 forces 00-23 output (instead of 1-24 in some Safari builds). Sidesteps
+    // the rare "24" edge case — but we keep the == 24 guard below as a fallback.
+    hourCycle: "h23",
+  });
+  const out = {};
+  for (const p of fmt.formatToParts(new Date(epochMs))) {
+    if (p.type !== "literal") out[p.type] = Number(p.value);
+  }
+  return {
+    year: out.year,
+    month: out.month - 1,
+    day: out.day,
+    hour: out.hour === 24 ? 0 : out.hour,
+    minute: out.minute,
+  };
+}
+
+// Inverse of laComponents: epoch ms whose DASHBOARD_TZ representation is the
+// given components. Two-pass drift correction handles DST boundaries where a
+// single pass would be off by 60 minutes.
+function epochFromLa(year, month, day, hour, minute) {
+  const target = Date.UTC(year, month, day, hour, minute, 0);
+  let epoch = target;
+  for (let pass = 0; pass < 2; pass++) {
+    const actual = laComponents(epoch);
+    const actualUtc = Date.UTC(actual.year, actual.month, actual.day, actual.hour, actual.minute);
+    const drift = target - actualUtc;
+    if (drift === 0) break;
+    epoch += drift;
+  }
+  return epoch;
+}
+
+// Place `panelW × panelH` relative to `anchorRect` with two-axis flip fallback.
+// Vertical prefers below-anchor, flips to above if it'd overflow, clamps if
+// neither fits. Horizontal prefers left-align with anchor, flips to right-
+// align if overflowing, clamps as a last resort. This keeps the picker on
+// screen whether the anchor is near the top, bottom, or right viewport edges.
+function computePlacement(anchorRect, panelW, panelH) {
+  const margin = 10;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let top = anchorRect.bottom + 6;
+  if (top + panelH > vh - margin) {
+    const above = anchorRect.top - panelH - 6;
+    top = above >= margin ? above : Math.max(margin, vh - panelH - margin);
+  }
+
+  let left = anchorRect.left;
+  if (left + panelW > vw - margin) {
+    const rightAligned = anchorRect.right - panelW;
+    left = rightAligned >= margin ? rightAligned : Math.max(margin, vw - panelW - margin);
+  }
+
+  return { top, left };
+}
+
+// Text-editable hour/minute field with click-through steppers + arrow-key
+// support. While focused, `buffer` holds the user's partial string so typing
+// "1" on the way to "15" doesn't fire onChange(1) mid-edit. When not focused,
+// `buffer` is null and the displayed value is derived from props — no
+// synchronizing effect required. Tab/Shift+Tab navigation is native since
+// the element is a real <input>.
+function NumberField({ value, onChange, min, max, pad = 0, ariaLabel }) {
+  const formatted = pad ? String(value).padStart(pad, "0") : String(value);
+  const [buffer, setBuffer] = useState(null);
+  const focused = buffer !== null;
+  const display = focused ? buffer : formatted;
+
+  const commit = (raw) => {
+    const n = parseInt(String(raw).replace(/[^0-9]/g, ""), 10);
+    if (Number.isFinite(n)) {
+      onChange(Math.max(min, Math.min(max, n)));
+    }
+    // else: invalid input — drop buffer so display snaps back to prop value.
+    setBuffer(null);
+  };
+
+  const inc = () => onChange(value >= max ? min : value + 1);
+  const dec = () => onChange(value <= min ? max : value - 1);
+
+  const stepperBtn = {
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: 28, height: 16, padding: 0,
+    background: "transparent", border: "none", cursor: "pointer",
+    color: "rgba(205,214,244,0.55)", borderRadius: 4,
+    transition: "color 120ms",
+  };
+
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={inc}
+        aria-label={`Increase ${ariaLabel}`}
+        style={stepperBtn}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "#f97316"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(205,214,244,0.55)"; }}
+      >
+        <ArrowUp size={10} />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label={ariaLabel}
+        value={display}
+        onFocus={(e) => { setBuffer(formatted); e.target.select(); }}
+        onBlur={() => commit(buffer ?? formatted)}
+        onChange={(e) => setBuffer(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            inc();
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            dec();
+          }
+        }}
+        style={{
+          width: 28, padding: "2px 0",
+          background: focused ? "rgba(255,255,255,0.06)" : "transparent",
+          border: focused ? "1px solid rgba(249,115,22,0.5)" : "1px solid transparent",
+          borderRadius: 4, outline: "none",
+          textAlign: "center",
+          fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums",
+          color: "rgba(255,255,255,0.96)", fontFamily: "inherit",
+        }}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={dec}
+        aria-label={`Decrease ${ariaLabel}`}
+        style={stepperBtn}
+        onMouseEnter={(e) => { e.currentTarget.style.color = "#f97316"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(205,214,244,0.55)"; }}
+      >
+        <ArrowDown size={10} />
+      </button>
+    </div>
+  );
+}
+
+// Custom calendar + time view rendered inside SnoozePicker when the user
+// chooses "Pick date & time". Draft state is stored as {year, month, day,
+// hour, minute} in DASHBOARD_TZ so display and editing never touch the
+// browser's ambient timezone — we only convert to/from epoch at the edges
+// (default init, confirm).
+function CustomDateTimeView({ nowTick, onSelect, onBack }) {
+  // "today" in dashboard TZ — used to disable past days.
+  const today = useMemo(() => laComponents(nowTick), [nowTick]);
+
+  // Initial draft: current LA time, rounded up to the next whole minute.
+  // Avoids a confusing "+6h" pre-offset — the presets already cover interval
+  // shortcuts — and rounding ensures draftEpoch > nowTick so the Snooze button
+  // is enabled without forcing an adjustment first.
+  const [draft, setDraft] = useState(() => {
+    const nextMinute = Math.ceil(nowTick / 60_000) * 60_000;
+    return laComponents(nextMinute);
+  });
+  // Month being displayed in the calendar (may differ from draft if user
+  // navigated months without yet picking a day).
+  const [viewYear, setViewYear] = useState(draft.year);
+  const [viewMonth, setViewMonth] = useState(draft.month);
+
+  // Build 42 day cells for the calendar — identified by {year, month, day}
+  // rather than JS Date objects so we stay timezone-neutral throughout.
+  const cells = useMemo(() => {
+    // "first of viewMonth" as a UTC instant is fine for day-of-week math
+    // because the DOW of (Y,M,1) is the same in every timezone.
+    const firstDow = new Date(Date.UTC(viewYear, viewMonth, 1)).getUTCDay();
+    const out = [];
+    for (let i = 0; i < 42; i++) {
+      const dayOffset = i - firstDow;
+      const cellDate = new Date(Date.UTC(viewYear, viewMonth, 1 + dayOffset));
+      out.push({
+        year: cellDate.getUTCFullYear(),
+        month: cellDate.getUTCMonth(),
+        day: cellDate.getUTCDate(),
+        inMonth: cellDate.getUTCMonth() === viewMonth,
+      });
+    }
+    return out;
+  }, [viewYear, viewMonth]);
+
+  const changeMonth = (delta) => {
+    const d = new Date(Date.UTC(viewYear, viewMonth + delta, 1));
+    setViewYear(d.getUTCFullYear());
+    setViewMonth(d.getUTCMonth());
+  };
+
+  // Day ordering helper — lexicographic (year, month, day) since we never
+  // compare fractional days.
+  const compareDay = (a, b) =>
+    (a.year - b.year) || (a.month - b.month) || (a.day - b.day);
+
+  const selectDay = (cell) => {
+    if (compareDay(cell, today) < 0) return;
+    setDraft((prev) => ({ ...prev, year: cell.year, month: cell.month, day: cell.day }));
+    if (cell.month !== viewMonth || cell.year !== viewYear) {
+      setViewYear(cell.year);
+      setViewMonth(cell.month);
+    }
+  };
+
+  const hour24 = draft.hour;
+  const hour12 = ((hour24 + 11) % 12) + 1;
+  const minute = draft.minute;
+  const isPm = hour24 >= 12;
+
+  const setHour12 = (h) => {
+    const h24 = isPm ? (h % 12) + 12 : h % 12;
+    setDraft((prev) => ({ ...prev, hour: h24 }));
+  };
+  const setMinuteVal = (m) => {
+    setDraft((prev) => ({ ...prev, minute: Math.max(0, Math.min(59, m)) }));
+  };
+  const setAmPm = (pm) => {
+    const newHour24 = (hour24 % 12) + (pm ? 12 : 0);
+    setDraft((prev) => ({ ...prev, hour: newHour24 }));
+  };
+
+  const draftEpoch = epochFromLa(draft.year, draft.month, draft.day, draft.hour, draft.minute);
+  const confirmDisabled = draftEpoch <= nowTick;
+
+  // Month label in LA — use Intl with explicit timeZone so the label always
+  // matches the components we're editing (avoids "December" in LA displayed
+  // as "January" if rendered under a different ambient TZ near midnight).
+  const monthLabel = new Intl.DateTimeFormat("en-US", {
+    month: "long", year: "numeric",
+    timeZone: DASHBOARD_TZ,
+  }).format(new Date(Date.UTC(viewYear, viewMonth, 15, 12))); // noon-of-15th = DST-safe anchor
+
+  const navBtn = (active = false) => ({
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: 24, height: 24, padding: 0,
+    background: active ? "rgba(255,255,255,0.04)" : "transparent",
+    border: "none", borderRadius: 6, cursor: "pointer",
+    color: "rgba(205,214,244,0.75)", transition: "background 120ms, color 120ms",
+  });
+
+  const segmentBtn = (selected) => ({
+    padding: "4px 10px", fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+    fontFamily: "inherit", border: "none", cursor: "pointer", borderRadius: 6,
+    background: selected ? "#f97316" : "transparent",
+    color: selected ? "#ffffff" : "rgba(205,214,244,0.65)",
+    transition: "background 120ms, color 120ms",
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* Month header */}
+      <div
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "4px 6px 8px",
+        }}
+      >
+        <button
+          type="button" aria-label="Previous month"
+          onClick={() => changeMonth(-1)} style={navBtn()}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.92)" }}>
+          {monthLabel}
+        </div>
+        <button
+          type="button" aria-label="Next month"
+          onClick={() => changeMonth(1)} style={navBtn()}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+
+      {/* Weekday header */}
+      <div
+        style={{
+          display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2,
+          padding: "0 4px 4px",
+        }}
+      >
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+          <div
+            key={i}
+            style={{
+              textAlign: "center", fontSize: 10, fontWeight: 600,
+              color: "rgba(205,214,244,0.4)", letterSpacing: 0.4,
+              padding: "4px 0",
+            }}
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div
+        style={{
+          display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2,
+          padding: "0 4px 8px",
+        }}
+      >
+        {cells.map((cell, i) => {
+          const isPast = compareDay(cell, today) < 0;
+          const isToday = compareDay(cell, today) === 0;
+          const isSelected =
+            cell.year === draft.year && cell.month === draft.month && cell.day === draft.day;
+          const baseColor = !cell.inMonth
+            ? "rgba(205,214,244,0.3)"
+            : isPast
+              ? "rgba(205,214,244,0.22)"
+              : "rgba(205,214,244,0.85)";
+          return (
+            <button
+              key={i}
+              type="button"
+              disabled={isPast}
+              onClick={() => selectDay(cell)}
+              onMouseEnter={(e) => {
+                if (isPast || isSelected) return;
+                e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+              }}
+              onMouseLeave={(e) => {
+                if (isSelected) return;
+                e.currentTarget.style.background = "transparent";
+              }}
+              style={{
+                height: 28, padding: 0,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                fontSize: 12, fontFamily: "inherit", fontWeight: isSelected ? 700 : 500,
+                fontVariantNumeric: "tabular-nums",
+                color: isSelected ? "#ffffff" : baseColor,
+                background: isSelected ? "#f97316" : "transparent",
+                border: isToday && !isSelected ? "1px solid rgba(249,115,22,0.6)" : "1px solid transparent",
+                borderRadius: 6,
+                cursor: isPast ? "not-allowed" : "pointer",
+                transition: "background 120ms, color 120ms",
+              }}
+            >
+              {cell.day}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Time row */}
+      <div
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          padding: "8px 12px", borderTop: "1px solid rgba(255,255,255,0.06)",
+        }}
+      >
+        <NumberField
+          value={hour12} onChange={setHour12} min={1} max={12}
+          ariaLabel="hour"
+        />
+        <div style={{ fontSize: 14, fontWeight: 600, color: "rgba(205,214,244,0.5)" }}>:</div>
+        <NumberField
+          value={minute} onChange={setMinuteVal} min={0} max={59} pad={2}
+          ariaLabel="minute"
+        />
+        <div
+          style={{
+            display: "inline-flex", marginLeft: 4, padding: 2, gap: 2,
+            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: 8,
+          }}
+        >
+          <button type="button" onClick={() => setAmPm(false)} style={segmentBtn(!isPm)}>AM</button>
+          <button type="button" onClick={() => setAmPm(true)} style={segmentBtn(isPm)}>PM</button>
+        </div>
+      </div>
+
+      {/* Action bar */}
+      <div
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "8px 10px", borderTop: "1px solid rgba(255,255,255,0.06)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onBack}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "6px 10px", borderRadius: 8,
+            background: "transparent", border: "1px solid rgba(255,255,255,0.08)",
+            color: "rgba(205,214,244,0.75)", fontSize: 11, fontWeight: 600,
+            fontFamily: "inherit", cursor: "pointer",
+            transition: "background 120ms",
+          }}
+        >
+          <ChevronLeft size={12} />
+          Back
+        </button>
+        <button
+          type="button"
+          disabled={confirmDisabled}
+          onClick={() => onSelect(draftEpoch)}
+          style={{
+            padding: "6px 14px", borderRadius: 8,
+            background: confirmDisabled ? "rgba(249,115,22,0.2)" : "#f97316",
+            border: confirmDisabled ? "1px solid rgba(249,115,22,0.25)" : "1px solid #f97316",
+            color: confirmDisabled ? "rgba(255,255,255,0.5)" : "#ffffff",
+            fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
+            fontFamily: "inherit",
+            cursor: confirmDisabled ? "not-allowed" : "pointer",
+            transition: "background 120ms, transform 120ms",
+          }}
+          onMouseEnter={(e) => {
+            if (confirmDisabled) return;
+            e.currentTarget.style.background = "#fb923c";
+          }}
+          onMouseLeave={(e) => {
+            if (confirmDisabled) return;
+            e.currentTarget.style.background = "#f97316";
+          }}
+        >
+          Snooze
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // Floating picker anchored to the Snooze button. Follows the project's
@@ -1061,16 +1533,27 @@ function buildSnoozePresets() {
 function SnoozePicker({ anchorRef, onSelect, onClose }) {
   const panelRef = useRef(null);
   const [pos, setPos] = useState(null);
+  // View state: "presets" shows quick-picks, "custom" shows the calendar +
+  // time view. Swapping views changes panel dimensions, so the placement
+  // effect re-runs (view is in its dep array) to keep overflow handling sound.
+  const [view, setView] = useState("presets");
+  // nowTick drives live-updating preview text on "+6h" / "+24h" rows so the
+  // labels stay accurate while the picker sits open. 60s cadence is coarse
+  // enough to avoid needless renders and fine enough to feel fresh.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     function updatePos() {
       const r = anchorRef.current?.getBoundingClientRect();
       if (!r) return;
-      const panelW = 220, panelH = 260;
-      setPos({
-        top: Math.min(r.bottom + 6, window.innerHeight - panelH - 10),
-        left: Math.max(10, Math.min(r.left, window.innerWidth - panelW - 10)),
-      });
+      const panelW = view === "custom" ? 300 : 240;
+      const panelH = view === "custom" ? 400 : 180;
+      setPos({ ...computePlacement(r, panelW, panelH), panelW, panelH });
     }
     updatePos();
     window.addEventListener("scroll", updatePos, true);
@@ -1079,7 +1562,7 @@ function SnoozePicker({ anchorRef, onSelect, onClose }) {
       window.removeEventListener("scroll", updatePos, true);
       window.removeEventListener("resize", updatePos);
     };
-  }, [anchorRef]);
+  }, [anchorRef, view]);
 
   useEffect(() => {
     function onDown(e) {
@@ -1104,7 +1587,9 @@ function SnoozePicker({ anchorRef, onSelect, onClose }) {
   }, [pos]);
 
   if (!pos) return null;
-  const presets = buildSnoozePresets();
+  const presets = buildSnoozePresets(nowTick);
+
+  const handlePick = (ts) => { onSelect(ts); onClose(); };
 
   return createPortal(
     <div
@@ -1112,47 +1597,84 @@ function SnoozePicker({ anchorRef, onSelect, onClose }) {
       role="menu"
       style={{
         position: "fixed", top: pos.top, left: pos.left,
-        width: 220, maxHeight: 260, overflowY: "auto",
+        width: pos.panelW,
+        // Allow shrinkage on very small viewports — the placement clamp keeps
+        // us on screen but the content may need to scroll inside the panel.
+        maxHeight: `min(${pos.panelH}px, calc(100vh - 20px))`,
+        overflowY: "auto",
         overscrollBehavior: "contain", isolation: "isolate",
         background: "#16161e",
         border: "1px solid rgba(255,255,255,0.08)",
         borderRadius: 8,
         boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
-        padding: 6,
+        padding: view === "custom" ? 8 : 6,
         zIndex: 9999,
         fontFamily: "inherit",
       }}
     >
-      <div
-        style={{
-          padding: "6px 10px 8px",
-          fontSize: 10, color: "rgba(205,214,244,0.4)",
-          textTransform: "uppercase", letterSpacing: 0.5,
-        }}
-      >
-        Snooze until
-      </div>
-      {presets.map((p) => (
-        <button
-          key={p.label}
-          type="button"
-          onClick={() => { onSelect(p.at); onClose(); }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            width: "100%", padding: "8px 10px",
-            background: "transparent", border: "none", cursor: "pointer",
-            color: "rgba(205,214,244,0.85)", fontSize: 12, fontFamily: "inherit",
-            borderRadius: 6, textAlign: "left",
-          }}
-        >
-          <span>{p.label}</span>
-          <span style={{ fontSize: 10, color: "rgba(205,214,244,0.4)" }}>
-            {new Date(p.at).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}
-          </span>
-        </button>
-      ))}
+      {view === "presets" ? (
+        <>
+          <div
+            style={{
+              padding: "6px 10px 8px",
+              fontSize: 10, color: "rgba(205,214,244,0.4)",
+              textTransform: "uppercase", letterSpacing: 0.5,
+            }}
+          >
+            Snooze until
+          </div>
+          {presets.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => handlePick(p.at)}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                width: "100%", padding: "8px 10px",
+                background: "transparent", border: "none", cursor: "pointer",
+                color: "rgba(205,214,244,0.85)", fontSize: 12, fontFamily: "inherit",
+                borderRadius: 6, textAlign: "left",
+              }}
+            >
+              <span>{p.label}</span>
+              <span style={{ fontSize: 10, color: "rgba(205,214,244,0.4)" }}>
+                {new Date(p.at).toLocaleString([], {
+                  weekday: "short", hour: "numeric", minute: "2-digit",
+                  timeZone: DASHBOARD_TZ,
+                })}
+              </span>
+            </button>
+          ))}
+          <div
+            style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "6px 8px" }}
+            role="separator"
+          />
+          <button
+            type="button"
+            onClick={() => setView("custom")}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              width: "100%", padding: "8px 10px",
+              background: "transparent", border: "none", cursor: "pointer",
+              color: "rgba(205,214,244,0.85)", fontSize: 12, fontFamily: "inherit",
+              borderRadius: 6, textAlign: "left",
+            }}
+          >
+            <CalendarClock size={12} color="rgba(205,214,244,0.6)" />
+            <span>Pick date &amp; time</span>
+          </button>
+        </>
+      ) : (
+        <CustomDateTimeView
+          nowTick={nowTick}
+          onSelect={handlePick}
+          onBack={() => setView("presets")}
+        />
+      )}
     </div>,
     document.body,
   );
@@ -1500,6 +2022,13 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
             accent="#a6e3a1"
           />
         )}
+        <QuickAction
+          icon={email.read ? Mail : MailOpen}
+          label={email.read ? "Mark unread" : "Mark read"}
+          hint="U"
+          onClick={() => onAction("toggle-read")}
+          accent={accent}
+        />
         <QuickAction
           icon={Pin}
           label={pinned ? "Pinned" : "Pin"}
@@ -1876,6 +2405,7 @@ export default function InboxView({
   pinnedIds,
   pinnedSnapshots = [],
   snoozedEntries = [],
+  resurfacedEntries = [],
   onOpenDashboard,
   onRefresh,
   seedSelectedId,
@@ -1900,6 +2430,11 @@ export default function InboxView({
   const [snoozedMap, setSnoozedMap] = useState(
     () => new Map((snoozedEntries || []).map((s) => [s.uid, s.until_ts])),
   );
+  // Resurfaced snapshots (snooze woke up → inject as fresh live/untriaged).
+  // Keyed by uid; server cleanup TTL bounds the size of this map.
+  const [resurfacedMap, setResurfacedMap] = useState(
+    () => new Map((resurfacedEntries || []).map((r) => [r.uid, r])),
+  );
   // Ticks every 30s so snoozes expiring mid-session re-enter the list without
   // requiring a full live refresh.
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -1915,7 +2450,7 @@ export default function InboxView({
   // Pay-bill drawer open/close. Lifted here (instead of inside Reader) so the
   // inbox list can shrink in coordination with the drawer sliding in.
   const [billOpen, setBillOpen] = useState(false);
-  const { markEmailRead, markAccountEmailsRead, handleDismiss } = useDashboard();
+  const { markEmailRead, markEmailUnread, handleDismiss } = useDashboard();
 
   // Sync external seedSelectedId and pinnedIds changes into local state.
   // React 19 flags setState-in-effect; these are driven entirely by props
@@ -1936,6 +2471,10 @@ export default function InboxView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSnoozedMap(new Map((snoozedEntries || []).map((s) => [s.uid, s.until_ts])));
   }, [snoozedEntries]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setResurfacedMap(new Map((resurfacedEntries || []).map((r) => [r.uid, r])));
+  }, [resurfacedEntries]);
 
   const accountsById = useMemo(() => {
     const map = {};
@@ -1950,6 +2489,11 @@ export default function InboxView({
     const seenUids = new Set();
     const pushEmail = (entry) => {
       const key = entry.uid || entry.id;
+      // Skip if we've already pushed this id. Important is iterated before
+      // noise, so important wins (it has full email data; noise is sparse).
+      // This also defends against the briefing JSON containing the same email
+      // in both important[] and noise[] arrays.
+      if (key && seenUids.has(key)) return;
       if (key) seenUids.add(key);
       out.push(entry);
     };
@@ -1988,6 +2532,11 @@ export default function InboxView({
     for (const e of liveEmails) {
       if (liveTrashedUids.has(e.uid)) continue;
       const acc = synthAccount(e);
+      // Merge the resurfaced provenance if this uid is also in resurfacedMap.
+      // Gmail's live-poll (`newer_than:Nh`) often re-fetches recently-woken
+      // emails on its own; without this, the live entry wins dedup and the
+      // Snoozed badge / wake-time sort would be lost.
+      const resurfacedHit = resurfacedMap.get(e.uid);
       pushEmail({
         ...e,
         id: e.id || e.uid,
@@ -1999,6 +2548,38 @@ export default function InboxView({
         _lane: null,
         _untriaged: true,
         _live: true,
+        ...(resurfacedHit ? { _resurfaced: true, _resurfacedAt: resurfacedHit.resurfaced_at } : null),
+      });
+    }
+    // Merge resurfaced snapshots (snooze woke up). Gmail's live-poll filter
+    // (`newer_than:Nh`) uses the original internalDate so these wouldn't reach
+    // the inbox on their own — we inject them here with the live/untriaged
+    // treatment and tag them _resurfaced so the row can show a badge.
+    for (const entry of resurfacedMap.values()) {
+      const snap = entry.snapshot;
+      const key = snap?.uid || snap?.id;
+      if (!key || seenUids.has(key)) continue;
+      if (liveTrashedUids.has(key)) continue;
+      const acc = synthAccount(snap);
+      pushEmail({
+        ...snap,
+        id: snap.id || snap.uid,
+        preview: snap.preview || snap.body_preview || "",
+        fromEmail: snap.fromEmail || snap.from_email,
+        // `entry.read` is Gmail's current UNREAD state as of this poll
+        // (server-side probe). Union with `liveReadUids` so a read triggered
+        // within the session wins immediately without waiting for the next poll.
+        read: liveReadUids.has(key) || entry.read === true,
+        _accountKey: acc.id || acc.name,
+        _account: acc,
+        _lane: null,
+        _untriaged: true,
+        _live: true,
+        _resurfaced: true,
+        _resurfacedAt: entry.resurfaced_at,
+        // Preserve date for "resurfaced at" display via a separate field; the
+        // email's original date stays on `date` so sorting-by-age still works
+        // if the user prefers that.
       });
     }
     // Merge pin snapshots for emails that have aged out of the briefing/live
@@ -2021,7 +2602,7 @@ export default function InboxView({
       });
     }
     return out;
-  }, [emailAccounts, liveEmails, liveReadUids, liveTrashedUids, pinnedSnapshotMap]);
+  }, [emailAccounts, liveEmails, liveReadUids, liveTrashedUids, pinnedSnapshotMap, resurfacedMap]);
 
   const visibleEmails = useMemo(() => {
     return flatEmails.filter((e) => {
@@ -2044,7 +2625,11 @@ export default function InboxView({
       if (a._untriaged && !b._untriaged) return -1;
       if (!a._untriaged && b._untriaged) return 1;
       if (order[a._lane] !== order[b._lane]) return (order[a._lane] ?? 3) - (order[b._lane] ?? 3);
-      return new Date(b.date) - new Date(a.date);
+      // Resurfaced emails sort by their wake time (not original delivery) so
+      // they rank among other live/untriaged emails by recency of arrival.
+      const aKey = a._resurfacedAt || new Date(a.date).getTime();
+      const bKey = b._resurfacedAt || new Date(b.date).getTime();
+      return bKey - aKey;
     });
   }, [flatEmails, accountId, lane, search, snoozedMap, nowTick, pinnedSet]);
 
@@ -2100,14 +2685,22 @@ export default function InboxView({
     setBillOpen(false);
   }, [selectedId]);
 
+  // Auto-read the currently-selected email after a 500ms dwell. Keyed only on
+  // `selectedId`: including `flatEmails` would let a within-selection state
+  // change (e.g., the user toggling this row back to unread) reschedule the
+  // timer and flip it right back to read. Deselect → re-select of the same id
+  // still re-triggers auto-read because React treats it as a fresh run.
+  const flatEmailsRef = useRef(flatEmails);
+  useEffect(() => { flatEmailsRef.current = flatEmails; }, [flatEmails]);
+  const markEmailReadRef = useRef(markEmailRead);
+  useEffect(() => { markEmailReadRef.current = markEmailRead; }, [markEmailRead]);
+
   useEffect(() => {
     if (!selectedId) return undefined;
-    const email = flatEmails.find((e) => e.id === selectedId);
-    if (!email) return undefined;
     const t = setTimeout(() => {
+      const email = flatEmailsRef.current.find((e) => e.id === selectedId);
+      if (!email || email.read) return;
       if (email._live) {
-        // Live emails aren't in the briefing — mark on Gmail/iCloud directly
-        // and mirror locally so the row dims without waiting for the next poll.
         setLiveReadUids((prev) => {
           if (prev.has(email.uid)) return prev;
           const next = new Set(prev);
@@ -2116,11 +2709,45 @@ export default function InboxView({
         });
         markEmailAsRead(email.uid).catch(() => {});
       } else {
-        markEmailRead(selectedId);
+        // Both calls matter: the context update flips the row locally without
+        // waiting for a roundtrip; the API call syncs Gmail/iCloud and
+        // persists the read flag into the stored briefing JSON so a page
+        // reload doesn't revert the row to its briefing-generation state.
+        markEmailReadRef.current(selectedId);
+        if (email.uid) markEmailAsRead(email.uid).catch(() => {});
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [selectedId, flatEmails, markEmailRead]);
+  }, [selectedId]);
+
+  // Mark all currently-visible unread emails as read. Covers three paths the
+  // briefing-only `markAccountEmailsRead` doesn't touch:
+  // - live (untriaged) emails → mirrored locally via liveReadUids
+  // - resurfaced snapshots → same, so the row dims without waiting for a poll
+  // - briefing emails → context handles local state; we still call Gmail so
+  //   the next briefing regen matches reality
+  // One batched server call per path keeps the Gmail API traffic bounded even
+  // when the inbox is huge.
+  const markAllVisibleRead = useCallback(() => {
+    const unread = visibleEmails.filter((e) => !e.read);
+    if (unread.length === 0) return;
+    const liveUids = [];
+    for (const e of unread) {
+      if (e._live && e.uid) liveUids.push(e.uid);
+      else markEmailRead(e.id || e.uid);
+    }
+    if (liveUids.length) {
+      setLiveReadUids((prev) => {
+        const next = new Set(prev);
+        for (const uid of liveUids) next.add(uid);
+        return next;
+      });
+    }
+    const allUids = unread.map((e) => e.uid).filter(Boolean);
+    if (allUids.length) {
+      markAllEmailsAsRead(allUids).catch(() => {});
+    }
+  }, [visibleEmails, markEmailRead]);
 
   const moveBy = useCallback((dir) => {
     const idx = visibleEmails.findIndex((e) => e.id === selectedId);
@@ -2206,6 +2833,25 @@ export default function InboxView({
         });
       });
       moveBy(1);
+    } else if (kind === "toggle-read") {
+      const markingUnread = !!selectedEmail.read;
+      if (selectedEmail._live) {
+        setLiveReadUids((prev) => {
+          const n = new Set(prev);
+          if (markingUnread) n.delete(uid); else n.add(uid);
+          return n;
+        });
+        const call = markingUnread ? markEmailAsUnread : markEmailAsRead;
+        call(uid).catch(() => {});
+      } else {
+        if (markingUnread) {
+          markEmailUnread(id);
+          markEmailAsUnread(uid).catch(() => {});
+        } else {
+          markEmailRead(id);
+          markEmailAsRead(uid).catch(() => {});
+        }
+      }
     } else if (kind === "pin") {
       const key = uid;
       const isPinned = pinnedSet.has(key) || pinnedSet.has(id);
@@ -2236,7 +2882,7 @@ export default function InboxView({
         });
       }
     }
-  }, [selectedEmail, moveBy, handleDismiss, pinnedSet, buildEmailSnapshot]);
+  }, [selectedEmail, moveBy, handleDismiss, pinnedSet, buildEmailSnapshot, markEmailRead, markEmailUnread]);
 
   useEffect(() => {
     function onKey(e) {
@@ -2276,8 +2922,12 @@ export default function InboxView({
   const layout = customize.inboxLayout;
   const grouping = customize.inboxGrouping;
 
+  // briefingGeneratedAt is SQLite's `datetime('now')` output — a naive UTC
+  // string with no zone marker. Chrome parses that as local time, which makes
+  // `timeSince` return "just now" for hours-old briefings. Match the Z-suffix
+  // normalization Dashboard.jsx uses so the label reflects real elapsed time.
   const briefingAgoLabel = briefingGeneratedAt
-    ? `Triaged ${timeSince(briefingGeneratedAt)}`
+    ? `Triaged ${timeSince(briefingGeneratedAt.endsWith("Z") ? briefingGeneratedAt : `${briefingGeneratedAt}Z`)}`
     : null;
 
   return (
@@ -2343,7 +2993,7 @@ export default function InboxView({
               pinnedIds={pinnedSet}
               searchQuery={search}
               onSearchChange={setSearch}
-              onMarkAllRead={markAccountEmailsRead}
+              onMarkAllRead={markAllVisibleRead}
               onRefresh={onRefresh}
               totalCount={visibleEmails.length}
               unreadCount={unreadInView}

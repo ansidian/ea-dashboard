@@ -14,7 +14,7 @@ function groupByCategory(scenarios) {
 }
 
 export default function DevPanel() {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [scenarios, setScenarios] = useState([]);
   const [selected, setSelected] = useState(() => {
     const param = new URLSearchParams(window.location.search).get("scenario");

@@ -161,16 +161,22 @@ export default function DashboardHeader({
                 </div>
               </div>
               <button
-                className="bg-[#cba6da] text-[#1e1e2e] border-none rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer transition-all hover:bg-[#d4b3e2] hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed font-[inherit]"
+                className="bg-[#cba6da] text-[#1e1e2e] border-none rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer transition-all hover:bg-[#d4b3e2] hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(203,166,218,0.35)] active:translate-y-0 active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed font-[inherit] inline-flex items-center gap-1.5"
                 onClick={onGenerate}
               >
                 Generate
+                <kbd className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded text-[9.5px] font-mono font-medium bg-black/20 text-[#1e1e2e]/70 border border-black/10">
+                  R
+                </kbd>
               </button>
               <button
-                className="bg-white/[0.06] text-muted-foreground border border-white/10 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all font-[inherit] hover:bg-white/10 hover:text-foreground/80 hover:border-white/20"
+                className="bg-white/[0.06] text-muted-foreground border border-white/10 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-all font-[inherit] hover:bg-white/10 hover:text-foreground/80 hover:border-white/20 hover:-translate-y-px active:translate-y-0 inline-flex items-center gap-1.5"
                 onClick={() => refreshHold.setShowConfirm(false)}
               >
                 Cancel
+                <kbd className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded text-[9.5px] font-mono font-medium bg-white/5 text-muted-foreground/70 border border-white/10">
+                  Esc
+                </kbd>
               </button>
             </div>
           </motion.div>

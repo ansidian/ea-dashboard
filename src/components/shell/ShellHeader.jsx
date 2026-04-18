@@ -287,29 +287,8 @@ export default function ShellHeader({
         >
           <Sparkles size={13} color={accent} />
           Generate a fresh AI briefing?
-          <button
-            type="button"
-            onClick={onFullGenerate}
-            style={{
-              padding: "5px 10px", borderRadius: 6, border: "none",
-              background: accent, color: "#0b0b13",
-              fontFamily: "inherit", fontWeight: 600, fontSize: 11, cursor: "pointer",
-            }}
-          >
-            Generate
-          </button>
-          <button
-            type="button"
-            onClick={() => refreshHold?.setShowConfirm?.(false)}
-            style={{
-              padding: "5px 10px", borderRadius: 6,
-              border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
-              color: "rgba(205,214,244,0.7)",
-              fontFamily: "inherit", fontSize: 11, cursor: "pointer",
-            }}
-          >
-            Cancel
-          </button>
+          <ConfirmGenerateButton accent={accent} onClick={onFullGenerate} />
+          <ConfirmCancelButton onClick={() => refreshHold?.setShowConfirm?.(false)} />
         </div>
       )}
     </div>
@@ -362,5 +341,63 @@ function MenuLink({ icon, label, to, onClick }) {
       <Icon size={12} color="rgba(205,214,244,0.55)" />
       <span style={{ flex: 1 }}>{label}</span>
     </Link>
+  );
+}
+
+// Confirmation buttons for the "Generate a fresh AI briefing?" toast. Hover
+// raises them 1px with a tinted glow; active cancels the lift. The accent is
+// threaded in so the Generate button matches whichever accent the shell is
+// currently using (defaults to the dashboard's lavender).
+function ConfirmGenerateButton({ accent, onClick }) {
+  const [hover, setHover] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const lifted = hover && !pressed;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => { setHover(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      style={{
+        padding: "5px 10px", borderRadius: 6, border: "none",
+        background: accent, color: "#0b0b13",
+        fontFamily: "inherit", fontWeight: 600, fontSize: 11, cursor: "pointer",
+        transform: lifted ? "translateY(-1px)" : "translateY(0)",
+        boxShadow: lifted ? `0 6px 18px ${accent}59` : "none",
+        filter: lifted ? "brightness(1.06)" : "none",
+        transition: "transform 150ms, box-shadow 150ms, filter 150ms",
+      }}
+    >
+      Generate
+    </button>
+  );
+}
+
+function ConfirmCancelButton({ onClick }) {
+  const [hover, setHover] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const lifted = hover && !pressed;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => { setHover(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      style={{
+        padding: "5px 10px", borderRadius: 6,
+        border: `1px solid ${hover ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.1)"}`,
+        background: hover ? "rgba(255,255,255,0.06)" : "transparent",
+        color: hover ? "rgba(205,214,244,0.9)" : "rgba(205,214,244,0.7)",
+        fontFamily: "inherit", fontSize: 11, cursor: "pointer",
+        transform: lifted ? "translateY(-1px)" : "translateY(0)",
+        transition: "transform 150ms, background 150ms, border-color 150ms, color 150ms",
+      }}
+    >
+      Cancel
+    </button>
   );
 }

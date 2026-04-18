@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, useCallback } from "react";
-import { suspendService, getCalendarDeadlines, deleteBriefing } from "../api";
+import { getCalendarDeadlines, deleteBriefing } from "../api";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import ErrorState from "../components/layout/ErrorState";
 import RefreshBanner from "../components/layout/RefreshBanner";
@@ -11,8 +11,8 @@ import CustomizePanel from "../components/shell/CustomizePanel";
 import DashboardHero from "../components/dashboard/DashboardHero";
 import TodayTimeline from "../components/dashboard/TodayTimeline";
 import { InsightsRail, DeadlinesRail, BillsRail, InboxPeek } from "../components/dashboard/rails/Rails";
+import DeadlineDetailPopover from "../components/dashboard/DeadlineDetailPopover";
 import InboxView from "../components/inbox/InboxView";
-import EmailReaderOverlay from "../components/email/EmailReaderOverlay";
 import { Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 import { DashboardProvider, useDashboard } from "../context/DashboardContext";
@@ -49,31 +49,21 @@ export default function Dashboard() {
     onSilentRefresh: liveData.refreshNow,
   });
 
-  const [suspending, setSuspending] = useState(false);
-  const [suspended, setSuspended] = useState(false);
-
   const handleFullGeneration = useCallback(async () => {
     refreshHold.setShowConfirm(false);
     bd.handleFullGeneration();
   }, [refreshHold, bd]);
 
-  const handleSuspend = useCallback(async () => {
-    setSuspending(true);
-    try {
-      await suspendService();
-      setSuspended(true);
-    } catch (err) {
-      console.error("[EA] Suspend failed:", err.message);
-    } finally {
-      setSuspending(false);
-    }
-  }, []);
-
-  // R hotkey (same as before)
+  // R hotkey (same as before). Also wire Escape to dismiss the generate
+  // confirmation so the user can back out without mouse.
   useEffect(() => {
     function onKeyDown(e) {
-      if (e.repeat || e.key !== "r" || e.target.tagName === "INPUT" ||
-          e.target.tagName === "TEXTAREA") return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.key === "Escape" && refreshHold.showConfirm) {
+        refreshHold.setShowConfirm(false);
+        return;
+      }
+      if (e.repeat || e.key !== "r") return;
       if (bd.refreshing || bd.generating) return;
       if (refreshHold.showConfirm) { handleFullGeneration(); return; }
       refreshHold.startHold();
@@ -168,9 +158,6 @@ export default function Dashboard() {
         liveData={liveData}
         refreshHold={refreshHold}
         handleFullGeneration={handleFullGeneration}
-        handleSuspend={handleSuspend}
-        suspending={suspending}
-        suspended={suspended}
         historyOpen={historyOpen}
         setHistoryOpen={setHistoryOpen}
         historyTriggerRef={historyTriggerRef}
@@ -218,10 +205,12 @@ function RedesignShell({
     } catch { return "bills"; }
   });
   const showBills = !!liveData.actualConfigured;
-  const openCalendar = (viewKey) => {
+  const [calendarFocus, setCalendarFocus] = useState(null);
+  const openCalendar = (viewKey, focusDate = null) => {
     const resolved = viewKey === "bills" && !showBills ? "deadlines" : viewKey || calendarView;
     setCalendarView(resolved);
     try { localStorage.setItem("calendar:lastView", resolved); } catch { /* ignore */ }
+    setCalendarFocus(focusDate || null);
     setCalendarOpen(true);
     if (resolved === "deadlines") loadCalendarDeadlines();
   };
@@ -268,8 +257,8 @@ function RedesignShell({
     setTab("inbox");
   }, []);
 
-  // Simple in-dashboard email reader overlay for peek clicks
-  const [peekedEmail, setPeekedEmail] = useState(null);
+  // Deadline detail popover (anchored to the clicked row)
+  const [deadlinePopover, setDeadlinePopover] = useState(null);
 
   const handlePaletteAction = useCallback((item) => {
     if (item.kind === "tab") setTab(item.payload);
@@ -327,7 +316,13 @@ function RedesignShell({
             accent={accent}
             viewingPast={bd.viewingPast}
             onOpenEmail={openEmailInInbox}
-            onPeekEmail={setPeekedEmail}
+            onOpenDeadline={(task, anchor) => {
+              setDeadlinePopover((prev) => {
+                if (prev && String(prev.task?.id) === String(task?.id)) return null;
+                return { task, anchor };
+              });
+            }}
+            onOpenBillsCalendar={(date) => openCalendar("bills", date || null)}
             onJumpSection={jumpToSection}
           />
         ) : (
@@ -337,7 +332,11 @@ function RedesignShell({
             emailAccounts={briefing?.emails?.accounts || []}
             briefingSummary={briefing?.emails?.summary}
             briefingGeneratedAt={liveData.briefingGeneratedAt}
+            liveEmails={liveData.liveEmails}
             pinnedIds={liveData.pinnedIds}
+            pinnedSnapshots={liveData.pinnedSnapshots}
+            snoozedEntries={liveData.snoozedEntries}
+            resurfacedEntries={liveData.resurfacedEntries}
             onOpenDashboard={() => setTab("dashboard")}
             onRefresh={() => { bd.handleQuickRefresh?.(); liveData.refreshNow?.(); }}
             seedSelectedId={inboxSeedId}
@@ -345,12 +344,12 @@ function RedesignShell({
         )}
       </div>
 
-      {peekedEmail && (
-        <EmailReaderOverlay
-          open={!!peekedEmail}
-          email={peekedEmail}
-          onClose={() => setPeekedEmail(null)}
-          navigation={null}
+      {deadlinePopover && (
+        <DeadlineDetailPopover
+          task={deadlinePopover.task}
+          anchor={deadlinePopover.anchor}
+          accent={accent}
+          onClose={() => setDeadlinePopover(null)}
         />
       )}
 
@@ -383,6 +382,7 @@ function RedesignShell({
         onClose={() => setCalendarOpen(false)}
         view={calendarView}
         onViewChange={changeCalendarView}
+        focusDate={calendarFocus}
         billsData={{
           schedules: liveData.allSchedules,
           recentTransactions: liveData.recentTransactions,
@@ -403,7 +403,7 @@ function RedesignShell({
  * ====================================================================== */
 function DashboardBody({
   briefing, liveData, customize, accent,
-  onOpenEmail, onPeekEmail, onJumpSection,
+  onOpenEmail, onOpenDeadline, onOpenBillsCalendar, onJumpSection,
 }) {
   const { dashboardLayout, density, showInsights, showInboxPeek } = customize;
   const ctx = useDashboard();
@@ -415,16 +415,16 @@ function DashboardBody({
   const insights = briefing?.aiInsights || [];
   const emailAccounts = ctx.emailAccounts;
 
-  const handleRailJump = useCallback((payload) => {
+  const handleRailJump = useCallback((payload, anchor) => {
     if (!payload) return;
-    if (payload.kind === "email" && payload.email) {
-      onPeekEmail(payload.email);
+    if (payload.kind === "email" && payload.email?.id) {
+      onOpenEmail(payload.email.id);
     } else if (payload.kind === "deadline") {
-      onJumpSection("timeline");
+      onOpenDeadline(payload.data || payload, anchor);
     } else if (payload.kind === "bill") {
-      onJumpSection("bills");
+      onOpenBillsCalendar(payload.data?.next_date || payload.date || null);
     }
-  }, [onPeekEmail, onJumpSection]);
+  }, [onOpenEmail, onOpenDeadline, onOpenBillsCalendar]);
 
   const hero = (
     <DashboardHero
@@ -434,7 +434,18 @@ function DashboardBody({
       liveWeather={liveData.liveWeather}
       liveCalendar={events}
       liveBills={bills}
-      onJump={() => onJumpSection("timeline")}
+      onJump={(payload, anchor) => {
+        if (payload?.kind === "deadline") {
+          // Callout carries { title, sub, ... } but not the full task — find it.
+          const task = deadlines.find((d) => d.title === payload.title);
+          if (task) onOpenDeadline(task, anchor);
+        } else if (payload?.kind === "bill") {
+          const match = bills.find((b) => b.name === payload.title);
+          onOpenBillsCalendar(match?.next_date || payload.date || null);
+        } else {
+          onJumpSection("timeline");
+        }
+      }}
     />
   );
 
@@ -445,10 +456,7 @@ function DashboardBody({
       events={events}
       deadlines={deadlines}
       bills={bills}
-      onJump={(payload) => {
-        if (payload.kind === "bill") onJumpSection("bills");
-        else if (payload.kind === "deadline") onJumpSection("deadlines");
-      }}
+      onJump={handleRailJump}
     />
   );
 
@@ -464,7 +472,7 @@ function DashboardBody({
           accent={accent}
           emailAccounts={emailAccounts}
           onJump={handleRailJump}
-          onOpenInbox={() => onJumpSection("inbox") || onOpenEmail(null)}
+          onOpenInbox={() => onOpenEmail(null)}
         />
       )}
     </>

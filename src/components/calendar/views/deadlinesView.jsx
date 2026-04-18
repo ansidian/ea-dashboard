@@ -1,10 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
+import { Circle, CircleDashed, CheckCircle2 } from "lucide-react";
 import { parseDueDate } from "../../../lib/dashboard-helpers";
-import CTMCard from "../../ctm/CTMCard";
-import ContextMenu from "../../ui/ContextMenu";
-import AddTaskPanel from "../../todoist/AddTaskPanel";
-import { useDashboard } from "../../../context/DashboardContext";
+import DeadlineDetailPopover from "../../dashboard/DeadlineDetailPopover";
 
 const MAX_PILLS = 2;
 
@@ -18,44 +16,10 @@ function sourceOf(task) {
   return task?.source || "canvas";
 }
 
-function openInNewTab(url) {
-  if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
-function buildTaskMenu(task, { onEdit, onComplete, onStatusChange }) {
-  const isTodoist = task.source === "todoist";
-  const isCanvas = task.source === "canvas";
-  const isComplete = task.status === "complete";
-
-  if (isTodoist) {
-    return [
-      { label: "Edit task", onSelect: onEdit },
-      !isComplete && { label: "Mark complete", onSelect: onComplete },
-      { type: "separator" },
-      task.url && { label: "Open in Todoist", onSelect: () => openInNewTab(task.url) },
-    ].filter(Boolean);
-  }
-
-  const statusItems = [];
-  if (task.status !== "incomplete") {
-    statusItems.push({ label: "Mark incomplete", onSelect: () => onStatusChange("incomplete") });
-  }
-  if (task.status !== "in_progress") {
-    statusItems.push({ label: "Mark in-progress", onSelect: () => onStatusChange("in_progress") });
-  }
-  if (task.status !== "complete") {
-    statusItems.push({ label: "Mark complete", onSelect: () => onStatusChange("complete") });
-  }
-
-  const ctmUrl = `https://ctm.andysu.tech/#/event/${task.id}`;
-  const openItems = [];
-  if (isCanvas && task.url) {
-    openItems.push({ label: "Open in Canvas", onSelect: () => openInNewTab(task.url) });
-  }
-  openItems.push({ label: "Open in CTM", onSelect: () => openInNewTab(ctmUrl) });
-
-  return [...statusItems, { type: "separator" }, ...openItems];
+function DeadlineStatusIcon({ status, size = 12 }) {
+  if (status === "complete") return <CheckCircle2 size={size} color="#a6e3a1" />;
+  if (status === "in_progress") return <CircleDashed size={size} color="#89dceb" />;
+  return <Circle size={size} color="rgba(205,214,244,0.45)" />;
 }
 
 function compute({ data, viewYear, viewMonth }) {
@@ -153,8 +117,7 @@ function renderCellContents({ items }) {
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
                 minWidth: 0,
-                color: "rgba(205,214,244,0.55)",
-                textDecoration: isComplete ? "line-through" : "none",
+                color: isComplete ? "rgba(205,214,244,0.35)" : "rgba(205,214,244,0.55)",
               }}
             >
               {t.title || t.name || "Untitled"}
@@ -176,18 +139,88 @@ function formatFullDate(year, month, day) {
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
+function DeadlineDetailRow({ task, onOpen }) {
+  const isComplete = task.status === "complete";
+  const source = sourceOf(task);
+  const dot = SOURCE_COLORS[source] || "rgba(255,255,255,0.3)";
+  const sourceLabel = source === "todoist" ? "Todoist" : source === "canvas" ? "Canvas" : "CTM";
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(e) => onOpen(task, e.currentTarget)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(task, e.currentTarget);
+        }
+      }}
+      style={{
+        display: "grid", gridTemplateColumns: "16px 1fr auto", gap: 10, alignItems: "center",
+        padding: "9px 4px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+        cursor: "pointer", transition: "background 150ms",
+        opacity: isComplete ? 0.55 : 1,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+    >
+      <DeadlineStatusIcon status={task.status} />
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 12, color: "#cdd6f4", fontWeight: 500,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            marginBottom: 2,
+            textDecoration: isComplete ? "line-through" : "none",
+            textDecorationColor: "rgba(205,214,244,0.35)",
+          }}
+        >
+          {task.title || task.name || "Untitled"}
+        </div>
+        <div
+          style={{
+            fontSize: 10.5, color: "rgba(205,214,244,0.45)",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            display: "flex", alignItems: "center", gap: 6,
+          }}
+        >
+          <span
+            style={{
+              width: 6, height: 6, borderRadius: "50%", background: dot,
+              opacity: 0.85, flexShrink: 0,
+            }}
+          />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {task.class_name || task.project_name || sourceLabel}
+          </span>
+        </div>
+      </div>
+      {task.due_time && (
+        <div
+          style={{
+            fontSize: 10.5, color: "rgba(205,214,244,0.55)",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {task.due_time}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DeadlinesDetail({ selectedDay, viewYear, viewMonth, items }) {
-  const {
-    expandedTask,
-    setExpandedTask,
-    handleCompleteTask,
-    handleUpdateTaskStatus,
-    handleUpdateTask,
-  } = useDashboard();
-  const [menuState, setMenuState] = useState(null);
-  const [editingTask, setEditingTask] = useState(null);
+  const [popover, setPopover] = useState(null);
 
   const incompleteCount = items.filter((t) => t.status !== "complete").length;
+
+  const openPopover = (task, anchor) => {
+    setPopover((prev) => {
+      if (prev && String(prev.task?.id) === String(task?.id)) return null;
+      return { task, anchor };
+    });
+  };
 
   return (
     <div style={{ padding: "16px 20px", overflow: "auto", flex: 1 }}>
@@ -199,58 +232,20 @@ function DeadlinesDetail({ selectedDay, viewYear, viewMonth, items }) {
           {incompleteCount} open · {items.length} total
         </div>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {items.map((item) => {
-          const source = sourceOf(item);
-          return (
-            <CTMCard
-              key={`${source}-${item.id}`}
-              task={item}
-              expanded={expandedTask === item.id}
-              onToggle={() =>
-                setExpandedTask(expandedTask === item.id ? null : item.id)
-              }
-              onComplete={handleCompleteTask}
-              onStatusChange={handleUpdateTaskStatus}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setMenuState({
-                  task: item,
-                  x: e.clientX,
-                  y: e.clientY,
-                  rowEl: e.currentTarget,
-                });
-              }}
-            />
-          );
-        })}
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {items.map((item) => (
+          <DeadlineDetailRow
+            key={`${sourceOf(item)}-${item.id}`}
+            task={item}
+            onOpen={openPopover}
+          />
+        ))}
       </div>
-      {editingTask && (
-        <AddTaskPanel
-          anchorRef={editingTask.anchorRef}
-          editingTask={editingTask.task}
-          onClose={() => setEditingTask(null)}
-          onTaskUpdated={(task) => handleUpdateTask(task)}
-        />
-      )}
-      {menuState && (
-        <ContextMenu
-          x={menuState.x}
-          y={menuState.y}
-          onClose={() => setMenuState(null)}
-          items={buildTaskMenu(menuState.task, {
-            onEdit: () => {
-              const rowEl = menuState.rowEl;
-              setEditingTask({
-                task: menuState.task,
-                anchorRef: { current: rowEl },
-              });
-            },
-            onComplete: () => handleCompleteTask(menuState.task.id),
-            onStatusChange: (status) =>
-              handleUpdateTaskStatus(menuState.task.id, status),
-          })}
+      {popover && (
+        <DeadlineDetailPopover
+          task={popover.task}
+          anchor={popover.anchor}
+          onClose={() => setPopover(null)}
         />
       )}
     </div>
@@ -287,37 +282,44 @@ function renderFooter({ viewYear, viewMonth, currentYear, currentMonth, todayDat
     }
   }
 
+  // Stacks rows vertically — designed for the narrow (340px) side rail in
+  // the redesigned CalendarModal. Big-number left, label right.
+  const StatRow = ({ value, label }) => (
+    <div
+      style={{
+        display: "flex", alignItems: "baseline", justifyContent: "space-between",
+        padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)",
+      }}
+    >
+      <span style={{ fontSize: 11, color: "rgba(205,214,244,0.55)" }}>{label}</span>
+      <span
+        style={{
+          fontSize: 18, fontWeight: 500, color: "#fff",
+          fontVariantNumeric: "tabular-nums", letterSpacing: -0.2,
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+
   return (
     <div
       style={{
-        marginTop: 12,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "14px 20px",
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.04)",
-        borderRadius: 8,
-        gap: 16,
-        minHeight: 56,
-        boxSizing: "border-box",
+        padding: "12px 14px",
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        borderRadius: 10,
+        display: "flex", flexDirection: "column", gap: 2,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+      {isCurrentMonth && <StatRow value={dueToday} label="Due today" />}
+      {isCurrentMonth && <StatRow value={dueThisWeek} label="Due this week" />}
+      <StatRow value={total} label="Total this month" />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 10 }}>
         <LegendDot color={SOURCE_COLORS.canvas} label="Canvas" />
         <LegendDot color={SOURCE_COLORS.todoist} label="Todoist" />
       </div>
-      <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
-        {isCurrentMonth && (
-          <>
-            <span style={{ color: "#cdd6f4", fontWeight: 600 }}>{dueToday}</span> due today
-            <span style={{ color: "rgba(255,255,255,0.25)", margin: "0 8px" }}>·</span>
-            <span style={{ color: "#cdd6f4", fontWeight: 600 }}>{dueThisWeek}</span> due this week
-            <span style={{ color: "rgba(255,255,255,0.25)", margin: "0 8px" }}>·</span>
-          </>
-        )}
-        <span style={{ color: "#cdd6f4", fontWeight: 600 }}>{total}</span> total this month
-      </span>
     </div>
   );
 }

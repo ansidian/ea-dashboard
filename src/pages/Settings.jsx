@@ -12,8 +12,39 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 
 const AccountsList = lazy(() => import("../components/settings/AccountsList"));
+
+// Replacement for window.confirm() — Chrome silently suppresses native dialogs
+// after repeated triggers (especially under HMR + StrictMode in dev), making
+// destructive actions appear to no-op. The in-app dialog isn't subject to that.
+function useConfirm() {
+  const [pending, setPending] = useState(null); // { message, resolve }
+  const confirm = useCallback(
+    (message) => new Promise((resolve) => setPending({ message, resolve })),
+    []
+  );
+  const close = (value) => {
+    pending?.resolve(value);
+    setPending(null);
+  };
+  const dialog = (
+    <Dialog open={!!pending} onOpenChange={(open) => { if (!open) close(false); }}>
+      <DialogContent showCloseButton={false}>
+        <DialogTitle>Confirm</DialogTitle>
+        <DialogDescription>{pending?.message}</DialogDescription>
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={() => close(false)}>Cancel</Button>
+          <Button variant="destructive" size="sm" onClick={() => close(true)}>Confirm</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+  return { confirm, dialog };
+}
 
 // --- Auto-save hook ---
 function useSettingsAutoSave() {
@@ -83,6 +114,7 @@ function ApiTokensCard() {
   const [newToken, setNewToken] = useState(null); // { token, label } — shown once
   const [copied, setCopied] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => {
     listApiTokens().then(setTokens).catch(e => setLoadError(e.message));
@@ -106,13 +138,13 @@ function ApiTokensCard() {
   }
 
   async function handleRevoke(id) {
-    if (!confirm("Revoke this token? Any device using it will stop working immediately.")) return;
+    if (!await confirm("Revoke this token? Any device using it will stop working immediately.")) return;
     setBusyId(id);
     try {
       await revokeApiToken(id);
       setTokens(ts => ts.filter(t => t.id !== id));
     } catch (err) {
-      alert(err.message || "Failed to revoke token");
+      console.error("Revoke failed:", err);
     } finally {
       setBusyId(null);
     }
@@ -135,6 +167,7 @@ function ApiTokensCard() {
   }
 
   return (
+    <>
     <SettingsCard title="API Tokens" icon={<KeyRound size={12} />}>
       <div className="text-xs text-muted-foreground/70 leading-relaxed mb-3">
         Bearer tokens for mobile shortcuts (e.g. Apple Shortcuts posting Tap-to-Pay transactions to Actual Budget).
@@ -214,6 +247,8 @@ function ApiTokensCard() {
         </div>
       )}
     </SettingsCard>
+    {confirmDialog}
+    </>
   );
 }
 
@@ -289,6 +324,7 @@ export default function Settings() {
   const shouldAnimateRef = useRef(false);
 
   const { patch, status: saveStatus } = useSettingsAutoSave();
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   useEffect(() => { writeTabToURL(tab); }, [tab]);
 
@@ -354,9 +390,13 @@ export default function Settings() {
   }
 
   async function handleRemoveAccount(id) {
-    if (!confirm("Remove this account?")) return;
-    await removeAccount(id);
-    setAccounts(accounts.filter(a => a.id !== id));
+    if (!await confirm("Remove this account?")) return;
+    try {
+      await removeAccount(id);
+      setAccounts((curr) => curr.filter((a) => a.id !== id));
+    } catch (err) {
+      console.error("Remove account failed:", err);
+    }
   }
 
   async function handleGeocode() {
@@ -929,6 +969,7 @@ export default function Settings() {
           )}
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

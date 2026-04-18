@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Video, Plane, Calendar, Coffee, Users,
-  AlertCircle, CreditCard,
+  Circle, CircleDashed, CheckCircle2, CreditCard, Flag,
 } from "lucide-react";
 import {
   buildTimeline, dayBucket, dayBucketLabel,
@@ -9,6 +9,32 @@ import {
   urgencyForDays, pacificClock,
 } from "../../lib/redesign-helpers";
 import { daysUntil, formatAmount } from "../../lib/bill-utils";
+
+// Matches Rails.jsx. Todoist priority: 1=urgent, 2=high, 3=medium, 4=low; we
+// only surface 1–3 because "no flag" is the expected baseline.
+const PRIORITY_COLOR = {
+  1: "#f38ba8",
+  2: "#f9e2af",
+  3: "#89b4fa",
+};
+
+function PriorityFlag({ level, size = 11 }) {
+  const color = PRIORITY_COLOR[level];
+  if (!color) return null;
+  return (
+    <span
+      title={`P${level}`}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: size + 4, height: size + 4, borderRadius: 4,
+        background: `${color}1e`, border: `1px solid ${color}38`,
+        flexShrink: 0,
+      }}
+    >
+      <Flag size={size - 2} color={color} strokeWidth={2.2} />
+    </span>
+  );
+}
 
 function SectionHeader({ title, right }) {
   return (
@@ -36,8 +62,8 @@ function NowLine({ accent, now }) {
     <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 10px", position: "relative" }}>
       <div
         style={{
-          position: "absolute", left: -27, top: "50%", transform: "translateY(-50%)",
-          width: 11, height: 11, borderRadius: 99,
+          position: "absolute", left: -22, top: "50%", transform: "translateY(-50%)",
+          width: 13, height: 13, borderRadius: 99,
           background: accent,
           boxShadow: `0 0 12px ${accent}, 0 0 0 3px ${accent}25`,
           animation: "dashPulse 2s ease-in-out infinite",
@@ -63,8 +89,9 @@ function NowLine({ accent, now }) {
 }
 
 function TimelineRow({ item, now, accent, onJump }) {
-  let Icon, title, sub, meta, leftLabel, urgency, jumpPayload;
+  let Icon, iconColor, title, sub, meta, leftLabel, urgency, jumpPayload;
   let isPast = false, isLive = false;
+  let priorityLevel = null;
 
   if (item.kind === "event") {
     const ev = item.data;
@@ -88,12 +115,21 @@ function TimelineRow({ item, now, accent, onJump }) {
     const d = item.data;
     const days = daysUntil(d.due_date);
     urgency = urgencyForDays(days, accent).key;
-    Icon = AlertCircle;
+    isPast = d.status === "complete";
+    Icon = d.status === "complete" ? CheckCircle2
+         : d.status === "in_progress" ? CircleDashed
+         : Circle;
+    iconColor = d.status === "complete" ? "#a6e3a1"
+              : d.status === "in_progress" ? "#89dceb"
+              : "rgba(205,214,244,0.55)";
     leftLabel = d.due_time || "11:59p";
     title = d.title;
     sub = d.class_name || d.source || "";
     meta = d.source === "todoist" ? "Todoist" : d.source === "canvas" ? "Canvas" : "CTM";
-    jumpPayload = { kind: "deadline", id: d.id };
+    if (d.source === "todoist" && PRIORITY_COLOR[d.priority]) {
+      priorityLevel = d.priority;
+    }
+    jumpPayload = { kind: "deadline", id: d.id, data: d };
   } else if (item.kind === "bill") {
     const b = item.data;
     const days = daysUntil(b.next_date);
@@ -103,7 +139,7 @@ function TimelineRow({ item, now, accent, onJump }) {
     title = b.name;
     sub = b.payee || "";
     meta = formatAmount(b.amount);
-    jumpPayload = { kind: "bill", id: b.id };
+    jumpPayload = { kind: "bill", id: b.id, data: b };
   } else {
     return null;
   }
@@ -116,8 +152,8 @@ function TimelineRow({ item, now, accent, onJump }) {
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onJump?.(jumpPayload)}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.(jumpPayload); }}
+      onClick={(e) => onJump?.(jumpPayload, e.currentTarget)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.(jumpPayload, e.currentTarget); }}
       style={{
         position: "relative", padding: "9px 12px", marginBottom: 4,
         borderRadius: 9, cursor: "pointer", opacity,
@@ -164,7 +200,7 @@ function TimelineRow({ item, now, accent, onJump }) {
       {/* Main */}
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-          <Icon size={11} color="rgba(205,214,244,0.55)" />
+          <Icon size={11} color={iconColor || "rgba(205,214,244,0.55)"} />
           <div
             style={{
               fontSize: 13, fontWeight: 500, color: "#cdd6f4",
@@ -186,6 +222,7 @@ function TimelineRow({ item, now, accent, onJump }) {
               Live
             </span>
           )}
+          {priorityLevel && <PriorityFlag level={priorityLevel} />}
         </div>
         {sub && (
           <div

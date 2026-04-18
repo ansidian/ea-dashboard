@@ -6,8 +6,8 @@ import deadlinesView from "./views/deadlinesView.jsx";
 
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const GRID_ROWS = 6;
-const CELL_HEIGHT = 88;
-const DETAIL_HEIGHT = 340;
+const CELL_HEIGHT = 84;
+const SIDEBAR_WIDTH = 340;
 
 const VIEWS = {
   bills: billsView,
@@ -20,6 +20,115 @@ function getMonthData(year, month) {
   return { firstDay, daysInMonth };
 }
 
+function CalendarCell({ day, items, hasItems, isToday, isSelected, hasOverdue, allComplete, onClick, renderCellContents }) {
+  // Minimal cells: hairline borders, accent dot for "today", purple ring on
+  // selection, subtle status accents instead of heavy bg/border combinations.
+  let cellBg = "rgba(255,255,255,0.015)";
+  let cellBorder = "1px solid rgba(255,255,255,0.04)";
+  let cellShadow = "none";
+  let dateColor = "rgba(205,214,244,0.7)";
+  let dateWeight = 400;
+  let accentBar = null;
+
+  if (isSelected) {
+    cellBg = "rgba(203,166,218,0.06)";
+    cellBorder = "1px solid rgba(203,166,218,0.4)";
+    cellShadow = "0 0 0 1px rgba(203,166,218,0.18), 0 4px 14px rgba(203,166,218,0.18)";
+    dateColor = "#cba6da";
+    dateWeight = 600;
+  } else if (allComplete) {
+    accentBar = "#a6e3a1";
+    dateColor = "rgba(166,227,161,0.85)";
+  } else if (hasOverdue) {
+    accentBar = "#f38ba8";
+    dateColor = "rgba(243,139,168,0.9)";
+  } else if (hasItems) {
+    dateColor = "#cdd6f4";
+    dateWeight = 500;
+  }
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        position: "relative",
+        minWidth: 0, overflow: "hidden", borderRadius: 8,
+        padding: "7px 9px",
+        background: cellBg, border: cellBorder, boxShadow: cellShadow,
+        cursor: hasItems ? "pointer" : "default",
+        transition: "box-shadow 150ms, border-color 150ms, background 150ms",
+        display: "flex", flexDirection: "column", gap: 3,
+      }}
+    >
+      {accentBar && (
+        <span
+          style={{
+            position: "absolute", left: 0, top: 8, bottom: 8, width: 2,
+            background: accentBar, borderRadius: 2, opacity: 0.55,
+          }}
+        />
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        <span style={{ fontSize: 12.5, color: dateColor, fontWeight: dateWeight, fontVariantNumeric: "tabular-nums" }}>
+          {day}
+        </span>
+        {isToday && (
+          <span
+            style={{
+              width: 5, height: 5, borderRadius: 99, background: "#f97316",
+              boxShadow: "0 0 8px rgba(249,115,22,0.6), 0 0 0 2px rgba(249,115,22,0.18)",
+              animation: "dashPulse 2s ease-in-out infinite",
+            }}
+            aria-label="Today"
+          />
+        )}
+      </div>
+      {renderCellContents?.({ items, hasOverdue })}
+    </div>
+  );
+}
+
+function CalendarSummary({ view, viewYear, viewMonth, currentYear, currentMonth, todayDate, itemsByDay, computed, data, activeView }) {
+  // Default-state side rail content. Renders the view-supplied footer
+  // (already shows totals + legend) inside the new card layout, plus a
+  // friendly empty-state hint at the top.
+  const isCurrentMonth = viewYear === currentYear && viewMonth === currentMonth;
+  const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  return (
+    <div style={{ flex: 1, padding: "20px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <div
+          style={{
+            fontSize: 10, fontWeight: 600, letterSpacing: 2.6, textTransform: "uppercase",
+            color: "rgba(205,214,244,0.55)",
+          }}
+        >
+          {view === "bills" ? "Bills overview" : "Deadlines overview"}
+        </div>
+        <div className="ea-display" style={{ marginTop: 4, fontSize: 18, color: "#fff", letterSpacing: -0.2 }}>
+          {isCurrentMonth ? "This month · " : ""}{monthLabel}
+        </div>
+      </div>
+      <div style={{ height: 1, background: "rgba(255,255,255,0.04)" }} />
+      <div style={{ fontSize: 12, color: "rgba(205,214,244,0.55)", lineHeight: 1.5 }}>
+        Click any day with activity to drill in. Items are color-coded by source on the rail.
+      </div>
+      <span style={{ flex: 1 }} />
+      {/* The view's existing footer renderer becomes the per-month summary
+          card now that it lives in the rail instead of below the grid. */}
+      {activeView.renderFooter?.({ viewYear, viewMonth, currentYear, currentMonth, todayDate, itemsByDay, computed, data })}
+    </div>
+  );
+}
+
+function parseFocusDate(focusDate) {
+  if (!focusDate) return null;
+  const d = new Date(`${focusDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
 export default function CalendarModal({
   open,
   onClose,
@@ -27,6 +136,7 @@ export default function CalendarModal({
   onViewChange,
   billsData,
   deadlinesData,
+  focusDate,
 }) {
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -57,13 +167,21 @@ export default function CalendarModal({
   });
   const navigateMonth = (dir) => navigateMonthRef.current?.(dir);
 
-  // Reset state when modal opens
+  // Reset state when modal opens. If a focusDate is supplied, jump to that
+  // month and auto-select the day cell (e.g. clicking a bill drills straight
+  // into its due-day's detail rail).
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
     setPrevOpen(open);
     if (open) {
-      setViewDate({ month: currentMonth, year: currentYear });
-      setSelectedDay(null);
+      const focus = parseFocusDate(focusDate);
+      if (focus) {
+        setViewDate({ month: focus.getMonth(), year: focus.getFullYear() });
+        setSelectedDay(focus.getDate());
+      } else {
+        setViewDate({ month: currentMonth, year: currentYear });
+        setSelectedDay(null);
+      }
     }
   }
 
@@ -162,6 +280,18 @@ export default function CalendarModal({
           e.preventDefault();
           e.stopPropagation();
           break;
+        case "1":
+          // Scoped to the modal — stopPropagation prevents the shell's
+          // 1=Dashboard hotkey from firing underneath.
+          if (view !== "bills") onViewChange?.("bills");
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        case "2":
+          if (view !== "deadlines") onViewChange?.("deadlines");
+          e.preventDefault();
+          e.stopPropagation();
+          break;
         default:
           if (e.key.length === 1 && e.key !== "r" && e.key !== "R") {
             e.stopPropagation();
@@ -171,12 +301,10 @@ export default function CalendarModal({
     }
     document.addEventListener("keydown", handleKey, true);
     return () => document.removeEventListener("keydown", handleKey, true);
-  }, [open, onClose, currentMonth, currentYear, canGoPrev]);
+  }, [open, onClose, currentMonth, currentYear, canGoPrev, view, onViewChange]);
 
-  const monthLabel = new Date(viewYear, viewMonth).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
+  const monthName = new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long" });
+  const monthYear = String(viewYear);
 
   if (!open) return null;
 
@@ -202,69 +330,79 @@ export default function CalendarModal({
           ref={panelRef}
           className="isolate flex flex-col animate-in fade-in zoom-in-95 duration-200"
           style={{
-            width: "min(1100px, calc(100vw - 96px))",
-            maxHeight: "calc(100vh - 96px)",
-            background: "#16161e",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+            width: "min(1280px, calc(100vw - 64px))",
+            maxHeight: "calc(100vh - 64px)",
+            background: "radial-gradient(ellipse at top left, #1a1a2a, #0d0d15 70%)",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.06)",
+            boxShadow: "0 30px 80px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.04)",
           }}
         >
           <div
             ref={scrollRef}
             className="overflow-y-auto overscroll-contain flex-1"
-            style={{ padding: "32px 40px" }}
+            style={{ padding: "28px 32px" }}
           >
-            {/* Header */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", marginBottom: 24, gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "start" }}>
-                <button
-                  onClick={() => canGoPrev && navigateMonth(-1)}
-                  style={{
-                    color: canGoPrev ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.15)",
-                    cursor: canGoPrev ? "pointer" : "default",
-                    width: 40,
-                    height: 40,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: 8,
-                    background: "rgba(255,255,255,0.04)",
-                    border: "none",
-                    fontFamily: "inherit",
-                    flexShrink: 0,
-                  }}
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <span style={{
-                  fontSize: 24,
-                  fontWeight: 600,
-                  color: "#cdd6f4",
-                  minWidth: 240,
-                  textAlign: "center",
-                }}>
-                  {monthLabel}
-                </span>
-                <button
-                  onClick={() => navigateMonth(1)}
-                  style={{
-                    color: "rgba(255,255,255,0.5)",
-                    cursor: "pointer",
-                    width: 40,
-                    height: 40,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: 8,
-                    background: "rgba(255,255,255,0.04)",
-                    border: "none",
-                    fontFamily: "inherit",
-                    flexShrink: 0,
-                  }}
-                >
-                  <ChevronRight size={20} />
-                </button>
+            {/* Header — eyebrow + display title pattern from the mock */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", marginBottom: 22, gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, justifySelf: "start", minWidth: 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 10, fontWeight: 600, letterSpacing: 2.6, textTransform: "uppercase",
+                      color: "rgba(205,214,244,0.55)",
+                    }}
+                  >
+                    Calendar · {view === "bills" ? "Bills" : "Deadlines"}
+                  </div>
+                  <div
+                    className="ea-display"
+                    style={{
+                      fontSize: 28, fontWeight: 500, color: "#fff",
+                      letterSpacing: -0.4, lineHeight: 1.05,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {monthName}{" "}
+                    <span style={{ color: "rgba(205,214,244,0.4)", fontWeight: 400 }}>{monthYear}</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button
+                    onClick={() => canGoPrev && navigateMonth(-1)}
+                    aria-label="Previous month"
+                    style={{
+                      color: canGoPrev ? "rgba(205,214,244,0.7)" : "rgba(205,214,244,0.18)",
+                      cursor: canGoPrev ? "pointer" : "default",
+                      width: 36, height: 36,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      borderRadius: 8,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      fontFamily: "inherit",
+                      transition: "all 120ms",
+                    }}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => navigateMonth(1)}
+                    aria-label="Next month"
+                    style={{
+                      color: "rgba(205,214,244,0.7)",
+                      cursor: "pointer",
+                      width: 36, height: 36,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      borderRadius: 8,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      fontFamily: "inherit",
+                      transition: "all 120ms",
+                    }}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
 
               {/* Segmented view switcher */}
@@ -272,17 +410,17 @@ export default function CalendarModal({
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.06)",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.05)",
                   borderRadius: 8,
-                  padding: 3,
+                  padding: 2,
                   gap: 2,
                   justifySelf: "center",
                 }}
               >
                 {[
-                  { key: "bills", label: "Bills", Icon: Receipt },
-                  { key: "deadlines", label: "Deadlines", Icon: ListChecks },
+                  { key: "bills", label: "Bills", Icon: Receipt, hint: "1" },
+                  { key: "deadlines", label: "Deadlines", Icon: ListChecks, hint: "2" },
                 ].map((opt) => {
                   const active = view === opt.key;
                   const { Icon } = opt;
@@ -293,28 +431,42 @@ export default function CalendarModal({
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 6,
-                        padding: "6px 14px",
+                        gap: 7,
+                        padding: "6px 12px",
                         borderRadius: 6,
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: 500,
                         letterSpacing: 0.3,
                         border: "none",
                         cursor: active ? "default" : "pointer",
                         fontFamily: "inherit",
-                        background: active ? "rgba(203,166,218,0.14)" : "transparent",
-                        color: active ? "#cba6da" : "rgba(255,255,255,0.5)",
+                        background: active ? "rgba(203,166,218,0.12)" : "transparent",
+                        color: active ? "#cba6da" : "rgba(205,214,244,0.55)",
                         transition: "background 150ms, color 150ms",
                       }}
                     >
-                      <Icon size={12} strokeWidth={1.8} />
+                      <Icon size={11} strokeWidth={1.8} />
                       {opt.label}
+                      <kbd
+                        style={{
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          minWidth: 16, height: 16, padding: "0 4px",
+                          fontSize: 9.5, fontFamily: "Fira Code, ui-monospace, monospace", fontWeight: 500,
+                          color: active ? "#cba6da" : "rgba(205,214,244,0.45)",
+                          background: active ? "rgba(203,166,218,0.10)" : "rgba(255,255,255,0.04)",
+                          border: `1px solid ${active ? "rgba(203,166,218,0.28)" : "rgba(255,255,255,0.06)"}`,
+                          borderRadius: 4, letterSpacing: 0,
+                          marginLeft: 2,
+                        }}
+                      >
+                        {opt.hint}
+                      </kbd>
                     </button>
                   );
                 })}
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "end" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, justifySelf: "end" }}>
                 {HeaderExtras ? (
                   <HeaderExtras
                     data={viewData}
@@ -324,18 +476,17 @@ export default function CalendarModal({
                 ) : null}
                 <button
                   onClick={onClose}
+                  aria-label="Close"
                   style={{
-                    color: "rgba(255,255,255,0.3)",
+                    color: "rgba(205,214,244,0.7)",
                     cursor: "pointer",
-                    width: 40,
-                    height: 40,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    width: 36, height: 36,
+                    display: "flex", alignItems: "center", justifyContent: "center",
                     borderRadius: 8,
-                    background: "rgba(255,255,255,0.04)",
-                    border: "none",
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.06)",
                     fontFamily: "inherit",
+                    transition: "all 120ms",
                   }}
                 >
                   <X size={16} />
@@ -343,127 +494,118 @@ export default function CalendarModal({
               </div>
             </div>
 
-            {/* Day-of-week headers */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 6 }}>
-              {DAYS.map((d) => (
-                <div key={d} style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.35)", padding: 6, fontWeight: 500, letterSpacing: 0.5 }}>
-                  {d}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar grid */}
+            {/* Body: calendar (left) + side rail (right) */}
             <div
-              key={`${view}-${viewYear}-${viewMonth}`}
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(7, 1fr)",
-                gridTemplateRows: `repeat(${GRID_ROWS}, ${CELL_HEIGHT}px)`,
-                gap: 4,
+                gridTemplateColumns: `minmax(0, 1fr) ${SIDEBAR_WIDTH}px`,
+                gap: 24,
+                alignItems: "start",
               }}
             >
-              {Array.from({ length: firstDay }, (_, i) => (
-                <div key={`empty-${i}`} />
-              ))}
-
-              {Array.from({ length: daysInMonth }, (_, i) => {
-                const day = i + 1;
-                const items = itemsByDay[day] || [];
-                const hasItems = items.length > 0;
-                const isToday = isCurrentMonth && day === todayDate;
-                const isSelected = selectedDay === day;
-                const hasOverdue = activeView.hasOverdue?.(items) || false;
-                const allComplete = activeView.allComplete?.(items) || false;
-
-                let cellBg = "rgba(255,255,255,0.02)";
-                let cellBorder = "1px solid rgba(255,255,255,0.04)";
-                let cellShadow = "none";
-                let dateColor = "rgba(255,255,255,0.5)";
-                let dateWeight = 400;
-
-                if (isSelected) {
-                  cellBg = "rgba(203,166,218,0.08)";
-                  cellBorder = "1px solid rgba(203,166,218,0.3)";
-                  cellShadow = "0 0 8px rgba(203,166,218,0.12)";
-                  dateColor = "#cba6da";
-                  dateWeight = 600;
-                } else if (isToday) {
-                  cellBg = "rgba(249,115,22,0.08)";
-                  cellBorder = "1px solid rgba(249,115,22,0.25)";
-                  cellShadow = "0 0 8px rgba(249,115,22,0.08)";
-                  dateColor = "#f97316";
-                  dateWeight = 600;
-                } else if (allComplete) {
-                  cellBg = "rgba(166,227,161,0.06)";
-                  cellBorder = "1px solid rgba(166,227,161,0.18)";
-                } else if (hasOverdue) {
-                  cellBg = "rgba(243,139,168,0.06)";
-                  cellBorder = "1px solid rgba(243,139,168,0.15)";
-                }
-
-                return (
-                  <div
-                    key={day}
-                    onClick={() => hasItems && setSelectedDay(isSelected ? null : day)}
-                    style={{
-                      minWidth: 0,
-                      overflow: "hidden",
-                      borderRadius: 8,
-                      padding: "6px 8px",
-                      background: cellBg,
-                      border: cellBorder,
-                      boxShadow: cellShadow,
-                      cursor: hasItems ? "pointer" : "default",
-                      transition: "box-shadow 150ms, border-color 150ms",
-                    }}
-                  >
-                    <div style={{ fontSize: 13, color: dateColor, fontWeight: dateWeight }}>
-                      {day}
+              <div style={{ minWidth: 0 }}>
+                {/* Day-of-week headers */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 8 }}>
+                  {DAYS.map((d) => (
+                    <div
+                      key={d}
+                      style={{
+                        textAlign: "center", fontSize: 10, fontWeight: 600,
+                        color: "rgba(205,214,244,0.4)",
+                        padding: 4, letterSpacing: 1.6, textTransform: "uppercase",
+                      }}
+                    >
+                      {d}
                     </div>
-                    {isToday && !hasItems && (
-                      <div style={{ fontSize: 9, fontWeight: 600, color: "#f97316", marginTop: 2, letterSpacing: 0.5 }}>TODAY</div>
-                    )}
-                    {activeView.renderCellContents?.({ items, hasOverdue })}
-                  </div>
-                );
-              })}
-
-              {Array.from({ length: trailingEmpty }, (_, i) => (
-                <div key={`trail-${i}`} />
-              ))}
-            </div>
-
-            {/* Detail area */}
-            <div
-              style={{
-                height: DETAIL_HEIGHT,
-                marginTop: 12,
-                borderRadius: 8,
-                background: showDetail ? "rgba(203,166,218,0.04)" : "transparent",
-                border: showDetail ? "1px solid rgba(203,166,218,0.12)" : "1px solid transparent",
-                transition: "background 200ms, border-color 200ms",
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              {showDetail ? (
-                activeView.renderDetail?.({
-                  selectedDay,
-                  viewYear,
-                  viewMonth,
-                  items: selectedItems,
-                  data: viewData,
-                  computed,
-                })
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1 }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.15)" }}>Click a day to see details</span>
+                  ))}
                 </div>
-              )}
-            </div>
 
-            {/* Footer */}
-            {activeView.renderFooter?.({ viewYear, viewMonth, currentYear, currentMonth, todayDate, itemsByDay, computed, data: viewData })}
+                {/* Calendar grid */}
+                <div
+                  key={`${view}-${viewYear}-${viewMonth}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(7, 1fr)",
+                    gridTemplateRows: `repeat(${GRID_ROWS}, ${CELL_HEIGHT}px)`,
+                    gap: 6,
+                  }}
+                >
+                  {Array.from({ length: firstDay }, (_, i) => (
+                    <div key={`empty-${i}`} />
+                  ))}
+
+                  {Array.from({ length: daysInMonth }, (_, i) => {
+                    const day = i + 1;
+                    const items = itemsByDay[day] || [];
+                    const hasItems = items.length > 0;
+                    const isToday = isCurrentMonth && day === todayDate;
+                    const isSelected = selectedDay === day;
+                    const hasOverdue = activeView.hasOverdue?.(items) || false;
+                    const allComplete = activeView.allComplete?.(items) || false;
+
+                    return (
+                      <CalendarCell
+                        key={day}
+                        day={day}
+                        items={items}
+                        hasItems={hasItems}
+                        isToday={isToday}
+                        isSelected={isSelected}
+                        hasOverdue={hasOverdue}
+                        allComplete={allComplete}
+                        onClick={() => hasItems && setSelectedDay(isSelected ? null : day)}
+                        renderCellContents={activeView.renderCellContents}
+                      />
+                    );
+                  })}
+
+                  {Array.from({ length: trailingEmpty }, (_, i) => (
+                    <div key={`trail-${i}`} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Side rail — detail when a day is selected, summary otherwise */}
+              <aside
+                style={{
+                  position: "sticky",
+                  top: 0,
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  borderRadius: 12,
+                  minHeight: GRID_ROWS * CELL_HEIGHT + (GRID_ROWS - 1) * 6 + 30,
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                }}
+              >
+                {showDetail ? (
+                  <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                    {activeView.renderDetail?.({
+                      selectedDay,
+                      viewYear,
+                      viewMonth,
+                      items: selectedItems,
+                      data: viewData,
+                      computed,
+                    })}
+                  </div>
+                ) : (
+                  <CalendarSummary
+                    view={view}
+                    viewYear={viewYear}
+                    viewMonth={viewMonth}
+                    currentYear={currentYear}
+                    currentMonth={currentMonth}
+                    todayDate={todayDate}
+                    itemsByDay={itemsByDay}
+                    computed={computed}
+                    data={viewData}
+                    activeView={activeView}
+                  />
+                )}
+              </aside>
+            </div>
           </div>
         </div>
       </div>

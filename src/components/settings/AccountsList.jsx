@@ -50,7 +50,13 @@ function AccountRow({ acc, accounts, setAccounts, onRemove }) {
             <div className="text-[11px] max-sm:text-xs text-muted-foreground truncate">{acc.email} · {acc.type}</div>
           </div>
         </div>
-        <div className="flex items-center gap-2 max-sm:border-t max-sm:border-white/[0.04] max-sm:pt-2 max-sm:-mx-4 max-sm:px-4">
+        <div
+          className="flex items-center gap-2 max-sm:border-t max-sm:border-white/[0.04] max-sm:pt-2 max-sm:-mx-4 max-sm:px-4"
+          // Stop pointerdown so the row's dnd-kit PointerSensor doesn't capture
+          // the pointer and swallow clicks on these buttons. The buttons aren't
+          // drag handles anyway — the icon/label area still initiates drag.
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           <Button variant="ghost" size="xs" onClick={() => setEditing(!editing)}>
             {editing ? "Cancel" : "Edit"}
           </Button>

@@ -20,6 +20,9 @@ export default function useLiveData({ disabled = false } = {}) {
   const [actualConfigured, setActualConfigured] = useState(true);
   const [actualBudgetUrl, setActualBudgetUrl] = useState(null);
   const [pinnedIds, setPinnedIds] = useState([]);
+  const [pinnedSnapshots, setPinnedSnapshots] = useState([]);
+  const [snoozedEntries, setSnoozedEntries] = useState([]);
+  const [resurfacedEntries, setResurfacedEntries] = useState([]);
   const mountedRef = useRef(true);
   const fetchingRef = useRef(false);
 
@@ -46,6 +49,9 @@ export default function useLiveData({ disabled = false } = {}) {
       setActualConfigured(data.actualConfigured || false);
       setActualBudgetUrl(data.actualBudgetUrl || null);
       setPinnedIds(data.pinnedIds || []);
+      setPinnedSnapshots(data.pinnedSnapshots || []);
+      setSnoozedEntries(data.snoozedEntries || []);
+      setResurfacedEntries(data.resurfacedEntries || []);
       setBillsLoading(false);
     } catch (err) {
       console.error("[Live] Fetch failed:", err.message);
@@ -95,6 +101,9 @@ export default function useLiveData({ disabled = false } = {}) {
     actualConfigured,
     actualBudgetUrl,
     pinnedIds,
+    pinnedSnapshots,
+    snoozedEntries,
+    resurfacedEntries,
     refreshNow,
   };
 }

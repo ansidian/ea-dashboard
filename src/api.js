@@ -55,10 +55,46 @@ export const pollStatus = (id) => apiFetch(`/api/briefing/status/${id}`);
 export const checkInProgress = () => apiFetch("/api/briefing/in-progress");
 export const getBriefingHistory = () => apiFetch("/api/briefing/history");
 export const getBriefingById = (id) => apiFetch(`/api/briefing/${id}`);
-export const getEmailBody = (uid) => apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}`);
+// 5-minute in-memory TTL cache for email bodies. Bodies don't mutate
+// server-side once delivered; the cache eliminates the loading flicker on
+// re-selection and dedupes concurrent fetches for the same uid.
+const EMAIL_BODY_TTL_MS = 5 * 60 * 1000;
+const emailBodyCache = new Map(); // uid -> { promise, expiresAt, value }
+export const getEmailBody = (uid) => {
+  const now = Date.now();
+  const hit = emailBodyCache.get(uid);
+  if (hit && hit.expiresAt > now) return hit.value ? Promise.resolve(hit.value) : hit.promise;
+  const promise = apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}`)
+    .then((value) => {
+      emailBodyCache.set(uid, { promise, value, expiresAt: Date.now() + EMAIL_BODY_TTL_MS });
+      return value;
+    })
+    .catch((err) => {
+      // Don't poison the cache on failure — let the next call retry.
+      emailBodyCache.delete(uid);
+      throw err;
+    });
+  emailBodyCache.set(uid, { promise, value: null, expiresAt: now + EMAIL_BODY_TTL_MS });
+  return promise;
+};
+export const peekEmailBody = (uid) => {
+  const hit = emailBodyCache.get(uid);
+  return hit && hit.value && hit.expiresAt > Date.now() ? hit.value : null;
+};
 export const dismissEmail = (emailId) => apiFetch(`/api/briefing/dismiss/${encodeURIComponent(emailId)}`, { method: "POST" });
-export const pinEmail = (emailId) => apiFetch(`/api/briefing/pin/${encodeURIComponent(emailId)}`, { method: "POST" });
+export const pinEmail = (emailId, snapshot = null) =>
+  apiFetch(`/api/briefing/pin/${encodeURIComponent(emailId)}`, {
+    method: "POST",
+    body: JSON.stringify({ snapshot }),
+  });
 export const unpinEmail = (emailId) => apiFetch(`/api/briefing/pin/${encodeURIComponent(emailId)}`, { method: "DELETE" });
+export const snoozeEmail = (uid, untilTs, snapshot = null) =>
+  apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}/snooze`, {
+    method: "POST",
+    body: JSON.stringify({ until_ts: untilTs, snapshot }),
+  });
+export const unsnoozeEmail = (uid) =>
+  apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}/snooze`, { method: "DELETE" });
 export const completeTask = (taskId) => apiFetch(`/api/briefing/complete-task/${encodeURIComponent(taskId)}`, { method: "POST" });
 export const updateTaskStatus = (taskId, status) => apiFetch(`/api/briefing/task-status/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ status }) });
 export const markEmailAsRead = (uid) => apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}/mark-read`, { method: "POST" });
