@@ -97,6 +97,8 @@ export const unsnoozeEmail = (uid) =>
   apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}/snooze`, { method: "DELETE" });
 export const completeTask = (taskId) => apiFetch(`/api/briefing/complete-task/${encodeURIComponent(taskId)}`, { method: "POST" });
 export const updateTaskStatus = (taskId, status) => apiFetch(`/api/briefing/task-status/${encodeURIComponent(taskId)}`, { method: "PATCH", body: JSON.stringify({ status }) });
+export const dismissTombstone = (todoistId) =>
+  apiFetch(`/api/briefing/tombstone/${todoistId}`, { method: "DELETE" });
 export const markEmailAsRead = (uid) => apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}/mark-read`, { method: "POST" });
 export const markEmailAsUnread = (uid) => apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}/mark-unread`, { method: "POST" });
 export const trashEmail = (uid) => apiFetch(`/api/briefing/email/${encodeURIComponent(uid)}/trash`, { method: "POST" });

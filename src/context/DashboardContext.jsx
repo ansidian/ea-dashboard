@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useMemo } from "react";
-import { dismissEmail, completeTask, updateTaskStatus } from "../api";
+import { dismissEmail, completeTask, updateTaskStatus, dismissTombstone } from "../api";
 
 const DashboardContext = createContext(null);
 
@@ -112,6 +112,35 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
     setTimeout(() => removeCompletedTask(taskId), 600);
     if (expandedTask === taskId) setExpandedTask(null);
   }, [expandedTask, setBriefing, setCalendarDeadlines, removeCompletedTask]);
+
+  const handleDismissGhost = useCallback((todoistId) => {
+    dismissTombstone(todoistId).catch(() => {});
+    const stripTombstone = (root) => {
+      if (!root) return root;
+      const updated = JSON.parse(JSON.stringify(root));
+      if (updated.todoist?.upcoming) {
+        const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+        const weekFromNow = new Date(Date.now() + 7 * 86400000).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+        updated.todoist.upcoming = updated.todoist.upcoming.filter(
+          (t) => !(t._tombstone && t.id === todoistId),
+        );
+        let dueToday = 0, dueThisWeek = 0;
+        for (const d of updated.todoist.upcoming) {
+          if (d.due_date === today) dueToday++;
+          if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
+        }
+        updated.todoist.stats = {
+          incomplete: updated.todoist.upcoming.filter((t) => t.status !== "complete").length,
+          dueToday,
+          dueThisWeek,
+          totalPoints: 0,
+        };
+      }
+      return updated;
+    };
+    setBriefing((prev) => stripTombstone(prev));
+    setCalendarDeadlines?.((prev) => (prev ? stripTombstone(prev) : prev));
+  }, [setBriefing, setCalendarDeadlines]);
 
   const handleUpdateTask = useCallback((updatedTask) => {
     const applyUpdate = (root) => {
@@ -230,6 +259,7 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
       setExpandedTask,
       handleDismiss,
       handleCompleteTask,
+      handleDismissGhost,
       handleAddTask,
       handleUpdateTask,
       handleUpdateTaskStatus,
