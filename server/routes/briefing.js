@@ -418,10 +418,14 @@ router.post("/email/:uid/snooze", async (req, res) => {
         }
       } catch (archiveErr) {
         console.error("[EA Snooze] Gmail archive failed, rolling back DB row:", archiveErr.message);
-        await db.execute({
-          sql: "DELETE FROM ea_snoozed_emails WHERE user_id = ? AND email_id = ?",
-          args: [userId, uid],
-        });
+        try {
+          await db.execute({
+            sql: "DELETE FROM ea_snoozed_emails WHERE user_id = ? AND email_id = ?",
+            args: [userId, uid],
+          });
+        } catch (rollbackErr) {
+          console.error("[EA Snooze] Rollback DELETE failed:", rollbackErr.message);
+        }
         return res.status(502).json({ message: "Failed to archive on Gmail" });
       }
     }
