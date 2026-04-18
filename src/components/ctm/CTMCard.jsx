@@ -112,6 +112,7 @@ export default function CTMCard({ task, expanded, onToggle, onComplete, onStatus
   const urgColor = { high: "#f38ba8", medium: "#f9e2af", low: "#a6adc8" }[urg];
   const statuses = isTodoist ? TODOIST_STATUSES : CTM_STATUSES;
   function handleSpineChange(newStatus) {
+    if (task._tombstone) return;
     if (newStatus === task.status) return;
     if (newStatus === "complete") {
       if (isTodoist) {
