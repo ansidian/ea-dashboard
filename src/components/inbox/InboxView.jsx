@@ -1531,6 +1531,7 @@ function Reader({ email, account, accent, pinned, onAction, onClose, showTriage,
             <QuickAction
               icon={ExternalLink}
               label="Open in Gmail"
+              hint="O"
               title="Open in Gmail"
               onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
               accent={accent}
@@ -2252,10 +2253,16 @@ export default function InboxView({
       if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); moveBy(1); }
       else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); moveBy(-1); }
       else if (e.key === "p") { e.preventDefault(); onAction("pin"); }
+      else if (e.key === "o") {
+        e.preventDefault();
+        if (!selectedEmail) return;
+        const url = getGmailUrl(selectedEmail);
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [moveBy, onAction]);
+  }, [moveBy, onAction, selectedEmail]);
 
   const selectedAccount = selectedEmail
     ? accountsById[selectedEmail._accountKey] || selectedEmail._account
