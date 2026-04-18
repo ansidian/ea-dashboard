@@ -194,10 +194,10 @@ export default function DeadlineDetailPopover({ task, anchor, accent = "#cba6da"
           left: pos.left,
           width: 340,
           zIndex: 60,
-          background: "#16161e",
+          background: "radial-gradient(ellipse at top left, #1a1a2a, #0d0d15 70%)",
           borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          boxShadow: "0 30px 80px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.04)",
           overflow: "hidden",
           isolation: "isolate",
         }}
