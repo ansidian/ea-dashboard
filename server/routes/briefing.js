@@ -17,6 +17,7 @@ import { decrypt } from "../briefing/encryption.js";
 import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories as getActualCategories, getPayees as getActualPayees, getMetadata as getActualMetadata, testConnection as testActual, createQuickTxn } from "../briefing/actual.js";
 import { trimBillBody } from "../briefing/bill-extract.js";
 import { completeTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask, updateTodoistTask } from "../briefing/todoist.js";
+import { buildSnapshot } from "../briefing/tombstones.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
 import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
@@ -507,25 +508,11 @@ router.post("/complete-task/:taskId", async (req, res) => {
         // Recurring: persist a tombstone snapshot. The task will reappear on
         // next briefing as the advanced next occurrence; the tombstone keeps
         // today's completed row visible until due_date < today.
-        const snapshot = {
-          id: todoistTask.id,
-          title: todoistTask.title,
-          due_date: todoistTask.due_date,
-          due_time: todoistTask.due_time ?? null,
-          class_name: todoistTask.class_name,
-          class_color: todoistTask.class_color,
-          url: todoistTask.url,
-          priority: todoistTask.priority ?? null,
-          labels: todoistTask.labels ?? [],
-          description: todoistTask.description ?? "",
-          source: "todoist",
-          is_recurring: true,
-        };
         await db.execute({
           sql: `INSERT OR REPLACE INTO ea_completed_tasks
                 (user_id, todoist_id, completed_at, due_date, snapshot_json)
                 VALUES (?, ?, datetime('now'), ?, ?)`,
-          args: [userId, todoistId, todoistTask.due_date, JSON.stringify(snapshot)],
+          args: [userId, todoistId, todoistTask.due_date, JSON.stringify(buildSnapshot(todoistTask))],
         });
       } else {
         await db.execute({
