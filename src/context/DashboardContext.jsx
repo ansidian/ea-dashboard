@@ -70,7 +70,7 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
       for (const section of ["ctm", "todoist"]) {
         if (!updated[section]?.upcoming) continue;
         const task = updated[section].upcoming.find(
-          t => String(t.id) === String(taskId) || t.todoist_id === String(taskId)
+          t => !t._tombstone && (String(t.id) === String(taskId) || t.todoist_id === String(taskId))
         );
         if (task) {
           task.status = "complete";
@@ -99,7 +99,7 @@ export function DashboardProvider({ briefing, setBriefing, setCalendarDeadlines,
       const updated = JSON.parse(JSON.stringify(root));
       for (const section of ["ctm", "todoist"]) {
         const task = updated[section]?.upcoming?.find(
-          t => String(t.id) === String(taskId) || t.todoist_id === String(taskId)
+          t => !t._tombstone && (String(t.id) === String(taskId) || t.todoist_id === String(taskId))
         );
         if (task) task._completing = true;
       }
