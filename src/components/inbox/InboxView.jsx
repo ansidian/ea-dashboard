@@ -336,9 +336,9 @@ function Sidebar({
           <Eyebrow style={{ marginBottom: 8 }}>Shortcuts</Eyebrow>
           <div style={{ display: "grid", rowGap: 6, fontSize: 10, color: "rgba(205,214,244,0.5)" }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>J</Kbd><Kbd>K</Kbd><span>Navigate</span></div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>E</Kbd><span>Trash</span></div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>E</Kbd><span>Hold · Trash</span></div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>R</Kbd><span>Reply</span></div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>S</Kbd><span>Snooze</span></div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>S</Kbd><span>Hold · Snooze</span></div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>P</Kbd><span>Pin</span></div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>⌘F</Kbd><span>Find</span></div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Kbd>⌘K</Kbd><span>Command</span></div>
