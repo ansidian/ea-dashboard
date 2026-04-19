@@ -430,7 +430,7 @@ export default function BillBadgeForm({
 }) {
   return (
     <>
-      <BillTypeHeader
+      <BillBadgeHeader
         isMobile={isMobile}
         usesStackedLayout={usesStackedLayout}
         editType={editType}
