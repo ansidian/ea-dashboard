@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Video, Plane, Calendar, Coffee, Users,
   Circle, CircleDashed, CheckCircle2, Flag,
@@ -6,7 +6,7 @@ import {
 import {
   buildTimeline, dayBucket, dayBucketLabel,
   eventState, formatEventTime, formatEventDuration,
-  urgencyForDays, pacificClock,
+  urgencyForDays, pacificClock, overdueLabel,
 } from "../../lib/redesign-helpers";
 import { daysUntil } from "../../lib/bill-utils";
 
@@ -57,12 +57,36 @@ function SectionHeader({ title, right }) {
   );
 }
 
-function NowLine({ accent, now }) {
+// Absolute-positioned marker overlaid on the today group. The pill lives in
+// the left gutter (to the left of the spine dot) so it never collides with
+// event text, and the gradient line fades from the spine rightward across the
+// content area. `top` is computed from DOM measurements of row refs so the
+// marker slides smoothly within a live event and at row boundaries.
+function NowMarker({ accent, now, top, spineLeft, pillGap }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0 10px", position: "relative" }}>
+    <div
+      style={{
+        position: "absolute", left: 0, right: 0, top,
+        pointerEvents: "none", zIndex: 5,
+        transition: "top 1s ease",
+      }}
+    >
       <div
         style={{
-          position: "absolute", left: -22, top: "50%", transform: "translateY(-50%)",
+          position: "absolute",
+          right: `calc(100% - ${spineLeft - 6 - pillGap}px)`,
+          top: 0, transform: "translateY(-50%)",
+          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase",
+          color: accent, padding: "2px 8px",
+          background: `${accent}15`, borderRadius: 99, border: `1px solid ${accent}30`,
+          whiteSpace: "nowrap",
+        }}
+      >
+        Now · {pacificClock(new Date(now))}
+      </div>
+      <div
+        style={{
+          position: "absolute", left: spineLeft - 6, top: 0, transform: "translateY(-50%)",
           width: 13, height: 13, borderRadius: 99,
           background: accent,
           boxShadow: `0 0 12px ${accent}, 0 0 0 3px ${accent}25`,
@@ -71,16 +95,7 @@ function NowLine({ accent, now }) {
       />
       <div
         style={{
-          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase",
-          color: accent, padding: "2px 8px",
-          background: `${accent}15`, borderRadius: 99, border: `1px solid ${accent}30`,
-        }}
-      >
-        Now · {pacificClock(new Date(now))}
-      </div>
-      <div
-        style={{
-          flex: 1, height: 1,
+          position: "absolute", left: spineLeft + 8, right: 0, top: 0, height: 1,
           background: `linear-gradient(90deg, ${accent}60, transparent)`,
         }}
       />
@@ -92,6 +107,7 @@ function TimelineRow({ item, now, accent, onJump }) {
   let Icon, iconColor, title, sub, meta, leftLabel, urgency, jumpPayload;
   let isPast = false, isLive = false;
   let priorityLevel = null;
+  let overdueText = null;
 
   if (item.kind === "event") {
     const ev = item.data;
@@ -128,6 +144,9 @@ function TimelineRow({ item, now, accent, onJump }) {
     meta = d.source === "todoist" ? "Todoist" : d.source === "canvas" ? "Canvas" : "CTM";
     if (d.source === "todoist" && PRIORITY_COLOR[d.priority]) {
       priorityLevel = d.priority;
+    }
+    if (d.source === "todoist" && d.status !== "complete") {
+      overdueText = overdueLabel(item.dueAtMs, now);
     }
     jumpPayload = { kind: "deadline", id: d.id, data: d };
   } else {
@@ -213,6 +232,18 @@ function TimelineRow({ item, now, accent, onJump }) {
             </span>
           )}
           {priorityLevel && <PriorityFlag level={priorityLevel} />}
+          {overdueText && (
+            <span
+              style={{
+                padding: "1px 6px", borderRadius: 99,
+                fontSize: 9, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 600,
+                background: "#f38ba820", color: "#f38ba8",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {overdueText}
+            </span>
+          )}
         </div>
         {sub && (
           <div
@@ -245,8 +276,9 @@ function TimelineRow({ item, now, accent, onJump }) {
 
 /**
  * TodayTimeline — merges events + deadlines onto one chronological rail.
- * Now marker is anchored between the last-past and first-future item so the
- * user sees "where they are" without scrolling.
+ * The now marker slides proportionally inside a live event's row, otherwise
+ * snaps to the boundary between past and future items; CSS transitions the
+ * `top` value so the marker animates smoothly between positions.
  */
 export default function TodayTimeline({
   accent = "#cba6da",
@@ -372,22 +404,80 @@ export default function TodayTimeline({
   );
 }
 
+// Gutter sizes enough to hold the "Now · HH:MM PM" pill in the left margin
+// without colliding with row content. Applied globally so the spine position
+// stays visually consistent across day groups; past/future days simply have
+// an empty gutter.
+const GUTTER = 130;
+const SPINE_LEFT = GUTTER - 16; // spine sits 16px before row content
+const PILL_SPINE_GAP = 16; // horizontal gap between pill's right edge and the spine dot
+
 function DayGroup({ day, items, now, accent, onJump, isFirst }) {
   const label = dayBucketLabel(day, now);
   const hideHeader = isFirst && day === 0;
+  const isToday = day === 0;
 
-  // Compute the index where "now" falls among today's items. Rendering the
-  // marker from this index — rather than probing each adjacent pair for a
-  // past/future boundary — keeps the marker visible when the filter narrows
-  // to a lane where every item is either all past or all future.
-  let nowIdx = -1;
-  if (day === 0) {
-    nowIdx = items.length;
-    for (let i = 0; i < items.length; i++) {
-      const itMs = items[i].startMs ?? items[i].dueAtMs;
-      if (now < itMs) { nowIdx = i; break; }
+  const rowRefs = useRef([]);
+  const [markerTop, setMarkerTop] = useState(null);
+
+  // Position the now-marker by measuring rendered row offsets. Live events
+  // get a proportional slide (progress through their duration); elsewhere the
+  // marker snaps to a row boundary and relies on CSS `transition: top` to
+  // animate between positions. useLayoutEffect is correct here — we read
+  // layout then sync state before paint.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useLayoutEffect(() => {
+    if (!isToday || items.length === 0) {
+      setMarkerTop(null);
+      return;
     }
-  }
+
+    let liveIdx = -1;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind !== "event") continue;
+      const s = it.startMs;
+      const e = it.endMs;
+      if (s != null && e != null && s <= now && now < e) {
+        liveIdx = i;
+        break;
+      }
+    }
+
+    if (liveIdx >= 0 && rowRefs.current[liveIdx]) {
+      const row = rowRefs.current[liveIdx];
+      const it = items[liveIdx];
+      const progress = (now - it.startMs) / (it.endMs - it.startMs);
+      setMarkerTop(row.offsetTop + progress * row.offsetHeight);
+      return;
+    }
+
+    let firstFutureIdx = -1;
+    for (let i = 0; i < items.length; i++) {
+      const ms = items[i].startMs ?? items[i].dueAtMs;
+      if (ms != null && ms > now) { firstFutureIdx = i; break; }
+    }
+
+    if (firstFutureIdx === 0) {
+      setMarkerTop(0);
+      return;
+    }
+    if (firstFutureIdx > 0 && rowRefs.current[firstFutureIdx - 1]) {
+      const prev = rowRefs.current[firstFutureIdx - 1];
+      setMarkerTop(prev.offsetTop + prev.offsetHeight + 2);
+      return;
+    }
+
+    const lastIdx = items.length - 1;
+    if (rowRefs.current[lastIdx]) {
+      const last = rowRefs.current[lastIdx];
+      setMarkerTop(last.offsetTop + last.offsetHeight + 2);
+      return;
+    }
+
+    setMarkerTop(null);
+  }, [items, now, isToday]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div style={{ marginBottom: 28 }}>
@@ -396,7 +486,7 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
           <div
             style={{
               fontSize: 10.5, letterSpacing: 0.8, textTransform: "uppercase", fontWeight: 600,
-              color: day === 0 ? "#cdd6f4" : "rgba(205,214,244,0.45)",
+              color: isToday ? "#cdd6f4" : "rgba(205,214,244,0.45)",
             }}
           >
             {label}
@@ -408,21 +498,26 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
         </div>
       )}
 
-      <div style={{ position: "relative", paddingLeft: 22 }}>
+      <div style={{ position: "relative", paddingLeft: GUTTER }}>
         <div
           style={{
-            position: "absolute", left: 6, top: 8, bottom: 8, width: 1,
+            position: "absolute", left: SPINE_LEFT, top: 8, bottom: 8, width: 1,
             background: "rgba(255,255,255,0.06)",
           }}
         />
         {items.map((it, i) => (
-          <div key={`${it.kind}-${i}`}>
-            {i === nowIdx && <NowLine accent={accent} now={now} />}
+          <div key={`${it.kind}-${i}`} ref={(el) => { rowRefs.current[i] = el; }}>
             <TimelineRow item={it} now={now} accent={accent} onJump={onJump} />
           </div>
         ))}
-        {day === 0 && nowIdx === items.length && items.length > 0 && (
-          <NowLine accent={accent} now={now} />
+        {isToday && markerTop != null && (
+          <NowMarker
+            accent={accent}
+            now={now}
+            top={markerTop}
+            spineLeft={SPINE_LEFT}
+            pillGap={PILL_SPINE_GAP}
+          />
         )}
       </div>
     </div>

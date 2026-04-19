@@ -25,6 +25,23 @@ export function daysLabel(d) {
   return `${d}d`;
 }
 
+// Granular overdue label for an item with a due timestamp. Returns null if not
+// overdue. Unit breakpoints: <60min → "Nmin", <24h → "Nh", <30d → "Nd",
+// otherwise "Nmo". "mo" disambiguates months from minutes.
+export function overdueLabel(dueAtMs, now = Date.now()) {
+  if (!Number.isFinite(dueAtMs)) return null;
+  const ms = now - dueAtMs;
+  if (ms <= 0) return null;
+  const min = Math.floor(ms / 60000);
+  if (min < 60) return `${min} min overdue`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h overdue`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d} d overdue`;
+  const mo = Math.floor(d / 30);
+  return `${mo}mo overdue`;
+}
+
 export function phaseIndex(date = new Date()) {
   const hour = parseInt(date.toLocaleTimeString("en-US", {
     timeZone: "America/Los_Angeles", hour: "numeric", hour12: false,
