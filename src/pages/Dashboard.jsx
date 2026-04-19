@@ -46,7 +46,6 @@ export default function Dashboard() {
     disabled: isMock,
     lastQuickRefreshAt: bd.lastQuickRefreshAt,
     onQuickRefresh: bd.handleQuickRefresh,
-    onSilentRefresh: liveData.refreshNow,
   });
 
   const handleFullGeneration = useCallback(async () => {
