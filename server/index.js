@@ -10,6 +10,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import authRoutes from "./routes/auth.js";
 import briefingRoutes from "./routes/briefing.js";
+import newBriefingRoutes from "./routes/briefing/index.js";
 import accountsRoutes from "./routes/accounts.js";
 import searchRoutes from "./routes/search.js";
 import liveRoutes from "./routes/live.js";
@@ -56,6 +57,7 @@ app.use("/api", (req, res, next) => {
 
 // API routes
 app.use("/api/auth", authRoutes);
+app.use("/api/briefing", newBriefingRoutes);
 app.use("/api/briefing", briefingRoutes);
 app.use("/api/ea", accountsRoutes);
 app.use("/api/search", searchRoutes);

@@ -1,8 +1,7 @@
 import { Router } from "express";
 import db from "../db/connection.js";
 import { requireAuth } from "../middleware/auth.js";
-import { generateBriefing, quickRefresh, loadUserConfig, fetchAllEmails } from "../briefing/index.js";
-import { indexEmails } from "../briefing/email-index.js";
+import { generateBriefing, quickRefresh, loadUserConfig } from "../briefing/index.js";
 import {
   fetchEmailBody as fetchGmailBody,
   markAsRead as gmailMarkAsRead,
@@ -22,32 +21,10 @@ import * as storedBriefingService from "../briefing/stored-briefing-service.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
 import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
-import { applyScenarios, listScenarios } from "../db/scenarios/index.js";
+import { applyScenarios } from "../db/scenarios/index.js";
 
 const router = Router();
 router.use(requireAuth);
-
-// List available dev scenarios (dev only)
-router.get("/scenarios", (req, res) => {
-  if (process.env.NODE_ENV === "production") return res.status(404).json({ message: "Not found" });
-  res.json(listScenarios());
-});
-
-// Reindex emails without generating a briefing (dev only — no Claude call)
-router.post("/dev-reindex-emails", async (req, res) => {
-  if (process.env.NODE_ENV === "production") return res.status(404).json({ message: "Not found" });
-  const userId = process.env.EA_USER_ID;
-  const hoursBack = Math.min(parseInt(req.query.hours) || 720, 2160);
-  try {
-    const { accounts, settings } = await loadUserConfig(userId);
-    const emails = await fetchAllEmails(accounts, settings, hoursBack);
-    await indexEmails(userId, emails);
-    res.json({ indexed: emails.length, hoursBack });
-  } catch (err) {
-    console.error("[EA] Dev reindex failed:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
 
 // Persist read status into the stored briefing so reloads reflect it
 async function markEmailsReadInIndex(userId, uids) {
