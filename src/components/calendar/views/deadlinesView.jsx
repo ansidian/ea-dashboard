@@ -350,6 +350,7 @@ const deadlinesView = {
   renderDetail,
   renderFooter,
   HeaderExtras: null,
+  label: "Deadlines",
 };
 
 export default deadlinesView;

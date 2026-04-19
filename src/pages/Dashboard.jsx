@@ -23,6 +23,7 @@ import useBriefingData from "../hooks/useBriefingData";
 import useAutoRefresh from "../hooks/useAutoRefresh";
 import useNotifications from "../hooks/useNotifications";
 import useCustomize from "../hooks/useCustomize";
+import useCalendarRange from "../hooks/useCalendarRange";
 
 const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevPanel.jsx")) : null;
 
@@ -38,6 +39,7 @@ export default function Dashboard() {
   }, []);
 
   const liveData = useLiveData({ disabled: isMock });
+  const calendarRange = useCalendarRange({ disabled: isMock });
   useNotifications(liveData);
   const bd = useBriefingData({ liveData, isMock });
   const refreshHold = useHoldGesture({ onShortPress: bd.handleQuickRefresh });
@@ -155,6 +157,7 @@ export default function Dashboard() {
       <RedesignShell
         bd={bd}
         liveData={liveData}
+        calendarRange={calendarRange}
         refreshHold={refreshHold}
         handleFullGeneration={handleFullGeneration}
         historyOpen={historyOpen}
@@ -176,7 +179,7 @@ export default function Dashboard() {
  * REDESIGN SHELL — tabs + palette + customize + routed body
  * ====================================================================== */
 function RedesignShell({
-  bd, liveData, refreshHold, handleFullGeneration,
+  bd, liveData, calendarRange, refreshHold, handleFullGeneration,
   historyOpen, setHistoryOpen, historyTriggerRef,
   calendarDeadlines, loadCalendarDeadlines,
 }) {
@@ -200,8 +203,9 @@ function RedesignShell({
   const [calendarView, setCalendarView] = useState(() => {
     try {
       const saved = localStorage.getItem("calendar:lastView");
-      return saved === "deadlines" ? "deadlines" : "bills";
-    } catch { return "bills"; }
+      if (saved === "deadlines" || saved === "bills" || saved === "events") return saved;
+      return "events";
+    } catch { return "events"; }
   });
   const showBills = !!liveData.actualConfigured;
   const [calendarFocus, setCalendarFocus] = useState(null);
@@ -271,6 +275,13 @@ function RedesignShell({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpToSection, bd.handleQuickRefresh, handleFullGeneration]);
 
+  const eventsData = useMemo(() => ({
+    ensureRange: calendarRange.ensureRange,
+    getEvents: calendarRange.getEvents,
+    loading: calendarRange.loading,
+    error: calendarRange.error,
+  }), [calendarRange.ensureRange, calendarRange.getEvents, calendarRange.loading, calendarRange.error]);
+
   const nextBriefingLabel = formatNextBriefingLabel(bd.schedules);
 
   // Unread-live count surfaced on the Inbox tab. Drives the little blue pill
@@ -317,6 +328,7 @@ function RedesignShell({
           <DashboardBody
             briefing={briefing}
             liveData={liveData}
+            calendarRange={calendarRange}
             customize={customize}
             accent={accent}
             viewingPast={bd.viewingPast}
@@ -328,6 +340,7 @@ function RedesignShell({
               });
             }}
             onOpenBillsCalendar={(date) => openCalendar("bills", date || null)}
+            onOpenEventsCalendar={(date) => openCalendar("events", date || null)}
             onJumpSection={jumpToSection}
           />
         ) : (
@@ -388,6 +401,7 @@ function RedesignShell({
         view={calendarView}
         onViewChange={changeCalendarView}
         focusDate={calendarFocus}
+        eventsData={eventsData}
         billsData={{
           schedules: liveData.allSchedules,
           recentTransactions: liveData.recentTransactions,
@@ -407,36 +421,28 @@ function RedesignShell({
  * DASHBOARD BODY — hero + timeline + rails (layout variants)
  * ====================================================================== */
 function DashboardBody({
-  briefing, liveData, customize, accent,
-  onOpenEmail, onOpenDeadline, onOpenBillsCalendar, onJumpSection,
+  briefing, liveData, calendarRange, customize, accent,
+  onOpenEmail, onOpenDeadline, onOpenBillsCalendar, onOpenEventsCalendar, onJumpSection,
 }) {
   const { dashboardLayout, density, showInsights, showInboxPeek } = customize;
   const ctx = useDashboard();
-  // Merge today + tomorrow + next-week arrays so the timeline can bucket
-  // events into "Today", "Tomorrow", "In N days" groups. Dedup by startMs+title
-  // because tomorrowCalendar's single day overlaps nextWeekCalendar's Sun–Sat
-  // range whenever today is Saturday.
-  const events = useMemo(() => {
-    const parts = [
-      liveData.liveCalendar || briefing?.calendar || [],
-      liveData.liveTomorrowCalendar || briefing?.tomorrowCalendar || [],
-      liveData.liveNextWeekCalendar || briefing?.nextWeekCalendar || [],
-    ];
-    const seen = new Set();
-    const merged = [];
-    for (const arr of parts) {
-      for (const ev of arr) {
-        const key = `${ev.startMs}:${ev.title}:${ev.source}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        merged.push(ev);
-      }
-    }
-    return merged;
-  }, [
-    liveData.liveCalendar, liveData.liveTomorrowCalendar, liveData.liveNextWeekCalendar,
-    briefing?.calendar, briefing?.tomorrowCalendar, briefing?.nextWeekCalendar,
-  ]);
+
+  const [events, setEvents] = useState([]);
+  const today = useMemo(
+    () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date()),
+    [],
+  );
+  useEffect(() => {
+    if (!calendarRange) return;
+    const endDate = new Date(`${today}T12:00:00Z`);
+    endDate.setUTCDate(endDate.getUTCDate() + 14);
+    const end = endDate.toISOString().slice(0, 10);
+    let cancelled = false;
+    calendarRange.ensureRange(today, end)
+      .then((result) => { if (!cancelled) setEvents(result); })
+      .catch(() => { if (!cancelled) setEvents(briefing?.calendar || []); });
+    return () => { cancelled = true; };
+  }, [calendarRange.ensureRange, today, briefing?.calendar]);
   const ctm = briefing?.ctm?.upcoming || [];
   const todoist = briefing?.todoist?.upcoming || [];
   const deadlines = [...ctm, ...todoist];
@@ -452,8 +458,13 @@ function DashboardBody({
       onOpenDeadline(payload.data || payload, anchor);
     } else if (payload.kind === "bill") {
       onOpenBillsCalendar(payload.data?.next_date || payload.date || null);
+    } else if (payload.kind === "event" && payload.data?.startMs) {
+      const ymd = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Los_Angeles",
+      }).format(new Date(payload.data.startMs));
+      onOpenEventsCalendar(ymd);
     }
-  }, [onOpenEmail, onOpenDeadline, onOpenBillsCalendar]);
+  }, [onOpenEmail, onOpenDeadline, onOpenBillsCalendar, onOpenEventsCalendar]);
 
   const hero = (
     <DashboardHero

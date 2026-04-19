@@ -106,7 +106,7 @@ function CalendarSummary({ view, viewYear, viewMonth, currentYear, currentMonth,
             color: "rgba(205,214,244,0.55)",
           }}
         >
-          {view === "bills" ? "Bills overview" : "Deadlines overview"}
+          {view === "bills" ? "Bills overview" : view === "events" ? "Events overview" : "Deadlines overview"}
         </div>
         <div className="ea-display" style={{ marginTop: 4, fontSize: 18, color: "#fff", letterSpacing: -0.2 }}>
           {isCurrentMonth ? "This month · " : ""}{monthLabel}
@@ -155,7 +155,7 @@ export default function CalendarModal({
 
   const activeView = VIEWS[view] || billsView;
   const viewData =
-    view === "events" ? eventsData
+    view === "events" ? { events: eventsData?.getEvents?.(viewYear, viewMonth) || [] }
     : view === "deadlines" ? deadlinesData
     : billsData;
 
@@ -313,6 +313,14 @@ export default function CalendarModal({
     document.addEventListener("keydown", handleKey, true);
     return () => document.removeEventListener("keydown", handleKey, true);
   }, [open, onClose, currentMonth, currentYear, canGoPrev, view, onViewChange]);
+
+  useEffect(() => {
+    if (!open || view !== "events" || !eventsData?.ensureRange) return;
+    const start = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-01`;
+    const last = new Date(Date.UTC(viewYear, viewMonth + 1, 0)).getUTCDate();
+    const end = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+    eventsData.ensureRange(start, end);
+  }, [open, view, viewYear, viewMonth, eventsData]);
 
   const monthName = new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long" });
   const monthYear = String(viewYear);

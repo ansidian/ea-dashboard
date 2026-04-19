@@ -137,7 +137,7 @@ function TimelineRow({ item, now, accent, onJump }) {
       : ev.location || ev.subtitle;
     meta = formatEventDuration(ev.startMs, ev.endMs);
     urgency = isLive ? "high" : "low";
-    jumpPayload = { kind: "event", id: ev.id };
+    jumpPayload = { kind: "event", id: ev.id, data: ev };
   } else if (item.kind === "deadline") {
     const d = item.data;
     const days = daysUntil(d.due_date);
