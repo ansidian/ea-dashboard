@@ -17,6 +17,7 @@ morning-briefing.jsx
 .worktrees/
 CLAUDE.md
 .playwright-mcp
+.playwright-cli
 My-Finances-*/
 dist-ssr
 *.local
