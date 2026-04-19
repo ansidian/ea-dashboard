@@ -103,6 +103,10 @@ export async function fetchCalendar(gmailAccounts, { startDate, endDate } = {}) 
         "https://www.googleapis.com/calendar/v3/users/me/calendarList",
         { headers: { Authorization: `Bearer ${token}` } },
       );
+      if (!calListRes.ok) {
+        const body = await calListRes.text().catch(() => "");
+        console.warn(`[Calendar] calendarList ${calListRes.status} for ${account.email}: ${body.slice(0, 200)}`);
+      }
       const calendars = calListRes.ok
         ? (await calListRes.json()).items || []
         : [{ id: "primary" }];
@@ -121,7 +125,11 @@ export async function fetchCalendar(gmailAccounts, { startDate, endDate } = {}) 
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          console.warn(`[Calendar] events ${res.status} for ${account.email} cal=${calId}: ${body.slice(0, 200)}`);
+          continue;
+        }
 
         const data = await res.json();
         for (const event of data.items || []) {
