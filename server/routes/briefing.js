@@ -551,7 +551,7 @@ router.post("/email/:uid/mark-read", async (req, res) => {
     } else {
       await gmailMarkAsRead(found.account, uid);
     }
-    await storedBriefingService.markEmailsRead(userId,uid);
+    await storedBriefingService.markEmailsRead(userId, uid);
     await markEmailsReadInIndex(userId, uid);
     res.json({ ok: true });
   } catch (err) {
@@ -573,7 +573,7 @@ router.post("/email/:uid/mark-unread", async (req, res) => {
     } else {
       await gmailMarkAsUnread(found.account, uid);
     }
-    await storedBriefingService.markEmailsUnread(userId,uid);
+    await storedBriefingService.markEmailsUnread(userId, uid);
     await markEmailsUnreadInIndex(userId, uid);
     res.json({ ok: true });
   } catch (err) {
@@ -655,7 +655,7 @@ router.post("/email/mark-all-read", async (req, res) => {
     }
 
     await Promise.all(ops);
-    await storedBriefingService.markEmailsRead(userId,uids);
+    await storedBriefingService.markEmailsRead(userId, uids);
     await markEmailsReadInIndex(userId, uids);
     res.json({ ok: true });
   } catch (err) {
