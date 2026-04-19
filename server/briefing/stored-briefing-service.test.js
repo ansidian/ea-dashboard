@@ -280,6 +280,24 @@ describe("applyCTMCompletionAfterTodoistClose", () => {
   });
 });
 
+describe("email mutations with missing important field", () => {
+  it("safely no-ops when an account lacks the important array", async () => {
+    seedLatest({ emails: { accounts: [{ name: "Personal" }] } });
+    await markEmailsRead("u1", "any-id");
+
+    seedLatest({ emails: { accounts: [{ name: "Personal" }] } });
+    await markEmailsUnread("u1", "any-id");
+
+    seedLatest({ emails: { accounts: [{ name: "Personal" }] } });
+    await removeDismissedEmailFromBriefing("u1", "any-id");
+
+    const updateCalls = mockDb.execute.mock.calls.filter(
+      (c) => c[0].sql?.startsWith("UPDATE")
+    );
+    expect(updateCalls).toHaveLength(0);
+  });
+});
+
 describe("mergeAccountPrefs", () => {
   it("applies label/color/icon from ea_accounts by label or email match", async () => {
     mockDb.execute.mockResolvedValueOnce({

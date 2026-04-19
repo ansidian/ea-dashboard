@@ -56,7 +56,7 @@ export async function markEmailsRead(userId, uids) {
   return mutateLatest(userId, (briefing) => {
     let changed = false;
     for (const acct of briefing.emails?.accounts || []) {
-      for (const email of acct.important) {
+      for (const email of (acct.important ?? [])) {
         if ((uidSet.has(email.id) || uidSet.has(email.uid)) && !email.read) {
           email.read = true;
           changed = true;
@@ -72,7 +72,7 @@ export async function markEmailsUnread(userId, uids) {
   return mutateLatest(userId, (briefing) => {
     let changed = false;
     for (const acct of briefing.emails?.accounts || []) {
-      for (const email of acct.important) {
+      for (const email of (acct.important ?? [])) {
         if ((uidSet.has(email.id) || uidSet.has(email.uid)) && email.read) {
           email.read = false;
           changed = true;
@@ -87,8 +87,8 @@ export async function removeDismissedEmailFromBriefing(userId, emailId) {
   return mutateLatest(userId, (briefing) => {
     let changed = false;
     for (const acct of briefing.emails?.accounts || []) {
-      const before = acct.important.length;
-      acct.important = acct.important.filter((e) => e.id !== emailId);
+      const before = acct.important?.length ?? 0;
+      acct.important = (acct.important ?? []).filter((e) => e.id !== emailId);
       if (acct.important.length !== before) {
         acct.unread = acct.important.length;
         changed = true;
