@@ -17,6 +17,7 @@ import calendarRoutes from "./routes/calendar.js";
 import { initScheduler, startBackgroundIndexer } from "./briefing/scheduler.js";
 import { startSnoozeWaker } from "./briefing/snooze-waker.js";
 import { migrate } from "./db/migrate.js";
+import { migrateLegacyEncryption } from "./db/migrate-encryption.js";
 
 
 // fail fast if critical env vars are missing
@@ -76,7 +77,7 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-migrate().then(() => {
+migrate().then(() => migrateLegacyEncryption()).then(() => {
   app.listen(PORT, () => {
     console.log(`EA Dashboard running on http://localhost:${PORT}`);
     initScheduler().catch((err) =>
