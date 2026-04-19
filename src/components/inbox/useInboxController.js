@@ -420,6 +420,7 @@ export default function useInboxController({
     buildEmailSnapshot,
     markEmailRead,
     markEmailUnread,
+    onLiveReadOverrideChange,
   ]);
 
   const trashHold = useKeyHold({

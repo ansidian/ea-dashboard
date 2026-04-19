@@ -502,21 +502,14 @@ export function DashboardBody({
   const effectiveLayout = isMobile ? "paper" : dashboardLayout;
   const ctx = useDashboard();
 
-  const seededEvents = briefing?.calendar || [];
-  const [events, setEvents] = useState(() => seededEvents);
-  const [liveEventsReady, setLiveEventsReady] = useState(() => seededEvents.length > 0);
+  const seededEvents = useMemo(() => briefing?.calendar || [], [briefing?.calendar]);
+  const [events, setEvents] = useState([]);
+  const [liveEventsReady, setLiveEventsReady] = useState(false);
   const today = useMemo(
     () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date()),
     [],
   );
   const ensureCalendarRange = calendarRange.ensureRange;
-
-  useEffect(() => {
-    if (seededEvents.length > 0) {
-      setEvents(seededEvents);
-      setLiveEventsReady(true);
-    }
-  }, [seededEvents]);
 
   useEffect(() => {
     const endDate = new Date(`${today}T12:00:00Z`);
@@ -532,21 +525,23 @@ export function DashboardBody({
       })
       .catch(() => {
         if (!cancelled) {
-          setEvents((prev) => (prev.length > 0 ? prev : (briefing?.calendar || [])));
+          setEvents((prev) => (prev.length > 0 ? prev : seededEvents));
           setLiveEventsReady(true);
         }
       });
     return () => { cancelled = true; };
-  }, [ensureCalendarRange, today, briefing?.calendar]);
-  const ctm = briefing?.ctm?.upcoming || [];
-  const todoist = briefing?.todoist?.upcoming || [];
-  const deadlines = [...ctm, ...todoist];
+  }, [ensureCalendarRange, today, seededEvents]);
+  const ctm = useMemo(() => briefing?.ctm?.upcoming || [], [briefing?.ctm?.upcoming]);
+  const todoist = useMemo(() => briefing?.todoist?.upcoming || [], [briefing?.todoist?.upcoming]);
+  const deadlines = useMemo(() => [...ctm, ...todoist], [ctm, todoist]);
   const bills = liveData.liveBills || [];
   const insights = briefing?.aiInsights || [];
   const emailAccounts = ctx.emailAccounts;
+  const pressureNow = useMemo(() => new Date(`${today}T12:00:00Z`).getTime(), [today]);
+  const displayEvents = liveEventsReady ? events : seededEvents;
   const pressureFocusDate = useMemo(
-    () => focusPressureDate(deadlines, Date.now()),
-    [deadlines],
+    () => focusPressureDate(deadlines, pressureNow),
+    [deadlines, pressureNow],
   );
 
   const handleRailJump = useCallback((payload, anchor) => {
@@ -573,7 +568,7 @@ export function DashboardBody({
       stack={isMobile}
       briefing={briefing}
       liveWeather={liveData.liveWeather}
-      liveCalendar={events}
+      liveCalendar={displayEvents}
       liveBills={bills}
       onOpenPressure={() => onOpenDeadlinesCalendar?.(pressureFocusDate)}
       showEventSkeletons={!seededEvents.length && !liveEventsReady}
@@ -597,7 +592,7 @@ export function DashboardBody({
       accent={accent}
       density={density}
       isMobile={isMobile}
-      events={events}
+      events={displayEvents}
       deadlines={deadlines}
       onJump={handleRailJump}
       showEventSkeletons={!seededEvents.length && !liveEventsReady}
