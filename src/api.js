@@ -107,6 +107,9 @@ export const deleteBriefing = (id) => apiFetch(`/api/briefing/${id}`, { method: 
 
 // Calendar
 export const getCalendarDeadlines = () => apiFetch("/api/calendar/deadlines");
+// Calendar range fetch — used by useCalendarRange hook
+export const getCalendarRange = (start, end) =>
+  apiFetch(`/api/calendar/range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
 
 // Todoist
 export const getTodoistProjects = () => apiFetch("/api/briefing/todoist/projects");
