@@ -98,9 +98,15 @@ router.get("/all", async (_req, res) => {
       }
     }
 
-    // Compute hours since briefing (min 1h, max 24h)
+    // Dynamic window: when the briefing carries emails, live only needs to
+    // cover the gap since generation (min 1h, max 24h). With an empty
+    // briefing (clean inbox or a failed generation), fall back to the 12h
+    // default — otherwise live shows an artificially narrow slice right
+    // around briefing time, and actions that should resurface email (e.g.
+    // mark-as-unread on a 6h-old message) can't surface anything outside
+    // the gap window.
     let hoursBack = 12;
-    if (briefingGeneratedAt) {
+    if (briefingGeneratedAt && knownUids.size > 0) {
       const lastTime = new Date(briefingGeneratedAt + "Z").getTime();
       hoursBack = Math.max(1, Math.min(24, Math.ceil((Date.now() - lastTime) / 3600000)));
     }
