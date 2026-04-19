@@ -219,41 +219,47 @@ export default function CustomizePanel({
 
       {tab === "inbox" && (
         <>
-          <Row label="Inbox layout">
-            <Seg
-              value={inboxLayout}
-              onChange={(v) => setKey("inboxLayout", v)}
-              options={[
-                { value: "two-pane", label: "Two-pane" },
-                { value: "three-pane", label: "Three-pane" },
-                { value: "list-only", label: "List only" },
-              ]}
-              accent={accent}
-            />
-          </Row>
-          <Row label="Grouping">
-            <Seg
-              value={inboxGrouping}
-              onChange={(v) => setKey("inboxGrouping", v)}
-              options={[
-                { value: "swimlanes", label: "Swimlanes" },
-                { value: "flat", label: "Flat" },
-              ]}
-              accent={accent}
-            />
-          </Row>
-          <Row label="Inbox density">
-            <Seg
-              value={inboxDensity}
-              onChange={(v) => setKey("inboxDensity", v)}
-              options={[
-                { value: "compact", label: "Compact" },
-                { value: "default", label: "Default" },
-                { value: "comfortable", label: "Comfort" },
-              ]}
-              accent={accent}
-            />
-          </Row>
+          {!isMobile && (
+            <Row label="Inbox layout">
+              <Seg
+                value={inboxLayout}
+                onChange={(v) => setKey("inboxLayout", v)}
+                options={[
+                  { value: "two-pane", label: "Two-pane" },
+                  { value: "three-pane", label: "Three-pane" },
+                  { value: "list-only", label: "List only" },
+                ]}
+                accent={accent}
+              />
+            </Row>
+          )}
+          {!isMobile && (
+            <Row label="Grouping">
+              <Seg
+                value={inboxGrouping}
+                onChange={(v) => setKey("inboxGrouping", v)}
+                options={[
+                  { value: "swimlanes", label: "Swimlanes" },
+                  { value: "flat", label: "Flat" },
+                ]}
+                accent={accent}
+              />
+            </Row>
+          )}
+          {!isMobile && (
+            <Row label="Inbox density">
+              <Seg
+                value={inboxDensity}
+                onChange={(v) => setKey("inboxDensity", v)}
+                options={[
+                  { value: "compact", label: "Compact" },
+                  { value: "default", label: "Default" },
+                  { value: "comfortable", label: "Comfort" },
+                ]}
+                accent={accent}
+              />
+            </Row>
+          )}
           <Row label="Claude verbosity" hint="how loud">
             <Seg
               value={aiVerbosity}
@@ -266,12 +272,16 @@ export default function CustomizePanel({
               accent={accent}
             />
           </Row>
-          <Row label="Show previews in list">
-            <Toggle value={showPreview} onChange={(v) => setKey("showPreview", v)} accent={accent} />
-          </Row>
-          <Row label="Compact sidebar">
-            <Toggle value={sidebarCompact} onChange={(v) => setKey("sidebarCompact", v)} accent={accent} />
-          </Row>
+          {!isMobile && (
+            <Row label="Show previews in list">
+              <Toggle value={showPreview} onChange={(v) => setKey("showPreview", v)} accent={accent} />
+            </Row>
+          )}
+          {!isMobile && (
+            <Row label="Compact sidebar">
+              <Toggle value={sidebarCompact} onChange={(v) => setKey("sidebarCompact", v)} accent={accent} />
+            </Row>
+          )}
         </>
       )}
 

@@ -51,6 +51,8 @@ function formatModelName(model) {
 
 export default function BillBadge({ bill, model, emailSubject, emailFrom, emailBody, layout = "inline" }) {
   const isDrawer = layout === "drawer";
+  const isMobile = layout === "mobile";
+  const usesStackedLayout = isDrawer || isMobile;
   const [extractModel, setExtractModel] = useState(null);
   const effectiveModel = model || extractModel;
   const modelDisplayName = formatModelName(effectiveModel);
@@ -239,15 +241,18 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
     <div
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => { if (e.key === "Enter") e.stopPropagation(); }}
-      className={isDrawer ? "px-0 py-0" : "rounded-xl px-4 py-3"}
-      style={isDrawer ? undefined : {
+      className={usesStackedLayout ? "px-0 py-0" : "rounded-xl px-4 py-3"}
+      style={usesStackedLayout ? undefined : {
         background: "rgba(203,166,218,0.04)",
         border: "1px solid rgba(203,166,218,0.1)",
       }}
     >
       {/* Header: type pills. In drawer mode the Extract button drops to its
          own row below; in inline mode it sits right-aligned on the pill row. */}
-      <div className="flex items-center gap-1.5 flex-wrap">
+      <div className={cn(
+        "flex items-center gap-1.5 flex-wrap",
+        isMobile && "grid grid-cols-2 gap-2",
+      )}>
         {Object.entries(typeLabels).map(([key, info]) => {
           const Icon = info.Icon;
           const selected = editType === key;
@@ -255,7 +260,10 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
             <button
               key={key}
               onClick={(e) => { e.stopPropagation(); handleTypeChange(key); }}
-              className="inline-flex items-center gap-1 text-[10px] font-semibold tracking-wide px-2 py-1 rounded-md cursor-pointer transition-all duration-200"
+              className={cn(
+                "inline-flex items-center gap-1 font-semibold tracking-wide rounded-md cursor-pointer transition-all duration-200",
+                isMobile ? "w-full justify-center text-[10.5px] px-3 py-2" : "text-[10px] px-2 py-1",
+              )}
               style={{
                 color: selected ? info.color : "rgba(205,214,244,0.45)",
                 background: selected ? `${info.color}14` : "rgba(255,255,255,0.02)",
@@ -267,14 +275,14 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
             </button>
           );
         })}
-        {!isDrawer && (
+        {!usesStackedLayout && (
           <span className="text-[10px] text-muted-foreground/40 italic ml-1 truncate">
             {typeHints[editType]}
           </span>
         )}
-        {!isDrawer && effectiveModel ? (
+        {!usesStackedLayout && effectiveModel ? (
           <span className="text-[10px] text-muted-foreground/40 ml-auto shrink-0">detected by {modelDisplayName}</span>
-        ) : !isDrawer && canExtract ? (
+        ) : !usesStackedLayout && canExtract ? (
           <ExtractButton
             extractState={extractState}
             onClick={handleExtract}
@@ -282,17 +290,17 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
           />
         ) : null}
       </div>
-      {isDrawer && (
-        <div className="text-[10px] text-muted-foreground/45 italic mt-1.5">
+      {usesStackedLayout && (
+        <div className={cn("text-muted-foreground/45 italic", isMobile ? "text-[11px] mt-3" : "text-[10px] mt-1.5")}>
           {typeHints[editType]}
         </div>
       )}
-      {isDrawer && (effectiveModel ? (
-        <div className="text-[10px] text-muted-foreground/40 mt-2 text-right">
+      {usesStackedLayout && (effectiveModel ? (
+        <div className={cn("text-muted-foreground/40 text-right", isMobile ? "text-[11px] mt-2.5" : "text-[10px] mt-2")}>
           detected by {modelDisplayName}
         </div>
       ) : canExtract ? (
-        <div className="mt-3">
+        <div className={cn(isMobile ? "mt-3.5" : "mt-3")}>
           <ExtractButton
             extractState={extractState}
             onClick={handleExtract}
@@ -313,8 +321,8 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
         <>
           {/* Form rows. Drawer mode stacks everything vertically (narrow column);
              inline mode uses a 3-up grid for the top row to save vertical space. */}
-          {isDrawer ? (
-            <div className="flex flex-col gap-2.5 mt-3 animate-[fadeIn_0.25s_ease]">
+          {usesStackedLayout ? (
+            <div className={cn("flex flex-col animate-[fadeIn_0.25s_ease]", isMobile ? "gap-3 mt-4" : "gap-2.5 mt-3")}>
               {!isTransfer ? (
                 <FieldShell label="Payee">
                   {payees.length > 0 ? (
@@ -327,7 +335,7 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
                       onCreateNew={(name) => setEditPayee(name)}
                     />
                   ) : (
-                    <Input value={editPayee} onChange={e => setEditPayee(e.target.value)} placeholder="e.g. Da Vien" className="bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium h-8" />
+                    <Input value={editPayee} onChange={e => setEditPayee(e.target.value)} placeholder="e.g. Da Vien" className={cn("bg-input-bg border-white/[0.08] text-foreground font-medium", isMobile ? "text-[14px] h-10" : "text-[13px] h-8")} />
                   )}
                 </FieldShell>
               ) : (
@@ -340,15 +348,15 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
                   />
                 </FieldShell>
               )}
-              <div className="grid grid-cols-2 gap-2">
+              <div className={cn("grid grid-cols-2", isMobile ? "gap-3" : "gap-2")}>
                 <FieldShell label="Amount">
                   <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground/40 pointer-events-none">$</span>
-                    <Input type="number" step="0.01" value={editAmount} onChange={e => setEditAmount(e.target.value)} placeholder="0.00" className="pl-[22px] bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium h-8" />
+                    <span className={cn("absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/40 pointer-events-none", isMobile ? "text-[14px]" : "text-[13px]")}>$</span>
+                    <Input type="number" step="0.01" value={editAmount} onChange={e => setEditAmount(e.target.value)} placeholder="0.00" className={cn("pl-[22px] bg-input-bg border-white/[0.08] text-foreground font-medium", isMobile ? "text-[14px] h-10" : "text-[13px] h-8")} />
                   </div>
                 </FieldShell>
                 <FieldShell label="Due">
-                  <Input type="date" value={editDue} onChange={e => setEditDue(e.target.value)} className="bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium [color-scheme:dark] h-8" />
+                  <Input type="date" value={editDue} onChange={e => setEditDue(e.target.value)} className={cn("bg-input-bg border-white/[0.08] text-foreground font-medium [color-scheme:dark]", isMobile ? "text-[14px] h-10" : "text-[13px] h-8")} />
                 </FieldShell>
               </div>
               {!isTransfer ? (
@@ -375,7 +383,7 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
                       value={editScheduleName}
                       onChange={e => setEditScheduleName(e.target.value)}
                       placeholder={bill.payee || "e.g. SoFi Credit Card"}
-                      className="bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium h-8"
+                      className={cn("bg-input-bg border-white/[0.08] text-foreground font-medium", isMobile ? "text-[14px] h-10" : "text-[13px] h-8")}
                     />
                   </FieldShell>
                 </>
@@ -457,37 +465,39 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
           {/* Footer. Inline mode packs toggle + label + Send button on one row.
              Drawer mode stacks: CC fee row on top, Send button on its own line
              below so the primary CTA is always a full-width tap target. */}
-          {isDrawer ? (
+          {usesStackedLayout ? (
             <>
-              <div className="flex items-center gap-2 mt-3">
+              <div className={cn("flex items-center mt-3", isMobile ? "gap-3" : "gap-2")}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setFeeOverride(!feeEnabled); }}
-                  className="relative w-[28px] h-[14px] rounded-full transition-colors duration-200 flex-shrink-0 cursor-pointer"
+                  className={cn("relative rounded-full transition-colors duration-200 flex-shrink-0 cursor-pointer", isMobile ? "w-[34px] h-[18px]" : "w-[28px] h-[14px]")}
                   style={{
                     background: feeEnabled ? "rgba(203,166,218,0.35)" : "rgba(255,255,255,0.08)",
                   }}
                   aria-label="Toggle CC fee"
                 >
                   <span
-                    className="absolute top-[2px] w-[10px] h-[10px] rounded-full transition-all duration-200"
+                    className={cn("absolute rounded-full transition-all duration-200", isMobile ? "top-[2px] w-[14px] h-[14px]" : "top-[2px] w-[10px] h-[10px]")}
                     style={{
-                      left: feeEnabled ? "15px" : "3px",
+                      left: isMobile
+                        ? (feeEnabled ? "18px" : "2px")
+                        : (feeEnabled ? "15px" : "3px"),
                       background: feeEnabled ? "#cba6da" : "rgba(205,214,244,0.3)",
                     }}
                   />
                 </button>
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   {feeEnabled && parsedFee > 0 ? (
-                    <span className="text-[10px] text-muted-foreground/60 truncate">
+                    <span className={cn("text-muted-foreground/60 truncate", isMobile ? "text-[11px]" : "text-[10px]")}>
                       ${baseAmount.toFixed(2)} + ${parsedFee.toFixed(2)} = {" "}
                       <span className="text-[#cba6da] font-medium">${totalAmount.toFixed(2)}</span>
                     </span>
                   ) : (
-                    <span className="text-[10px] text-muted-foreground/45 truncate">CC processing fee</span>
+                    <span className={cn("text-muted-foreground/45 truncate", isMobile ? "text-[11px]" : "text-[10px]")}>CC processing fee</span>
                   )}
                   {feeEnabled && !detectedFee && (
                     <div className="relative shrink-0">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground/40 pointer-events-none">$</span>
+                      <span className={cn("absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/40 pointer-events-none", isMobile ? "text-[11px]" : "text-[10px]")}>$</span>
                       <input
                         type="number"
                         step="0.01"
@@ -495,7 +505,10 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
                         onChange={e => setCustomFee(e.target.value)}
                         onClick={e => e.stopPropagation()}
                         placeholder="0.00"
-                        className="w-[68px] pl-[16px] pr-2 h-[22px] rounded-md text-[10px] font-medium bg-input-bg border border-white/[0.08] text-foreground outline-none focus:border-[#cba6da]/40"
+                        className={cn(
+                          "pl-[16px] pr-2 rounded-md font-medium bg-input-bg border border-white/[0.08] text-foreground outline-none focus:border-[#cba6da]/40",
+                          isMobile ? "w-[76px] h-[28px] text-[11px]" : "w-[68px] h-[22px] text-[10px]",
+                        )}
                       />
                     </div>
                   )}
@@ -506,7 +519,8 @@ export default function BillBadge({ bill, model, emailSubject, emailFrom, emailB
                 disabled={!canSend}
                 aria-label="Send to Actual Budget"
                 className={cn(
-                  "w-full h-9 mt-3 gap-1.5 text-[12px] font-semibold transition-all duration-200",
+                  "w-full mt-3 gap-1.5 font-semibold transition-all duration-200",
+                  isMobile ? "h-10 text-[13px]" : "h-9 text-[12px]",
                   canSend
                     ? "bg-[#cba6da] text-[#1e1e2e] border-none hover:bg-[#d4b3e2] hover:-translate-y-px active:translate-y-0"
                     : "bg-[#cba6da]/20 text-muted-foreground border-none cursor-not-allowed"

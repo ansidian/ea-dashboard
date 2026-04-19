@@ -1,6 +1,6 @@
 import EmailIframe from "../../email/EmailIframe";
 
-export default function EmailBodyPane({ state, fallback }) {
+export default function EmailBodyPane({ state, fallback, isMobile = false }) {
   const { loading, body, error } = state;
   if (loading) {
     return (
@@ -36,12 +36,18 @@ export default function EmailBodyPane({ state, fallback }) {
     return (
       <div
         style={{
-          flex: 1, minHeight: 0, display: "flex", padding: "12px 16px 16px",
+          flex: isMobile ? "unset" : 1,
+          minHeight: 0,
+          display: "flex",
+          padding: isMobile ? "0 16px 8px" : "12px 16px 16px",
         }}
       >
         <div
           style={{
-            flex: 1, minHeight: 0, borderRadius: 8, overflow: "hidden",
+            flex: 1,
+            minHeight: isMobile ? 320 : 0,
+            borderRadius: 8,
+            overflow: "hidden",
             background: "#fff",
             border: "1px solid rgba(255,255,255,0.04)",
           }}
@@ -52,7 +58,14 @@ export default function EmailBodyPane({ state, fallback }) {
     );
   }
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "22px 24px 28px" }}>
+    <div
+      style={{
+        flex: isMobile ? "unset" : 1,
+        minHeight: 0,
+        overflowY: "auto",
+        padding: isMobile ? "16px 16px 8px" : "22px 24px 28px",
+      }}
+    >
       <div
         style={{
           fontSize: 13.5, lineHeight: 1.7, color: "rgba(205,214,244,0.88)",

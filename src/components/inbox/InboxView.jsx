@@ -1,4 +1,8 @@
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CheckCheck, Filter, Search, Sparkles,
+} from "lucide-react";
 import useKeyHold from "../../hooks/useKeyHold";
 import { useDashboard } from "../../context/DashboardContext";
 import {
@@ -19,7 +23,318 @@ import {
 import Sidebar from "./Sidebar";
 import DigestStrip from "./DigestStrip";
 import InboxList from "./InboxList";
+import EmailRow from "./EmailRow";
 import Reader from "./reader/Reader";
+
+const MOBILE_FILTER_CHIPS = [
+  { key: "__all", label: "All" },
+  { key: "__live", label: "New" },
+  { key: "action", label: "Action" },
+  { key: "fyi", label: "FYI" },
+  { key: "noise", label: "Noise" },
+];
+
+function MobileChip({ active, label, count, onClick, accent }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        width: "100%",
+        minWidth: 0,
+        padding: "8px 6px",
+        borderRadius: 999,
+        border: `1px solid ${active ? `${accent}48` : "rgba(255,255,255,0.08)"}`,
+        background: active ? `${accent}16` : "rgba(255,255,255,0.03)",
+        color: active ? "#fff" : "rgba(205,214,244,0.72)",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        fontSize: 10.5,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          minWidth: 16,
+          height: 16,
+          padding: "0 4px",
+          borderRadius: 999,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: active ? `${accent}28` : "rgba(255,255,255,0.06)",
+          color: active ? accent : "rgba(205,214,244,0.5)",
+          fontSize: 8.5,
+          fontWeight: 700,
+          fontVariantNumeric: "tabular-nums",
+          flexShrink: 0,
+        }}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function MobileIconButton({ icon, label, onClick, accent, buttonRef, tinted = false, testId }) {
+  const Icon = icon;
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-label={label}
+      title={label}
+      data-testid={testId}
+      onClick={onClick}
+      style={{
+        width: 34,
+        height: 34,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 10,
+        border: `1px solid ${tinted ? `${accent}40` : "rgba(255,255,255,0.08)"}`,
+        background: tinted ? `${accent}16` : "rgba(255,255,255,0.03)",
+        color: tinted ? accent : "rgba(205,214,244,0.7)",
+        cursor: "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      <Icon size={15} />
+    </button>
+  );
+}
+
+function MobileFilterSheet({
+  open,
+  accent,
+  triggerRef,
+  panelRef,
+  accountId,
+  setAccountId,
+  accounts,
+  totalUnread,
+  onClose,
+}) {
+  useEffect(() => {
+    if (!open) return undefined;
+    function onPointerDown(e) {
+      if (panelRef.current?.contains(e.target) || triggerRef.current?.contains(e.target)) return;
+      onClose();
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open, onClose, panelRef, triggerRef]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const el = panelRef.current;
+    if (!el) return undefined;
+    function onWheel(e) {
+      const atTop = el.scrollTop <= 0;
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+      if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) {
+        e.preventDefault();
+      }
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [open, panelRef]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 120,
+        background: "rgba(0,0,0,0.48)",
+      }}
+    >
+      <div
+        ref={panelRef}
+        data-testid="inbox-mobile-filter-sheet"
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          maxHeight: "72vh",
+          padding: "16px 16px 24px",
+          borderTopLeftRadius: 16,
+          borderTopRightRadius: 16,
+          background: "#16161e",
+          borderTop: `1px solid ${accent}30`,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.7)",
+          overflowY: "auto",
+          overscrollBehavior: "contain",
+          isolation: "isolate",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+          <div
+            style={{
+              width: 42,
+              height: 4,
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.16)",
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 2,
+              textTransform: "uppercase",
+              color: accent,
+            }}
+          >
+            Accounts
+          </span>
+          <span style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "rgba(205,214,244,0.55)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontSize: 12,
+            }}
+          >
+            Done
+          </button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => {
+              setAccountId("__all");
+              onClose();
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: accountId === "__all" ? `${accent}14` : "rgba(255,255,255,0.03)",
+              border: `1px solid ${accountId === "__all" ? `${accent}40` : "rgba(255,255,255,0.08)"}`,
+              color: "#fff",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              textAlign: "left",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>All accounts</div>
+              <div style={{ fontSize: 11, color: "rgba(205,214,244,0.5)", marginTop: 2 }}>
+                {totalUnread} unread across inbox
+              </div>
+            </div>
+          </button>
+          {accounts.map((acc) => {
+            const accKey = acc.id || acc.name;
+            const active = accountId === accKey;
+            return (
+              <button
+                key={accKey}
+                type="button"
+                onClick={() => {
+                  setAccountId(accKey);
+                  onClose();
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  width: "100%",
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  background: active ? `${acc.color || accent}14` : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${active ? `${acc.color || accent}40` : "rgba(255,255,255,0.08)"}`,
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  textAlign: "left",
+                }}
+              >
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    background: acc.color || accent,
+                    boxShadow: `0 0 8px ${(acc.color || accent)}66`,
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {acc.name || acc.email}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "rgba(205,214,244,0.5)",
+                      marginTop: 2,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {acc.email}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: acc.color || accent,
+                    background: `${acc.color || accent}18`,
+                    borderRadius: 999,
+                    padding: "2px 7px",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {acc.unread || 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 /* ======================================================================
  * TOP-LEVEL VIEW
@@ -38,13 +353,17 @@ export default function InboxView({
   onOpenDashboard,
   onRefresh,
   seedSelectedId,
+  isMobile = false,
 }) {
   const [accountId, setAccountId] = useState("__all");
   const [lane, setLane] = useState("__all");
   const [search, setSearch] = useState("");
   const searchRef = useRef(null);
+  const mobileFilterTriggerRef = useRef(null);
+  const mobileFilterPanelRef = useRef(null);
   // Reconcile external seed/pinned props by re-keying the inner view below.
   const [selectedId, setSelectedId] = useState(seedSelectedId || null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [pinnedSet, setPinnedSet] = useState(() => new Set(pinnedIds || []));
   // Snapshots are keyed by uid and merged into flatEmails so pinned rows keep
   // rendering even when they've aged out of the current briefing window.
@@ -104,7 +423,6 @@ export default function InboxView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setResurfacedMap(new Map((resurfacedEntries || []).map((r) => [r.uid, r])));
   }, [resurfacedEntries]);
-
   const accountsById = useMemo(() => {
     const map = {};
     for (const acc of emailAccounts) {
@@ -139,7 +457,8 @@ export default function InboxView({
       const snoozeUntil = snoozedMap.get(uid);
       if (snoozeUntil && snoozeUntil > nowTick) return false;
       if (accountId !== "__all" && e._accountKey !== accountId) return false;
-      if (lane !== "__all" && e._lane !== lane) return false;
+      if (lane === "__live" && !e._untriaged) return false;
+      if (lane !== "__all" && lane !== "__live" && e._lane !== lane) return false;
       if (search) {
         const hay = `${e.subject || ""} ${e.from || ""} ${e.preview || ""}`.toLowerCase();
         if (!hay.includes(search.toLowerCase())) return false;
@@ -177,6 +496,26 @@ export default function InboxView({
       && (accountId === "__all" || e._accountKey === accountId)).length;
   }, [flatEmails, accountId]);
 
+  const mobileChipCounts = useMemo(() => {
+    const counts = {
+      __all: 0,
+      __live: 0,
+      action: 0,
+      fyi: 0,
+      noise: 0,
+    };
+    for (const e of flatEmails) {
+      const uid = e.uid || e.id;
+      const snoozeUntil = snoozedMap.get(uid);
+      if (snoozeUntil && snoozeUntil > nowTick) continue;
+      if (accountId !== "__all" && e._accountKey !== accountId) continue;
+      counts.__all += 1;
+      if (e._untriaged) counts.__live += 1;
+      else if (e._lane && counts[e._lane] != null) counts[e._lane] += 1;
+    }
+    return counts;
+  }, [flatEmails, snoozedMap, nowTick, accountId]);
+
   const totalUnread = useMemo(() => {
     return flatEmails.filter((e) => !e.read).length;
   }, [flatEmails]);
@@ -186,7 +525,7 @@ export default function InboxView({
 
   const selectedEmail = useMemo(() => {
     if (!selectedId) return null;
-    return flatEmails.find((e) => e.id === selectedId) || null;
+    return flatEmails.find((e) => e.id === selectedId || e.uid === selectedId) || null;
   }, [selectedId, flatEmails]);
 
   const trashHold = useKeyHold({
@@ -227,7 +566,7 @@ export default function InboxView({
   useEffect(() => {
     if (!selectedId) return undefined;
     const t = setTimeout(() => {
-      const email = flatEmailsRef.current.find((e) => e.id === selectedId);
+      const email = flatEmailsRef.current.find((e) => e.id === selectedId || e.uid === selectedId);
       if (!email || email.read) return;
       if (email._live) {
         setLiveReadUids((prev) => {
@@ -279,10 +618,10 @@ export default function InboxView({
   }, [visibleEmails, markEmailRead]);
 
   const moveBy = useCallback((dir) => {
-    const idx = visibleEmails.findIndex((e) => e.id === selectedId);
+    const idx = visibleEmails.findIndex((e) => e.id === selectedId || e.uid === selectedId);
     const nextIdx = Math.max(0, Math.min(visibleEmails.length - 1, idx + dir));
     const next = visibleEmails[nextIdx];
-    if (next) setSelectedId(next.id);
+    if (next) setSelectedId(next.id || next.uid);
   }, [visibleEmails, selectedId]);
 
   // Build a durable email snapshot for server-side pin/snooze storage. Strips
@@ -445,11 +784,11 @@ export default function InboxView({
 
   const showTriage = customize.aiVerbosity !== "minimal";
   const showDraft = customize.aiVerbosity === "full";
-  const showPreview = customize.showPreview;
-  const density = customize.inboxDensity;
-  const sidebarCompact = customize.sidebarCompact;
-  const layout = customize.inboxLayout;
-  const grouping = customize.inboxGrouping;
+  const showPreview = isMobile ? true : customize.showPreview;
+  const density = isMobile ? "default" : customize.inboxDensity;
+  const sidebarCompact = isMobile ? false : customize.sidebarCompact;
+  const layout = isMobile ? "two-pane" : customize.inboxLayout;
+  const grouping = isMobile ? "flat" : customize.inboxGrouping;
 
   // briefingGeneratedAt is SQLite's `datetime('now')` output — a naive UTC
   // string with no zone marker. Chrome parses that as local time, which makes
@@ -459,8 +798,252 @@ export default function InboxView({
     ? `Triaged ${timeSince(briefingGeneratedAt.endsWith("Z") ? briefingGeneratedAt : `${briefingGeneratedAt}Z`)}`
     : null;
 
+  const scopedAccount = accountId === "__all"
+    ? null
+    : emailAccounts.find((acc) => (acc.id || acc.name) === accountId);
+
+  if (isMobile) {
+    return (
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          minHeight: 0,
+          background: "transparent",
+          color: "#cdd6f4",
+        }}
+      >
+        {selectedEmail ? (
+          <Reader
+            key={selectedEmail?.id || selectedEmail?.uid || "empty"}
+            email={selectedEmail}
+            account={selectedAccount}
+            accent={accent}
+            pinned={!!selectedEmail && (pinnedSet.has(selectedEmail.uid) || pinnedSet.has(selectedEmail.id))}
+            onAction={onAction}
+            onClose={() => setSelectedId(null)}
+            showTriage={showTriage}
+            showDraft={showDraft}
+            billOpen={billOpen}
+            setBillOpen={setBillOpen}
+            trashHoldProgress={trashHold.progress}
+            snoozeHoldProgress={snoozeHold.progress}
+            isMobile
+          />
+        ) : (
+          <div
+            data-testid="inbox-mobile-list"
+            style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}
+          >
+            <div style={{ padding: "16px 16px 0" }}>
+              <div
+                style={{
+                  padding: "14px 14px 12px",
+                  borderRadius: 14,
+                  background: `linear-gradient(135deg, ${accent}12, rgba(137,220,235,0.04))`,
+                  border: `1px solid ${accent}2c`,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Sparkles size={13} color={accent} />
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: 1.8,
+                      textTransform: "uppercase",
+                      color: accent,
+                    }}
+                  >
+                    Inbox snapshot
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  {briefingAgoLabel && (
+                    <span style={{ fontSize: 10, color: "rgba(205,214,244,0.5)" }}>
+                      {briefingAgoLabel}
+                    </span>
+                  )}
+                </div>
+                {briefingSummary && (
+                  <div
+                    className="ea-display"
+                    style={{
+                      marginTop: 8,
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                      color: "rgba(255,255,255,0.92)",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    {briefingSummary}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 14, marginTop: 12, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 11, color: "rgba(205,214,244,0.62)" }}>
+                    <span style={{ color: "#fff", fontWeight: 700 }}>{unreadInView}</span> unread
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(205,214,244,0.62)" }}>
+                    <span style={{ color: "#fff", fontWeight: 700 }}>{mobileChipCounts.__live}</span> new
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(205,214,244,0.62)" }}>
+                    <span style={{ color: "#fff", fontWeight: 700 }}>{mobileChipCounts.__all}</span> in scope
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                position: "sticky",
+                top: 0,
+                zIndex: 4,
+                padding: "12px 16px 10px",
+                marginTop: 14,
+                background: "linear-gradient(180deg, rgba(11,11,19,0.98), rgba(11,11,19,0.94))",
+                backdropFilter: "blur(14px)",
+                borderTop: "1px solid rgba(255,255,255,0.04)",
+                borderBottom: "1px solid rgba(255,255,255,0.04)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "0 10px",
+                    height: 36,
+                    borderRadius: 10,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <Search size={13} color="rgba(205,214,244,0.45)" />
+                  <input
+                    ref={searchRef}
+                    aria-label="Search inbox"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search inbox"
+                    style={{
+                      flex: 1,
+                      background: "transparent",
+                      border: "none",
+                      outline: "none",
+                      color: "#cdd6f4",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                    }}
+                  />
+                </div>
+                <MobileIconButton
+                  icon={Filter}
+                  label="Open filters"
+                  onClick={() => setMobileFiltersOpen(true)}
+                  accent={accent}
+                  buttonRef={mobileFilterTriggerRef}
+                  testId="inbox-mobile-filter-trigger"
+                />
+                <MobileIconButton
+                  icon={CheckCheck}
+                  label="Mark all read"
+                  onClick={markAllVisibleRead}
+                  accent={accent}
+                  tinted={unreadInView > 0}
+                />
+              </div>
+
+              <div
+                data-testid="inbox-mobile-chip-grid"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                  gap: 6,
+                  paddingTop: 10,
+                }}
+              >
+                {MOBILE_FILTER_CHIPS.map((chip) => (
+                  <MobileChip
+                    key={chip.key}
+                    active={lane === chip.key}
+                    label={chip.label}
+                    count={mobileChipCounts[chip.key]}
+                    onClick={() => setLane(chip.key)}
+                    accent={accent}
+                  />
+                ))}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  paddingTop: 10,
+                  fontSize: 11,
+                  color: "rgba(205,214,244,0.5)",
+                }}
+              >
+                <span>
+                  {scopedAccount ? scopedAccount.name || scopedAccount.email : "All accounts"}
+                </span>
+                <span style={{ opacity: 0.35 }}>·</span>
+                <span>{visibleEmails.length} shown</span>
+              </div>
+            </div>
+
+            <div style={{ padding: "6px 0 20px" }}>
+              {visibleEmails.length > 0 ? (
+                visibleEmails.map((email) => (
+                  <EmailRow
+                    key={email.id || email.uid}
+                    email={email}
+                    account={accountsById[email.accountId] || accountsById[email._accountKey]}
+                    selected={false}
+                    onOpen={(opened) => setSelectedId(opened.id || opened.uid)}
+                    density={density}
+                    showPreview={showPreview}
+                    accent={accent}
+                    pinned={!!(pinnedSet.has(email.uid) || pinnedSet.has(email.id))}
+                  />
+                ))
+              ) : (
+                <div
+                  style={{
+                    padding: "36px 18px",
+                    textAlign: "center",
+                    color: "rgba(205,214,244,0.45)",
+                    fontSize: 12,
+                  }}
+                >
+                  No emails match this view.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <MobileFilterSheet
+          open={mobileFiltersOpen}
+          accent={accent}
+          triggerRef={mobileFilterTriggerRef}
+          panelRef={mobileFilterPanelRef}
+          accountId={accountId}
+          setAccountId={setAccountId}
+          accounts={emailAccounts}
+          totalUnread={totalUnread}
+          onClose={() => setMobileFiltersOpen(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
+      data-testid="inbox-desktop-view"
       style={{
         position: "relative", display: "flex", flexDirection: "column",
         height: "100%", minHeight: 0,
@@ -546,6 +1129,7 @@ export default function InboxView({
               setBillOpen={setBillOpen}
               trashHoldProgress={trashHold.progress}
               snoozeHoldProgress={snoozeHold.progress}
+              isMobile={false}
             />
           )}
         </div>

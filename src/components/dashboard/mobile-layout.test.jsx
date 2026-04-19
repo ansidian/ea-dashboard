@@ -171,6 +171,40 @@ describe("CustomizePanel mobile options", () => {
     expect(screen.queryByText("Dashboard density")).toBeNull();
     expect(screen.getByText("Show AI insights")).toBeTruthy();
   });
+
+  it("hides desktop-only inbox controls on mobile", () => {
+    render(
+      <CustomizePanel
+        open
+        onClose={() => {}}
+        tab="inbox"
+        isMobile
+        customize={{
+          accent: "#cba6da",
+          serifChoice: "Instrument Serif",
+          dashboardLayout: "focus",
+          inboxLayout: "two-pane",
+          inboxGrouping: "swimlanes",
+          density: "comfortable",
+          inboxDensity: "default",
+          aiVerbosity: "standard",
+          showInsights: true,
+          showInboxPeek: true,
+          showPreview: true,
+          sidebarCompact: false,
+          setKey: () => {},
+          reset: () => {},
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Inbox layout")).toBeNull();
+    expect(screen.queryByText("Grouping")).toBeNull();
+    expect(screen.queryByText("Inbox density")).toBeNull();
+    expect(screen.queryByText("Show previews in list")).toBeNull();
+    expect(screen.queryByText("Compact sidebar")).toBeNull();
+    expect(screen.getByText("Claude verbosity")).toBeTruthy();
+  });
 });
 
 describe("TodayTimeline mobile layout", () => {

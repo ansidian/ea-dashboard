@@ -376,6 +376,7 @@ export function RedesignShell({
             onOpenDashboard={() => setTab("dashboard")}
             onRefresh={() => { bd.handleQuickRefresh?.(); liveData.refreshNow?.(); }}
             seedSelectedId={inboxSeedId}
+            isMobile={isMobile}
           />
         )}
       </div>
