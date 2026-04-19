@@ -70,4 +70,26 @@ describe("CalendarModal responsive layout", () => {
     expect(panel.style.width).toContain("calc(100vw - 48px)");
     expect(panel.style.maxWidth).toBe("1180px");
   });
+
+  it("shows skeleton loaders while the events month is loading", () => {
+    window.innerWidth = 1900;
+
+    render(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="events"
+        onViewChange={() => {}}
+        eventsData={{
+          getEvents: () => [],
+          isMonthLoading: () => true,
+        }}
+        billsData={{}}
+        deadlinesData={{}}
+      />,
+    );
+
+    expect(screen.getByTestId("calendar-events-grid-skeleton")).toBeTruthy();
+    expect(screen.getByTestId("calendar-events-rail-skeleton")).toBeTruthy();
+  });
 });

@@ -33,6 +33,14 @@ export default function useCalendarRange({ disabled = false } = {}) {
   const [error, setError] = useState(null);
   const [, forceUpdate] = useState(0);
 
+  const hasMonth = useCallback((year, month) => {
+    return cacheRef.current.has(monthKey(year, month));
+  }, []);
+
+  const isMonthLoading = useCallback((year, month) => {
+    return inFlightRef.current.has(monthKey(year, month));
+  }, []);
+
   const getEvents = useCallback((year, month) => {
     return cacheRef.current.get(monthKey(year, month)) || [];
   }, []);
@@ -91,5 +99,13 @@ export default function useCalendarRange({ disabled = false } = {}) {
     forceUpdate((n) => n + 1);
   }, []);
 
-  return { getEvents, ensureRange, invalidate, loading, error };
+  return {
+    getEvents,
+    ensureRange,
+    invalidate,
+    hasMonth,
+    isMonthLoading,
+    loading,
+    error,
+  };
 }

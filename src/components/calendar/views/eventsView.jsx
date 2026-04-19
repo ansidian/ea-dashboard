@@ -1,5 +1,37 @@
 import { ExternalLink, Calendar as CalendarIcon } from "lucide-react";
 
+const EVENT_ROW_HEIGHT = 12;
+const STACK_GAP = 2;
+const MORE_ROW_HEIGHT = 10;
+
+function getStackHeight(visibleCount, hasMore) {
+  if (visibleCount <= 0) return 0;
+  const childCount = visibleCount + (hasMore ? 1 : 0);
+  return (
+    visibleCount * EVENT_ROW_HEIGHT +
+    (hasMore ? MORE_ROW_HEIGHT : 0) +
+    Math.max(0, childCount - 1) * STACK_GAP
+  );
+}
+
+function getVisibleEventCount(itemCount, contentHeight) {
+  if (itemCount <= 0) return 0;
+  const fallback = Math.min(itemCount, 2);
+
+  if (!Number.isFinite(contentHeight) || contentHeight <= 0) {
+    return fallback;
+  }
+
+  for (let visibleCount = itemCount; visibleCount >= 1; visibleCount -= 1) {
+    const hiddenCount = itemCount - visibleCount;
+    if (getStackHeight(visibleCount, hiddenCount > 0) <= contentHeight) {
+      return visibleCount;
+    }
+  }
+
+  return 1;
+}
+
 function pacificYMD(ms) {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
@@ -48,9 +80,9 @@ function canNavigateBack() {
   return true;
 }
 
-function renderCellContents({ items }) {
+function renderCellContents({ items, contentHeight }) {
   if (!items?.length) return null;
-  const maxVisible = 2;
+  const maxVisible = getVisibleEventCount(items.length, contentHeight);
   const extra = items.length > maxVisible ? items.length - maxVisible : 0;
   return (
     <div
@@ -58,7 +90,6 @@ function renderCellContents({ items }) {
         display: "flex",
         flexDirection: "column",
         gap: 2,
-        marginTop: 2,
         minWidth: 0,
       }}
     >
@@ -289,6 +320,7 @@ function renderFooter({ computed }) {
 const eventsView = {
   compute,
   canNavigateBack,
+  getVisibleEventCount,
   renderCellContents,
   renderDetail,
   renderFooter,

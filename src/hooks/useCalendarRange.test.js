@@ -85,6 +85,29 @@ describe("useCalendarRange", () => {
     expect(getCalendarRange).toHaveBeenCalledTimes(2);
   });
 
+  it("reports per-month cache and loading state", async () => {
+    let resolve;
+    getCalendarRange.mockReturnValue(new Promise((r) => { resolve = r; }));
+    const { result } = renderHook(() => useCalendarRange({ disabled: false }));
+
+    expect(result.current.hasMonth(2026, 3)).toBe(false);
+    expect(result.current.isMonthLoading(2026, 3)).toBe(false);
+
+    act(() => {
+      result.current.ensureRange("2026-04-18", "2026-04-25");
+    });
+
+    expect(result.current.isMonthLoading(2026, 3)).toBe(true);
+    expect(result.current.hasMonth(2026, 3)).toBe(false);
+
+    await act(async () => {
+      resolve({ events: [] });
+    });
+
+    expect(result.current.isMonthLoading(2026, 3)).toBe(false);
+    expect(result.current.hasMonth(2026, 3)).toBe(true);
+  });
+
   it("returns trimmed events via ensureRange's resolved value", async () => {
     const before = { startMs: new Date("2026-04-17T18:00:00Z").getTime(), title: "before", source: "s", color: "#1" };
     const within = { startMs: new Date("2026-04-20T18:00:00Z").getTime(), title: "within", source: "s", color: "#1" };

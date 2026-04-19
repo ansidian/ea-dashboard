@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
 import { ChevronLeft, ChevronRight, X, Receipt, ListChecks, Calendar as CalendarIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import billsView from "./views/billsView.jsx";
 import { getCalendarLayoutMetrics } from "./calendarLayout.js";
 import deadlinesView from "./views/deadlinesView.jsx";
@@ -21,7 +22,18 @@ function getMonthData(year, month) {
   return { firstDay, daysInMonth };
 }
 
-function CalendarCell({ day, items, hasItems, isToday, isSelected, hasOverdue, allComplete, onClick, renderCellContents }) {
+function CalendarCell({
+  day,
+  items,
+  hasItems,
+  isToday,
+  isSelected,
+  hasOverdue,
+  allComplete,
+  loading,
+  onClick,
+  renderCellContents,
+}) {
   // Minimal cells: hairline borders, a strong date badge for "today", purple
   // ring on selection, and subtle status accents instead of heavy
   // bg/border combinations.
@@ -70,6 +82,32 @@ function CalendarCell({ day, items, hasItems, isToday, isSelected, hasOverdue, a
       ? `0 0 0 1px color-mix(in srgb, ${todayAccent} 18%, transparent), 0 6px 18px color-mix(in srgb, ${todayAccent} 24%, transparent)`
       : `0 4px 12px color-mix(in srgb, ${todayAccent} 18%, transparent)`;
   }
+
+  const contentRef = useRef(null);
+  const [contentHeight, setContentHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return undefined;
+
+    const updateHeight = () => {
+      setContentHeight(el.clientHeight || 0);
+    };
+
+    updateHeight();
+
+    if (typeof window.ResizeObserver !== "function") {
+      window.addEventListener("resize", updateHeight);
+      return () => window.removeEventListener("resize", updateHeight);
+    }
+
+    const observer = new window.ResizeObserver((entries) => {
+      const nextHeight = entries[0]?.contentRect?.height;
+      setContentHeight(nextHeight || el.clientHeight || 0);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div
@@ -128,7 +166,17 @@ function CalendarCell({ day, items, hasItems, isToday, isSelected, hasOverdue, a
           {day}
         </span>
       </div>
-      {renderCellContents?.({ items, hasOverdue })}
+      <div
+        ref={contentRef}
+        style={{
+          position: "relative",
+          minHeight: 0,
+          flex: 1,
+          overflow: "hidden",
+        }}
+      >
+        {renderCellContents?.({ items, hasOverdue, contentHeight, isToday, loading })}
+      </div>
     </div>
   );
 }
@@ -156,9 +204,32 @@ function CalendarSummary({ view, viewYear, viewMonth, currentYear, currentMonth,
         </div>
       </div>
       <div style={{ height: 1, background: "rgba(255,255,255,0.04)" }} />
-      <div style={{ fontSize: 12, color: "rgba(205,214,244,0.55)", lineHeight: 1.5 }}>
-        Click any day with activity to drill in. Items are color-coded by source on the rail.
-      </div>
+      {view === "events" && data?.isLoading ? (
+        <div
+          data-testid="calendar-events-rail-skeleton"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            padding: "12px 14px",
+            borderRadius: 10,
+            background: "rgba(255,255,255,0.025)",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        >
+          <Skeleton className="h-[11px] w-[148px] bg-white/8" />
+          <Skeleton className="h-[18px] w-[212px] bg-white/10" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }}>
+            <Skeleton className="h-[10px] w-full bg-white/7" />
+            <Skeleton className="h-[10px] w-[88%] bg-white/7" />
+            <Skeleton className="h-[10px] w-[72%] bg-white/7" />
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: "rgba(205,214,244,0.55)", lineHeight: 1.5 }}>
+          Click any day with activity to drill in. Items are color-coded by source on the rail.
+        </div>
+      )}
       <span style={{ flex: 1 }} />
       {/* The view's existing footer renderer becomes the per-month summary
           card now that it lives in the rail instead of below the grid. */}
@@ -172,6 +243,63 @@ function parseFocusDate(focusDate) {
   const d = new Date(`${focusDate}T00:00:00`);
   if (Number.isNaN(d.getTime())) return null;
   return d;
+}
+
+function CalendarEventsGridSkeleton({
+  firstDay,
+  daysInMonth,
+  trailingEmpty,
+  cellHeight,
+  gridGap,
+}) {
+  const rowWidths = cellHeight >= 96
+    ? ["84%", "71%", "58%"]
+    : ["86%", "63%"];
+
+  return (
+    <div
+      data-testid="calendar-events-grid-skeleton"
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "grid",
+        gridTemplateColumns: "repeat(7, 1fr)",
+        gridTemplateRows: `repeat(${GRID_ROWS}, ${cellHeight}px)`,
+        gap: gridGap,
+        pointerEvents: "none",
+      }}
+    >
+      {Array.from({ length: firstDay }, (_, i) => (
+        <div key={`sk-empty-${i}`} />
+      ))}
+      {Array.from({ length: daysInMonth }, (_, i) => (
+        <div
+          key={`sk-day-${i}`}
+          style={{
+            padding: "28px 9px 8px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 5,
+            minHeight: 0,
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {rowWidths.map((width, rowIndex) => (
+              <Skeleton
+                key={rowIndex}
+                className="h-[10px] rounded-sm bg-white/8"
+                style={{ width, opacity: rowIndex === rowWidths.length - 1 ? 0.72 : 1 }}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+      {Array.from({ length: trailingEmpty }, (_, i) => (
+        <div key={`sk-trail-${i}`} />
+      ))}
+    </div>
+  );
 }
 
 export default function CalendarModal({
@@ -200,7 +328,11 @@ export default function CalendarModal({
   const activeView = VIEWS[view] || billsView;
   const viewData = useMemo(() => {
     if (view === "events") {
-      return { events: eventsData?.getEvents?.(viewYear, viewMonth) || [] };
+      return {
+        events: eventsData?.getEvents?.(viewYear, viewMonth) || [],
+        isLoading: eventsData?.isMonthLoading?.(viewYear, viewMonth) || false,
+        hasMonth: eventsData?.hasMonth?.(viewYear, viewMonth) || false,
+      };
     }
     if (view === "deadlines") return deadlinesData;
     return billsData;
@@ -382,6 +514,10 @@ export default function CalendarModal({
   const monthYear = String(viewYear);
   const layout = getCalendarLayoutMetrics(viewportWidth);
   const panelWidth = `calc(100vw - ${layout.viewportMargin * 2}px)`;
+  const showEventsLoadingState =
+    view === "events" &&
+    viewData?.isLoading &&
+    (computed?.totalEvents || 0) === 0;
 
   if (!open) return null;
 
@@ -424,7 +560,54 @@ export default function CalendarModal({
           >
             {/* Header — eyebrow + display title pattern from the mock */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", marginBottom: 22, gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, justifySelf: "start", minWidth: 0 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "auto minmax(0, 1fr)",
+                  alignItems: "center",
+                  gap: 18,
+                  justifySelf: "start",
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button
+                    onClick={() => canGoPrev && navigateMonth(-1)}
+                    aria-label="Previous month"
+                    style={{
+                      color: canGoPrev ? "rgba(205,214,244,0.7)" : "rgba(205,214,244,0.18)",
+                      cursor: canGoPrev ? "pointer" : "default",
+                      width: 36, height: 36,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      borderRadius: 8,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      fontFamily: "inherit",
+                      transition: "all 120ms",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => navigateMonth(1)}
+                    aria-label="Next month"
+                    style={{
+                      color: "rgba(205,214,244,0.7)",
+                      cursor: "pointer",
+                      width: 36, height: 36,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      borderRadius: 8,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      fontFamily: "inherit",
+                      transition: "all 120ms",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
                   <div
                     style={{
@@ -445,42 +628,6 @@ export default function CalendarModal({
                     {monthName}{" "}
                     <span style={{ color: "rgba(205,214,244,0.4)", fontWeight: 400 }}>{monthYear}</span>
                   </div>
-                </div>
-                <div style={{ display: "flex", gap: 4 }}>
-                  <button
-                    onClick={() => canGoPrev && navigateMonth(-1)}
-                    aria-label="Previous month"
-                    style={{
-                      color: canGoPrev ? "rgba(205,214,244,0.7)" : "rgba(205,214,244,0.18)",
-                      cursor: canGoPrev ? "pointer" : "default",
-                      width: 36, height: 36,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      borderRadius: 8,
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.06)",
-                      fontFamily: "inherit",
-                      transition: "all 120ms",
-                    }}
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button
-                    onClick={() => navigateMonth(1)}
-                    aria-label="Next month"
-                    style={{
-                      color: "rgba(205,214,244,0.7)",
-                      cursor: "pointer",
-                      width: 36, height: 36,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      borderRadius: 8,
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.06)",
-                      fontFamily: "inherit",
-                      transition: "all 120ms",
-                    }}
-                  >
-                    <ChevronRight size={16} />
-                  </button>
                 </div>
               </div>
 
@@ -584,7 +731,7 @@ export default function CalendarModal({
                 alignItems: "start",
               }}
             >
-              <div style={{ minWidth: 0 }}>
+              <div style={{ minWidth: 0, position: "relative" }}>
                 {/* Day-of-week headers */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: layout.weekHeaderGap, marginBottom: 8 }}>
                   {DAYS.map((d) => (
@@ -602,47 +749,59 @@ export default function CalendarModal({
                 </div>
 
                 {/* Calendar grid */}
-                <div
-                  key={`${view}-${viewYear}-${viewMonth}`}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(7, 1fr)",
-                    gridTemplateRows: `repeat(${GRID_ROWS}, ${layout.cellHeight}px)`,
-                    gap: layout.gridGap,
-                  }}
-                >
-                  {Array.from({ length: firstDay }, (_, i) => (
-                    <div key={`empty-${i}`} />
-                  ))}
+                <div style={{ position: "relative" }}>
+                  <div
+                    key={`${view}-${viewYear}-${viewMonth}`}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(7, 1fr)",
+                      gridTemplateRows: `repeat(${GRID_ROWS}, ${layout.cellHeight}px)`,
+                      gap: layout.gridGap,
+                    }}
+                  >
+                    {Array.from({ length: firstDay }, (_, i) => (
+                      <div key={`empty-${i}`} />
+                    ))}
 
-                  {Array.from({ length: daysInMonth }, (_, i) => {
-                    const day = i + 1;
-                    const items = itemsByDay[day] || [];
-                    const hasItems = items.length > 0;
-                    const isToday = isCurrentMonth && day === todayDate;
-                    const isSelected = selectedDay === day;
-                    const hasOverdue = activeView.hasOverdue?.(items) || false;
-                    const allComplete = activeView.allComplete?.(items) || false;
+                    {Array.from({ length: daysInMonth }, (_, i) => {
+                      const day = i + 1;
+                      const items = itemsByDay[day] || [];
+                      const hasItems = items.length > 0;
+                      const isToday = isCurrentMonth && day === todayDate;
+                      const isSelected = selectedDay === day;
+                      const hasOverdue = activeView.hasOverdue?.(items) || false;
+                      const allComplete = activeView.allComplete?.(items) || false;
 
-                    return (
-                      <CalendarCell
-                        key={day}
-                        day={day}
-                        items={items}
-                        hasItems={hasItems}
-                        isToday={isToday}
-                        isSelected={isSelected}
-                        hasOverdue={hasOverdue}
-                        allComplete={allComplete}
-                        onClick={() => hasItems && setSelectedDay(isSelected ? null : day)}
-                        renderCellContents={activeView.renderCellContents}
-                      />
-                    );
-                  })}
+                      return (
+                        <CalendarCell
+                          key={day}
+                          day={day}
+                          items={items}
+                          hasItems={hasItems}
+                          isToday={isToday}
+                          isSelected={isSelected}
+                          hasOverdue={hasOverdue}
+                          allComplete={allComplete}
+                          loading={viewData?.isLoading}
+                          onClick={() => hasItems && setSelectedDay(isSelected ? null : day)}
+                          renderCellContents={activeView.renderCellContents}
+                        />
+                      );
+                    })}
 
-                  {Array.from({ length: trailingEmpty }, (_, i) => (
-                    <div key={`trail-${i}`} />
-                  ))}
+                    {Array.from({ length: trailingEmpty }, (_, i) => (
+                      <div key={`trail-${i}`} />
+                    ))}
+                  </div>
+                  {showEventsLoadingState && (
+                    <CalendarEventsGridSkeleton
+                      firstDay={firstDay}
+                      daysInMonth={daysInMonth}
+                      trailingEmpty={trailingEmpty}
+                      cellHeight={layout.cellHeight}
+                      gridGap={layout.gridGap}
+                    />
+                  )}
                 </div>
               </div>
 

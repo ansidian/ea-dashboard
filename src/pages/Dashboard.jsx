@@ -278,9 +278,18 @@ function RedesignShell({
   const eventsData = useMemo(() => ({
     ensureRange: calendarRange.ensureRange,
     getEvents: calendarRange.getEvents,
+    hasMonth: calendarRange.hasMonth,
+    isMonthLoading: calendarRange.isMonthLoading,
     loading: calendarRange.loading,
     error: calendarRange.error,
-  }), [calendarRange.ensureRange, calendarRange.getEvents, calendarRange.loading, calendarRange.error]);
+  }), [
+    calendarRange.ensureRange,
+    calendarRange.getEvents,
+    calendarRange.hasMonth,
+    calendarRange.isMonthLoading,
+    calendarRange.loading,
+    calendarRange.error,
+  ]);
 
   const nextBriefingLabel = formatNextBriefingLabel(bd.schedules);
 
@@ -432,17 +441,17 @@ function DashboardBody({
     () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date()),
     [],
   );
+  const ensureCalendarRange = calendarRange.ensureRange;
   useEffect(() => {
-    if (!calendarRange) return;
     const endDate = new Date(`${today}T12:00:00Z`);
     endDate.setUTCDate(endDate.getUTCDate() + 14);
     const end = endDate.toISOString().slice(0, 10);
     let cancelled = false;
-    calendarRange.ensureRange(today, end)
+    ensureCalendarRange(today, end)
       .then((result) => { if (!cancelled) setEvents(result); })
       .catch(() => { if (!cancelled) setEvents(briefing?.calendar || []); });
     return () => { cancelled = true; };
-  }, [calendarRange.ensureRange, today, briefing?.calendar]);
+  }, [ensureCalendarRange, today, briefing?.calendar]);
   const ctm = briefing?.ctm?.upcoming || [];
   const todoist = briefing?.todoist?.upcoming || [];
   const deadlines = [...ctm, ...todoist];
