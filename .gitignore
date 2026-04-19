@@ -35,5 +35,6 @@ dist-ssr
 .superpowers/
 .agents/
 .continue/
+AGENTS.md
 skills-lock.json
 docs/

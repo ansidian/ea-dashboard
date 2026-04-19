@@ -2,13 +2,12 @@ import { createPortal } from "react-dom";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { ChevronLeft, ChevronRight, X, Receipt, ListChecks, Calendar as CalendarIcon } from "lucide-react";
 import billsView from "./views/billsView.jsx";
+import { getCalendarLayoutMetrics } from "./calendarLayout.js";
 import deadlinesView from "./views/deadlinesView.jsx";
 import eventsView from "./views/eventsView.jsx";
 
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const GRID_ROWS = 6;
-const CELL_HEIGHT = 84;
-const SIDEBAR_WIDTH = 340;
 
 const VIEWS = {
   events: eventsView,
@@ -23,14 +22,20 @@ function getMonthData(year, month) {
 }
 
 function CalendarCell({ day, items, hasItems, isToday, isSelected, hasOverdue, allComplete, onClick, renderCellContents }) {
-  // Minimal cells: hairline borders, accent dot for "today", purple ring on
-  // selection, subtle status accents instead of heavy bg/border combinations.
+  // Minimal cells: hairline borders, a strong date badge for "today", purple
+  // ring on selection, and subtle status accents instead of heavy
+  // bg/border combinations.
+  const todayAccent = "var(--ea-accent)";
   let cellBg = "rgba(255,255,255,0.015)";
   let cellBorder = "1px solid rgba(255,255,255,0.04)";
   let cellShadow = "none";
   let dateColor = "rgba(205,214,244,0.7)";
   let dateWeight = 400;
   let accentBar = null;
+  let todayWash = null;
+  let dateBadgeBg = "transparent";
+  let dateBadgeBorder = "1px solid transparent";
+  let dateBadgeShadow = "none";
 
   if (isSelected) {
     cellBg = "rgba(203,166,218,0.06)";
@@ -49,9 +54,27 @@ function CalendarCell({ day, items, hasItems, isToday, isSelected, hasOverdue, a
     dateWeight = 500;
   }
 
+  if (isToday) {
+    todayWash = isSelected
+      ? `linear-gradient(180deg, color-mix(in srgb, ${todayAccent} 16%, transparent), color-mix(in srgb, ${todayAccent} 6%, transparent) 56%, transparent)`
+      : `linear-gradient(180deg, color-mix(in srgb, ${todayAccent} 20%, transparent), color-mix(in srgb, ${todayAccent} 8%, transparent) 58%, transparent)`;
+    dateColor = isSelected ? "#ffffff" : todayAccent;
+    dateWeight = 700;
+    dateBadgeBg = isSelected
+      ? `color-mix(in srgb, ${todayAccent} 32%, transparent)`
+      : `color-mix(in srgb, ${todayAccent} 18%, transparent)`;
+    dateBadgeBorder = isSelected
+      ? `1px solid color-mix(in srgb, ${todayAccent} 56%, white 12%)`
+      : `1px solid color-mix(in srgb, ${todayAccent} 42%, transparent)`;
+    dateBadgeShadow = isSelected
+      ? `0 0 0 1px color-mix(in srgb, ${todayAccent} 18%, transparent), 0 6px 18px color-mix(in srgb, ${todayAccent} 24%, transparent)`
+      : `0 4px 12px color-mix(in srgb, ${todayAccent} 18%, transparent)`;
+  }
+
   return (
     <div
       onClick={onClick}
+      aria-current={isToday ? "date" : undefined}
       style={{
         position: "relative",
         minWidth: 0, overflow: "hidden", borderRadius: 8,
@@ -62,6 +85,18 @@ function CalendarCell({ day, items, hasItems, isToday, isSelected, hasOverdue, a
         display: "flex", flexDirection: "column", gap: 3,
       }}
     >
+      {todayWash && (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 1,
+            borderRadius: 7,
+            background: todayWash,
+            pointerEvents: "none",
+          }}
+        />
+      )}
       {accentBar && (
         <span
           style={{
@@ -70,20 +105,28 @@ function CalendarCell({ day, items, hasItems, isToday, isSelected, hasOverdue, a
           }}
         />
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <span style={{ fontSize: 12.5, color: dateColor, fontWeight: dateWeight, fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            minWidth: isToday ? 24 : undefined,
+            height: isToday ? 24 : undefined,
+            padding: isToday ? "0 8px" : 0,
+            borderRadius: 999,
+            fontSize: 12.5,
+            color: dateColor,
+            fontWeight: dateWeight,
+            fontVariantNumeric: "tabular-nums",
+            background: dateBadgeBg,
+            border: dateBadgeBorder,
+            boxShadow: dateBadgeShadow,
+            transition: "background 150ms, border-color 150ms, box-shadow 150ms",
+          }}
+        >
           {day}
         </span>
-        {isToday && (
-          <span
-            style={{
-              width: 5, height: 5, borderRadius: 99, background: "#f97316",
-              boxShadow: "0 0 8px rgba(249,115,22,0.6), 0 0 0 2px rgba(249,115,22,0.18)",
-              animation: "dashPulse 2s ease-in-out infinite",
-            }}
-            aria-label="Today"
-          />
-        )}
       </div>
       {renderCellContents?.({ items, hasOverdue })}
     </div>
@@ -147,6 +190,7 @@ export default function CalendarModal({
 
   const [viewDate, setViewDate] = useState({ month: currentMonth, year: currentYear });
   const [selectedDay, setSelectedDay] = useState(null);
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
 
@@ -154,10 +198,13 @@ export default function CalendarModal({
   const viewYear = viewDate.year;
 
   const activeView = VIEWS[view] || billsView;
-  const viewData =
-    view === "events" ? { events: eventsData?.getEvents?.(viewYear, viewMonth) || [] }
-    : view === "deadlines" ? deadlinesData
-    : billsData;
+  const viewData = useMemo(() => {
+    if (view === "events") {
+      return { events: eventsData?.getEvents?.(viewYear, viewMonth) || [] };
+    }
+    if (view === "deadlines") return deadlinesData;
+    return billsData;
+  }, [view, eventsData, viewYear, viewMonth, deadlinesData, billsData]);
 
   const navigateMonthRef = useRef(null);
   useEffect(() => {
@@ -217,6 +264,15 @@ export default function CalendarModal({
     document.addEventListener("pointerdown", handleClick);
     return () => document.removeEventListener("pointerdown", handleClick);
   }, [open, onClose]);
+
+  useEffect(() => {
+    function handleResize() {
+      setViewportWidth(window.innerWidth);
+    }
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -324,6 +380,8 @@ export default function CalendarModal({
 
   const monthName = new Date(viewYear, viewMonth).toLocaleDateString("en-US", { month: "long" });
   const monthYear = String(viewYear);
+  const layout = getCalendarLayoutMetrics(viewportWidth);
+  const panelWidth = `calc(100vw - ${layout.viewportMargin * 2}px)`;
 
   if (!open) return null;
 
@@ -347,10 +405,12 @@ export default function CalendarModal({
       >
         <div
           ref={panelRef}
+          data-testid="calendar-modal-panel"
           className="isolate flex flex-col animate-in fade-in zoom-in-95 duration-200"
           style={{
-            width: "min(1280px, calc(100vw - 64px))",
-            maxHeight: "calc(100vh - 64px)",
+            width: panelWidth,
+            maxWidth: `${layout.shellMaxWidth}px`,
+            maxHeight: layout.shellMaxHeight,
             background: "radial-gradient(ellipse at top left, #1a1a2a, #0d0d15 70%)",
             borderRadius: 14,
             border: "1px solid rgba(255,255,255,0.06)",
@@ -360,7 +420,7 @@ export default function CalendarModal({
           <div
             ref={scrollRef}
             className="overflow-y-auto overscroll-contain flex-1"
-            style={{ padding: "28px 32px" }}
+            style={{ padding: layout.shellPadding }}
           >
             {/* Header — eyebrow + display title pattern from the mock */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", marginBottom: 22, gap: 12 }}>
@@ -379,7 +439,7 @@ export default function CalendarModal({
                     style={{
                       fontSize: 28, fontWeight: 500, color: "#fff",
                       letterSpacing: -0.4, lineHeight: 1.05,
-                      whiteSpace: "nowrap",
+                      whiteSpace: layout.headerWrap ? "normal" : "nowrap",
                     }}
                   >
                     {monthName}{" "}
@@ -516,16 +576,17 @@ export default function CalendarModal({
 
             {/* Body: calendar (left) + side rail (right) */}
             <div
+              data-testid="calendar-modal-body"
               style={{
                 display: "grid",
-                gridTemplateColumns: `minmax(0, 1fr) ${SIDEBAR_WIDTH}px`,
-                gap: 24,
+                gridTemplateColumns: layout.stacked ? "minmax(0, 1fr)" : `minmax(0, 1fr) ${layout.railWidth}px`,
+                gap: layout.contentGap,
                 alignItems: "start",
               }}
             >
               <div style={{ minWidth: 0 }}>
                 {/* Day-of-week headers */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: layout.weekHeaderGap, marginBottom: 8 }}>
                   {DAYS.map((d) => (
                     <div
                       key={d}
@@ -546,8 +607,8 @@ export default function CalendarModal({
                   style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(7, 1fr)",
-                    gridTemplateRows: `repeat(${GRID_ROWS}, ${CELL_HEIGHT}px)`,
-                    gap: 6,
+                    gridTemplateRows: `repeat(${GRID_ROWS}, ${layout.cellHeight}px)`,
+                    gap: layout.gridGap,
                   }}
                 >
                   {Array.from({ length: firstDay }, (_, i) => (
@@ -587,13 +648,14 @@ export default function CalendarModal({
 
               {/* Side rail — detail when a day is selected, summary otherwise */}
               <aside
+                data-testid="calendar-modal-rail"
                 style={{
-                  position: "sticky",
+                  position: layout.stickyRail ? "sticky" : "relative",
                   top: 0,
                   background: "rgba(255,255,255,0.02)",
                   border: "1px solid rgba(255,255,255,0.05)",
                   borderRadius: 12,
-                  minHeight: GRID_ROWS * CELL_HEIGHT + (GRID_ROWS - 1) * 6 + 30,
+                  minHeight: GRID_ROWS * layout.cellHeight + (GRID_ROWS - 1) * layout.gridGap + 30,
                   display: "flex",
                   flexDirection: "column",
                   overflow: "hidden",

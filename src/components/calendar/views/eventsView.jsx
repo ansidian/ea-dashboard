@@ -1,10 +1,11 @@
-/* eslint-disable react-refresh/only-export-components */
 import { ExternalLink, Calendar as CalendarIcon } from "lucide-react";
 
 function pacificYMD(ms) {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
-    year: "numeric", month: "2-digit", day: "2-digit",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   });
   return fmt.format(new Date(ms));
 }
@@ -12,15 +13,20 @@ function pacificYMD(ms) {
 function pacificTime(ms) {
   return new Date(ms).toLocaleTimeString("en-US", {
     timeZone: "America/Los_Angeles",
-    hour: "numeric", minute: "2-digit", hour12: true,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
 }
 
 function compute({ data, viewYear, viewMonth }) {
   const events = data?.events || [];
-  if (!events.length) return { itemsByDay: {} };
+  if (!events.length)
+    return { itemsByDay: {}, totalEvents: 0, allDayEvents: 0 };
 
   const itemsByDay = {};
+  let totalEvents = 0;
+  let allDayEvents = 0;
   for (const ev of events) {
     if (!ev.startMs) continue;
     const ymd = pacificYMD(ev.startMs); // e.g. "2026-04-20"
@@ -28,117 +34,264 @@ function compute({ data, viewYear, viewMonth }) {
     if (y !== viewYear || m !== viewMonth + 1) continue;
     if (!itemsByDay[d]) itemsByDay[d] = [];
     itemsByDay[d].push(ev);
+    totalEvents += 1;
+    if (ev.allDay) allDayEvents += 1;
   }
   // Sort each day's events chronologically
   for (const d of Object.keys(itemsByDay)) {
     itemsByDay[d].sort((a, b) => a.startMs - b.startMs);
   }
-  return { itemsByDay };
+  return { itemsByDay, totalEvents, allDayEvents };
 }
 
-function CellContents({ items }) {
+function canNavigateBack() {
+  return true;
+}
+
+function renderCellContents({ items }) {
   if (!items?.length) return null;
-  const colors = [...new Set(items.map((e) => e.color))].slice(0, 3);
-  const extra = items.length > 3 ? items.length - 3 : 0;
+  const maxVisible = 2;
+  const extra = items.length > maxVisible ? items.length - maxVisible : 0;
   return (
-    <div style={{ display: "flex", gap: 3, marginTop: 2, alignItems: "center" }}>
-      {colors.map((c, i) => (
-        <span
-          key={i}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        marginTop: 2,
+        minWidth: 0,
+      }}
+    >
+      {items.slice(0, maxVisible).map((ev, i) => (
+        <div
+          key={`${ev.id || ev.htmlLink || ev.title || "event"}-${i}`}
           style={{
-            width: 5, height: 5, borderRadius: 99, background: c,
-            display: "inline-block",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            fontSize: 10.5,
+            lineHeight: 1.1,
+            minWidth: 0,
           }}
-        />
+        >
+          <span
+            style={{
+              flexShrink: 0,
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: ev.color || "rgba(205,214,244,0.45)",
+              boxShadow: ev.color ? `0 0 4px ${ev.color}60` : "none",
+            }}
+          />
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+              color: "rgba(205,214,244,0.55)",
+            }}
+          >
+            {ev.title || "(No title)"}
+          </span>
+        </div>
       ))}
       {extra > 0 && (
-        <span style={{ fontSize: 9, color: "rgba(205,214,244,0.5)", marginLeft: 2 }}>
-          +{extra}
-        </span>
+        <div
+          style={{
+            fontSize: 9,
+            lineHeight: 1,
+            color: "rgba(205,214,244,0.5)",
+            paddingLeft: 11,
+          }}
+        >
+          +{extra} more
+        </div>
       )}
     </div>
   );
 }
 
-function Sidebar({ selectedDay, itemsByDay, viewYear, viewMonth }) {
-  const items = itemsByDay[selectedDay] || [];
-  if (selectedDay == null) {
-    return (
-      <div style={{ padding: 20, color: "rgba(205,214,244,0.4)", fontSize: 12 }}>
-        Select a day to see its events.
-      </div>
-    );
-  }
-  if (!items.length) {
-    return (
-      <div style={{ padding: 20, color: "rgba(205,214,244,0.4)", fontSize: 12 }}>
-        No events on this day.
-      </div>
-    );
-  }
-  const dateLabel = new Date(viewYear, viewMonth, selectedDay).toLocaleDateString("en-US", {
-    weekday: "long", month: "long", day: "numeric",
+function formatFullDate(year, month, day) {
+  return new Date(year, month, day).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
   });
+}
+
+function renderDetail({ selectedDay, viewYear, viewMonth, items }) {
   return (
-    <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{
-        fontSize: 10, fontWeight: 600, letterSpacing: 2.4, textTransform: "uppercase",
-        color: "rgba(205,214,244,0.55)", marginBottom: 4,
-      }}>
-        {dateLabel}
+    <div style={{ padding: "16px 20px", overflow: "auto", flex: 1 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ fontSize: 14, color: "#cba6da", fontWeight: 500 }}>
+          {formatFullDate(viewYear, viewMonth, selectedDay)}
+        </div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+          {items.length} event{items.length !== 1 ? "s" : ""}
+        </div>
       </div>
-      {items.map((ev, i) => (
-        <div
-          key={i}
-          style={{
-            display: "flex", gap: 10, padding: "10px 12px", borderRadius: 8,
-            background: "rgba(255,255,255,0.02)",
-            border: "1px solid rgba(255,255,255,0.05)",
-            alignItems: "flex-start",
-          }}
-        >
-          <span
-            aria-hidden
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {items.map((ev, i) => (
+          <div
+            key={i}
             style={{
-              width: 3, alignSelf: "stretch", borderRadius: 2,
-              background: ev.color, flexShrink: 0, marginTop: 2,
+              display: "flex",
+              gap: 10,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "rgba(255,255,255,0.02)",
+              border: "1px solid rgba(255,255,255,0.05)",
+              alignItems: "flex-start",
             }}
-          />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, color: "#e2e8f0", fontWeight: 500 }}>
-              {ev.title || "(No title)"}
-            </div>
-            <div style={{ fontSize: 10.5, color: "rgba(205,214,244,0.55)", marginTop: 2 }}>
-              {ev.allDay ? "All day" : pacificTime(ev.startMs)} · {ev.source}
-            </div>
-            {ev.location && (
-              <div style={{ fontSize: 10, color: "rgba(205,214,244,0.4)", marginTop: 2 }}>
-                {ev.location}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 3,
+                alignSelf: "stretch",
+                borderRadius: 2,
+                background: ev.color,
+                flexShrink: 0,
+                marginTop: 2,
+              }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{ fontSize: 12.5, color: "#e2e8f0", fontWeight: 500 }}
+              >
+                {ev.title || "(No title)"}
               </div>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  color: "rgba(205,214,244,0.55)",
+                  marginTop: 2,
+                }}
+              >
+                {ev.allDay ? "All day" : pacificTime(ev.startMs)} · {ev.source}
+              </div>
+              {ev.location && (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "rgba(205,214,244,0.4)",
+                    marginTop: 2,
+                  }}
+                >
+                  {ev.location}
+                </div>
+              )}
+            </div>
+            {ev.htmlLink && (
+              <a
+                href={ev.htmlLink}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open in Google Calendar"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  color: "rgba(205,214,244,0.4)",
+                  padding: 4,
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                <ExternalLink size={12} />
+              </a>
             )}
           </div>
-          {ev.htmlLink && (
-            <a
-              href={ev.htmlLink} target="_blank" rel="noreferrer"
-              aria-label="Open in Google Calendar"
-              style={{
-                color: "rgba(205,214,244,0.4)", padding: 4,
-                display: "inline-flex", alignItems: "center",
-              }}
-            >
-              <ExternalLink size={12} />
-            </a>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function renderFooter({ computed }) {
+  const totalEvents = computed?.totalEvents || 0;
+  const allDayEvents = computed?.allDayEvents || 0;
+  const activeDays = Object.keys(computed?.itemsByDay || {}).length;
+
+  const StatRow = ({ value, label }) => (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "baseline",
+        justifyContent: "space-between",
+        padding: "8px 0",
+        borderBottom: "1px solid rgba(255,255,255,0.04)",
+      }}
+    >
+      <span style={{ fontSize: 11, color: "rgba(205,214,244,0.55)" }}>
+        {label}
+      </span>
+      <span
+        style={{
+          fontSize: 18,
+          fontWeight: 500,
+          color: "#fff",
+          fontVariantNumeric: "tabular-nums",
+          letterSpacing: -0.2,
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        padding: "12px 14px",
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        borderRadius: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+      }}
+    >
+      <StatRow value={totalEvents} label="Events this month" />
+      <StatRow value={activeDays} label="Active days" />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          paddingTop: 8,
+        }}
+      >
+        <span style={{ fontSize: 11, color: "rgba(205,214,244,0.55)" }}>
+          All-day
+        </span>
+        <span
+          style={{
+            fontSize: 13,
+            color: "rgba(205,214,244,0.8)",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {allDayEvents}
+        </span>
+      </div>
     </div>
   );
 }
 
 const eventsView = {
   compute,
-  renderCellContents: (day, items) => <CellContents items={items} />,
-  renderSidebar: Sidebar,
+  canNavigateBack,
+  renderCellContents,
+  renderDetail,
+  renderFooter,
   icon: CalendarIcon,
   label: "Events",
 };

@@ -61,3 +61,18 @@ describe("eventsView.compute", () => {
     expect(itemsByDay).toEqual({});
   });
 });
+
+describe("eventsView.canNavigateBack", () => {
+  it("allows navigating to earlier months from the current month", () => {
+    expect(
+      eventsView.canNavigateBack({
+        viewYear: 2026,
+        viewMonth: 3,
+        currentYear: 2026,
+        currentMonth: 3,
+        data: { events: [] },
+        computed: { itemsByDay: {} },
+      }),
+    ).toBe(true);
+  });
+});
