@@ -55,7 +55,7 @@ export async function completeTask(userId, taskId) {
   }
 
   if (ctmTask) {
-    await Promise.resolve(updateCTMEventStatus(ctmTask.id, "complete")).catch((err) =>
+    await updateCTMEventStatus(ctmTask.id, "complete").catch((err) =>
       console.error("[Briefing] CTM status update failed:", err.message),
     );
   }

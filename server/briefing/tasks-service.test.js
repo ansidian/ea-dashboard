@@ -10,7 +10,7 @@ vi.mock("./todoist.js", () => ({
   createTodoistTask: vi.fn(),
   updateTodoistTask: vi.fn(),
 }));
-vi.mock("./ctm.js", () => ({ updateCTMEventStatus: vi.fn() }));
+vi.mock("./ctm.js", () => ({ updateCTMEventStatus: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./tombstones.js", () => ({ buildSnapshot: (t) => ({ snap: t.id }) }));
 vi.mock("./stored-briefing-service.js", () => ({
   applyTaskCompletion: vi.fn(),
@@ -28,7 +28,7 @@ const { completeTask } = await import("./tasks-service.js");
 beforeEach(() => {
   mockDb.execute.mockReset();
   Object.values(todoist).forEach((fn) => fn.mockReset?.());
-  ctm.updateCTMEventStatus.mockReset();
+  ctm.updateCTMEventStatus.mockClear();
   Object.values(storedBriefing).forEach((fn) => fn.mockReset?.());
 });
 
