@@ -603,7 +603,12 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
           .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
         acct.unread = acct.important.length;
       }
-      fixEmailAccounts(cloned, emails, accounts);
+      // Guard against fixEmailAccounts' empty-inputs branch, which resets
+      // accounts to zero-email seeded entries. That's correct for full-gen
+      // (Claude hallucinating triage from no inputs) but wrong here —
+      // cloned already holds carry-forward emails, and a quiet fresh fetch
+      // must not wipe them.
+      if (emails.length) fixEmailAccounts(cloned, emails, accounts);
       deduplicateBills(cloned);
       cloned.nextWeekCalendar = nextWeekCalendar;
       cloned.tomorrowCalendar = tomorrowCalendar;
