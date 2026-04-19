@@ -196,17 +196,20 @@ export default function InboxList({
                       fontFamily: "inherit", color: "inherit", padding: 0,
                     }}
                   >
-                    <Pin size={11} color={accent} />
+                    <Pin size={11} color={accent} style={{ flexShrink: 0 }} />
                     <span
                       style={{
                         fontSize: 10, fontWeight: 700, letterSpacing: 2,
                         textTransform: "uppercase", color: accent,
+                        minWidth: 0, whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis",
                       }}
                     >
                       Pinned
                     </span>
                     <span
                       style={{
+                        flexShrink: 0,
                         fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 999,
                         background: `${accent}22`, color: `${accent}cc`,
                         fontVariantNumeric: "tabular-nums",
@@ -215,7 +218,7 @@ export default function InboxList({
                       {grouped.pinned.length}
                     </span>
                     <span style={{ flex: 1 }} />
-                    {collapsed.pinned ? <ChevronRight size={12} color="rgba(205,214,244,0.4)" /> : <ChevronDown size={12} color="rgba(205,214,244,0.4)" />}
+                    {collapsed.pinned ? <ChevronRight size={12} color="rgba(205,214,244,0.4)" style={{ flexShrink: 0 }} /> : <ChevronDown size={12} color="rgba(205,214,244,0.4)" style={{ flexShrink: 0 }} />}
                   </div>
                 </StickyHeader>
                 {!collapsed.pinned && (
@@ -264,15 +267,19 @@ export default function InboxList({
                       style={{
                         fontSize: 10, fontWeight: 700, letterSpacing: 2,
                         textTransform: "uppercase", color: "#89b4fa",
+                        minWidth: 0, whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis",
                       }}
                     >
                       {briefingPhaseLabel(briefingGeneratedAt)}
                     </span>
                     <span
                       style={{
+                        flexShrink: 0,
                         fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 999,
                         background: "rgba(137,180,250,0.14)", color: "rgba(137,180,250,0.9)",
                         fontVariantNumeric: "tabular-nums",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       {grouped.live.length} new
@@ -280,13 +287,15 @@ export default function InboxList({
                     <span style={{ flex: 1 }} />
                     <span
                       style={{
+                        flexShrink: 0,
                         fontSize: 9, fontWeight: 600, letterSpacing: 0.5,
                         textTransform: "uppercase", color: "rgba(205,214,244,0.4)",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       Not yet triaged
                     </span>
-                    {collapsed.live ? <ChevronRight size={12} color="rgba(205,214,244,0.4)" /> : <ChevronDown size={12} color="rgba(205,214,244,0.4)" />}
+                    {collapsed.live ? <ChevronRight size={12} color="rgba(205,214,244,0.4)" style={{ flexShrink: 0 }} /> : <ChevronDown size={12} color="rgba(205,214,244,0.4)" style={{ flexShrink: 0 }} />}
                   </div>
                 </StickyHeader>
                 {!collapsed.live && (
@@ -311,17 +320,22 @@ export default function InboxList({
                         fontFamily: "inherit", color: "inherit", padding: 0,
                       }}
                     >
-                      <LaneIcon laneKey={k} />
+                      <span style={{ flexShrink: 0, display: "inline-flex" }}>
+                        <LaneIcon laneKey={k} />
+                      </span>
                       <span
                         style={{
                           fontSize: 10, fontWeight: 700, letterSpacing: 2,
                           textTransform: "uppercase", color: LANE[k].color,
+                          minWidth: 0, whiteSpace: "nowrap",
+                          overflow: "hidden", textOverflow: "ellipsis",
                         }}
                       >
                         {LANE[k].label}
                       </span>
                       <span
                         style={{
+                          flexShrink: 0,
                           fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 999,
                           background: LANE[k].soft, color: `${LANE[k].color}cc`,
                           fontVariantNumeric: "tabular-nums",
@@ -330,7 +344,7 @@ export default function InboxList({
                         {grouped[k].length}
                       </span>
                       <span style={{ flex: 1 }} />
-                      {collapsed[k] ? <ChevronRight size={12} color="rgba(205,214,244,0.4)" /> : <ChevronDown size={12} color="rgba(205,214,244,0.4)" />}
+                      {collapsed[k] ? <ChevronRight size={12} color="rgba(205,214,244,0.4)" style={{ flexShrink: 0 }} /> : <ChevronDown size={12} color="rgba(205,214,244,0.4)" style={{ flexShrink: 0 }} />}
                     </div>
                   </StickyHeader>
                   {!collapsed[k] && (
