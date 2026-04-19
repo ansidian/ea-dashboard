@@ -2,44 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockDb = { execute: vi.fn() };
 vi.mock("../db/connection.js", () => ({ default: mockDb }));
-vi.mock("../middleware/auth.js", () => ({ requireAuth: (_req, _res, next) => next() }));
 vi.mock("../briefing/todoist.js", () => ({
   completeTodoistTask: vi.fn(),
+  deleteTodoistTask: vi.fn(),
   fetchTodoistProjects: vi.fn(),
   fetchTodoistLabels: vi.fn(),
   createTodoistTask: vi.fn(),
   updateTodoistTask: vi.fn(),
 }));
 vi.mock("../briefing/ctm.js", () => ({ updateCTMEventStatus: vi.fn() }));
-vi.mock("../briefing/index.js", () => ({
-  generateBriefing: vi.fn(),
-  quickRefresh: vi.fn(),
-  loadUserConfig: vi.fn(),
-  fetchAllEmails: vi.fn(),
-}));
-vi.mock("../briefing/email-index.js", () => ({ indexEmails: vi.fn() }));
-vi.mock("../briefing/gmail.js", () => ({
-  fetchEmailBody: vi.fn(), markAsRead: vi.fn(), markAsUnread: vi.fn(),
-  trashMessage: vi.fn(), batchMarkAsRead: vi.fn(),
-  snoozeAtGmail: vi.fn(), wakeAtGmail: vi.fn(),
-}));
-vi.mock("../briefing/icloud.js", () => ({
-  fetchEmailBody: vi.fn(), markAsRead: vi.fn(), markAsUnread: vi.fn(),
-  trashMessage: vi.fn(), batchMarkAsRead: vi.fn(),
-}));
-vi.mock("../briefing/encryption.js", () => ({ decrypt: vi.fn() }));
-vi.mock("../briefing/actual.js", () => ({
-  sendBill: vi.fn(), markBillPaid: vi.fn(), getAccounts: vi.fn(),
-  getCategories: vi.fn(), getPayees: vi.fn(), getMetadata: vi.fn(),
-  testConnection: vi.fn(), createQuickTxn: vi.fn(),
-}));
-vi.mock("../briefing/bill-extract.js", () => ({ trimBillBody: vi.fn() }));
-vi.mock("../db/dev-fixture.js", () => ({ generateMockHistory: vi.fn(), generateEnrichedMock: vi.fn() }));
-vi.mock("../db/dev-seed-embeddings.js", () => ({ seedEmbeddings: vi.fn() }));
-vi.mock("../db/scenarios/index.js", () => ({ applyScenarios: vi.fn(), listScenarios: vi.fn() }));
+vi.mock("../briefing/tombstones.js", () => ({ buildSnapshot: vi.fn() }));
 
 process.env.EA_USER_ID = "user-1";
-const { default: router } = await import("./briefing.js");
+const { default: router } = await import("./briefing/tasks.js");
 
 function makeRes() {
   const res = { statusCode: 200, body: null };
