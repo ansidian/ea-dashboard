@@ -100,14 +100,13 @@ async function sweepIndex() {
     );
     for (const row of result.rows) {
       try {
-        const { accounts, settings } = await loadUserConfig(row.user_id);
+        const { accounts } = await loadUserConfig(row.user_id);
         const hasEmail = accounts.some(
           (a) => a.type === "gmail" || a.type === "icloud",
         );
         if (!hasEmail) continue;
         const emails = await fetchAllEmails(
           accounts,
-          settings,
           INDEXER_LOOKBACK_HOURS,
         );
         if (emails.length) await indexEmails(row.user_id, emails);

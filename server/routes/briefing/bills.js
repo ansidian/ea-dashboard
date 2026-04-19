@@ -66,7 +66,7 @@ router.post("/actual/bills/:id/mark-paid", async (req, res) => {
   }
 });
 
-router.get("/actual/metadata", async (req, res) => {
+router.get("/actual/metadata", async (_req, res) => {
   try {
     res.json(await billsService.getMetadata(EA_USER_ID));
   } catch (err) {
@@ -75,7 +75,7 @@ router.get("/actual/metadata", async (req, res) => {
   }
 });
 
-router.get("/actual/accounts", async (req, res) => {
+router.get("/actual/accounts", async (_req, res) => {
   try {
     res.json(await billsService.listAccounts(EA_USER_ID));
   } catch (err) {
@@ -84,7 +84,7 @@ router.get("/actual/accounts", async (req, res) => {
   }
 });
 
-router.get("/actual/payees", async (req, res) => {
+router.get("/actual/payees", async (_req, res) => {
   try {
     res.json(await billsService.listPayees(EA_USER_ID));
   } catch (err) {
@@ -93,7 +93,7 @@ router.get("/actual/payees", async (req, res) => {
   }
 });
 
-router.get("/actual/categories", async (req, res) => {
+router.get("/actual/categories", async (_req, res) => {
   try {
     res.json(await billsService.listCategories(EA_USER_ID));
   } catch (err) {

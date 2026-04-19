@@ -582,7 +582,7 @@ export default function AddTaskPanel({ anchorRef, onClose, onTaskAdded, editingT
       ? editingTask.labels.map((name) => ({ id: `name:${name}`, name, color: "#cba6da" }))
       : null,
   );
-  const [manualDue, setManualDue] = useState("");
+  const manualDue = "";
   const [overrides, setOverrides] = useState(
     editingTask
       ? {

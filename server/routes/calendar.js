@@ -16,7 +16,7 @@ import { hydrateRecurringTombstones, addDaysIso } from "../briefing/tombstones.j
 const router = Router();
 router.use(requireAuth);
 
-router.get("/deadlines", async (req, res) => {
+router.get("/deadlines", async (_req, res) => {
   try {
     const userId = process.env.EA_USER_ID;
 

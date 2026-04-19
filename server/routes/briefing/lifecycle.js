@@ -4,7 +4,7 @@ import * as lifecycleService from "../../briefing/lifecycle-service.js";
 const router = Router();
 const EA_USER_ID = process.env.EA_USER_ID;
 
-router.post("/generate", async (req, res) => {
+router.post("/generate", async (_req, res) => {
   try {
     res.json(await lifecycleService.triggerGeneration(EA_USER_ID));
   } catch (err) {
@@ -13,7 +13,7 @@ router.post("/generate", async (req, res) => {
   }
 });
 
-router.get("/in-progress", async (req, res) => {
+router.get("/in-progress", async (_req, res) => {
   try {
     res.json(await lifecycleService.getInProgress(EA_USER_ID));
   } catch (err) {
@@ -22,7 +22,7 @@ router.get("/in-progress", async (req, res) => {
   }
 });
 
-router.post("/refresh", async (req, res) => {
+router.post("/refresh", async (_req, res) => {
   try {
     res.json(await lifecycleService.refresh(EA_USER_ID));
   } catch (err) {
@@ -44,7 +44,7 @@ router.get("/latest", async (req, res) => {
   }
 });
 
-router.get("/history", async (req, res) => {
+router.get("/history", async (_req, res) => {
   try {
     res.json(await lifecycleService.getHistory(EA_USER_ID));
   } catch (err) {

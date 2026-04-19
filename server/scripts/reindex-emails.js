@@ -17,11 +17,11 @@ const hoursBack = Number(process.argv[2]) || 720;
 
 console.log(`[reindex] userId=${userId} hoursBack=${hoursBack}`);
 
-const { accounts, settings } = await loadUserConfig(userId);
+const { accounts } = await loadUserConfig(userId);
 console.log(`[reindex] loaded ${accounts.length} accounts`);
 
 const start = Date.now();
-const emails = await fetchAllEmails(accounts, settings, hoursBack);
+const emails = await fetchAllEmails(accounts, hoursBack);
 console.log(`[reindex] fetched ${emails.length} emails in ${Date.now() - start}ms`);
 
 await indexEmails(userId, emails);

@@ -100,7 +100,7 @@ async function fetchLiveData(userId, accounts, settings) {
 }
 
 // Fetch emails from all accounts
-export async function fetchAllEmails(accounts, settings, hoursBack) {
+export async function fetchAllEmails(accounts, hoursBack) {
   const gmailAccounts = accounts.filter((a) => a.type === "gmail");
   const icloudAccounts = accounts.filter((a) => a.type === "icloud");
 
@@ -111,7 +111,7 @@ export async function fetchAllEmails(accounts, settings, hoursBack) {
         return [];
       }),
     ),
-    ...icloudAccounts.map((a) => {
+    ...icloudAccounts.map(async (a) => {
       const password = decrypt(a.credentials_encrypted);
       return fetchIcloudEmails(a, password, hoursBack).catch((err) => {
         console.error(`iCloud fetch failed for ${a.email}:`, err.message);
@@ -544,7 +544,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
 
     const [{ calendar, nextWeekCalendar, tomorrowCalendar, weather, ctmDeadlines, todoistTasks, todoistTaskIdSet }, emails, { triagedIds, prevBriefing, dismissedIds, pinnedIds }] = await Promise.all([
       fetchLiveData(userId, accounts, settings),
-      fetchAllEmails(accounts, settings, hoursBack),
+      fetchAllEmails(accounts, hoursBack),
       loadPreviousTriage(userId),
     ]);
 
@@ -556,7 +556,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
     if (indexEmpty) {
       // one-time backfill: fetch 90 days of email metadata
       console.log("[EA] Email index empty — starting 90-day backfill...");
-      fetchAllEmails(accounts, settings, 2160)
+      fetchAllEmails(accounts, 2160)
         .then(allEmails => indexEmails(userId, allEmails))
         .then(() => console.log("[EA] Backfill complete"))
         .catch(err => console.error("[EA] Backfill indexing failed:", err.message));

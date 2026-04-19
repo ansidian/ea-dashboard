@@ -37,7 +37,7 @@ router.patch("/task-status/:taskId", async (req, res) => {
   }
 });
 
-router.get("/todoist/projects", async (req, res) => {
+router.get("/todoist/projects", async (_req, res) => {
   try {
     res.json(await tasksService.listProjects(EA_USER_ID));
   } catch (err) {
@@ -46,7 +46,7 @@ router.get("/todoist/projects", async (req, res) => {
   }
 });
 
-router.get("/todoist/labels", async (req, res) => {
+router.get("/todoist/labels", async (_req, res) => {
   try {
     res.json(await tasksService.listLabels(EA_USER_ID));
   } catch (err) {
