@@ -6,7 +6,7 @@ import db from "../db/connection.js";
  * that `date` falls on, as proper UTC-anchored Date objects regardless of the
  * server's local timezone.
  */
-function pacificDayBoundaries(date) {
+export function pacificDayBoundaries(date) {
   // Resolve the current Pacific UTC offset (handles DST automatically)
   const offsetPart = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Los_Angeles",

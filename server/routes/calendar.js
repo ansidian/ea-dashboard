@@ -4,11 +4,13 @@ import { requireAuth } from "../middleware/auth.js";
 import { fetchCTMDeadlinesAll } from "../briefing/ctm.js";
 import { fetchTodoistTasksAll } from "../briefing/todoist.js";
 import {
+  loadUserConfig,
   separateDeadlines,
   computeDeadlineStats,
   loadCompletedTaskIds,
   carryForwardCompletedTodoist,
 } from "../briefing/index.js";
+import { fetchCalendar, pacificDayBoundaries } from "../briefing/calendar.js";
 import { hydrateRecurringTombstones, addDaysIso } from "../briefing/tombstones.js";
 
 const router = Router();
@@ -77,6 +79,53 @@ router.get("/deadlines", async (req, res) => {
   } catch (err) {
     console.error("[Calendar] deadlines fetch failed:", err);
     res.status(500).json({ message: "Failed to fetch calendar deadlines" });
+  }
+});
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_SPAN_DAYS = 62;
+
+router.get("/range", async (req, res) => {
+  const { start, end } = req.query;
+
+  if (!start) return res.status(400).json({ message: "start param required (YYYY-MM-DD)" });
+  if (!end) return res.status(400).json({ message: "end param required (YYYY-MM-DD)" });
+  if (!ISO_DATE_RE.test(start) || !ISO_DATE_RE.test(end)) {
+    return res.status(400).json({ message: "start/end must be YYYY-MM-DD" });
+  }
+
+  const startDate = new Date(`${start}T12:00:00Z`);
+  const endDate = new Date(`${end}T12:00:00Z`);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return res.status(400).json({ message: "invalid date value" });
+  }
+  if (endDate < startDate) {
+    return res.status(400).json({ message: "end must be >= start" });
+  }
+  const spanDays = Math.round((endDate - startDate) / 86400000);
+  if (spanDays > MAX_SPAN_DAYS) {
+    return res.status(400).json({ message: `span must be <= ${MAX_SPAN_DAYS} days` });
+  }
+
+  try {
+    const userId = process.env.EA_USER_ID;
+    const { accounts } = await loadUserConfig(userId);
+    const calendarAccounts = accounts.filter(
+      (a) => a.type === "gmail" && a.calendar_enabled,
+    );
+
+    const { dayStart } = pacificDayBoundaries(startDate);
+    const { dayEnd } = pacificDayBoundaries(endDate);
+
+    const events = await fetchCalendar(calendarAccounts, {
+      startDate: dayStart,
+      endDate: dayEnd,
+    });
+
+    res.json({ events, fetchedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error("[Calendar] range fetch failed:", err.message);
+    res.status(500).json({ message: "Failed to fetch calendar range" });
   }
 });
 
