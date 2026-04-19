@@ -9,6 +9,7 @@ import {
   urgencyForDays, pacificClock, overdueLabel,
 } from "../../lib/redesign-helpers";
 import { daysUntil } from "../../lib/bill-utils";
+import Tooltip from "../shared/Tooltip";
 
 // Matches Rails.jsx. Todoist priority: 1=urgent, 2=high, 3=medium, 4=low; we
 // only surface 1–3 because "no flag" is the expected baseline.
@@ -17,6 +18,22 @@ const PRIORITY_COLOR = {
   2: "#f9e2af",
   3: "#89b4fa",
 };
+
+const DEADLINE_SOURCE_COLORS = {
+  canvas: "#5A8FBF",
+  manual: "#5A8FBF",
+  todoist: "#E9776A",
+};
+
+function formatFullDateForOffset(offset, now) {
+  const date = new Date(now + offset * 86400000);
+  return date.toLocaleDateString("en-US", {
+    timeZone: "America/Los_Angeles",
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
 
 function PriorityFlag({ level, size = 11 }) {
   const color = PRIORITY_COLOR[level];
@@ -119,6 +136,7 @@ function TimelineRow({ item, now, accent, onJump }) {
   let isPast = false, isLive = false;
   let priorityLevel = null;
   let overdueText = null;
+  let railDotColor = null;
 
   if (item.kind === "event") {
     const ev = item.data;
@@ -137,6 +155,7 @@ function TimelineRow({ item, now, accent, onJump }) {
       : ev.location || ev.subtitle;
     meta = formatEventDuration(ev.startMs, ev.endMs);
     urgency = isLive ? "high" : "low";
+    railDotColor = ev.color || ev.sourceColor || accent;
     jumpPayload = { kind: "event", id: ev.id, data: ev };
   } else if (item.kind === "deadline") {
     const d = item.data;
@@ -159,6 +178,8 @@ function TimelineRow({ item, now, accent, onJump }) {
     if (d.source === "todoist" && d.status !== "complete") {
       overdueText = overdueLabel(item.dueAtMs, now);
     }
+    railDotColor =
+      DEADLINE_SOURCE_COLORS[d.source] || DEADLINE_SOURCE_COLORS.canvas;
     jumpPayload = { kind: "deadline", id: d.id, data: d };
   } else {
     return null;
@@ -166,42 +187,77 @@ function TimelineRow({ item, now, accent, onJump }) {
 
   const urgColors = { high: "#f38ba8", medium: "#f9e2af", low: accent };
   const dotColor = urgColors[urgency] || accent;
+  const effectiveRailDotColor = railDotColor || dotColor;
   const opacity = isPast ? 0.38 : 1;
+  const railBorderColor = railDotColor
+    ? `${effectiveRailDotColor}${isLive ? "" : "55"}`
+    : isLive
+      ? effectiveRailDotColor
+      : "rgba(255,255,255,0.15)";
+  const railGlow = isLive
+    ? `0 0 10px ${effectiveRailDotColor}80`
+    : railDotColor
+      ? `0 0 0 1px ${effectiveRailDotColor}18`
+      : "none";
 
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={(e) => onJump?.(jumpPayload, e.currentTarget)}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.(jumpPayload, e.currentTarget); }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ")
+          onJump?.(jumpPayload, e.currentTarget);
+      }}
       style={{
-        position: "relative", padding: "9px 12px", marginBottom: 4,
-        borderRadius: 9, cursor: "pointer", opacity,
+        position: "relative",
+        padding: "9px 12px",
+        marginBottom: 4,
+        borderRadius: 9,
+        cursor: "pointer",
+        opacity,
         border: "1px solid transparent",
         transition: "all 130ms",
-        display: "grid", gridTemplateColumns: "54px 1fr auto", gap: 14, alignItems: "center",
+        display: "grid",
+        gridTemplateColumns: "54px 1fr auto",
+        gap: 14,
+        alignItems: "center",
         background: isLive ? `${accent}08` : "transparent",
         ...(isLive ? { borderColor: `${accent}30` } : {}),
       }}
-      onMouseEnter={(e) => { if (!isLive) e.currentTarget.style.background = "rgba(255,255,255,0.025)"; }}
-      onMouseLeave={(e) => { if (!isLive) e.currentTarget.style.background = "transparent"; }}
+      onMouseEnter={(e) => {
+        if (!isLive)
+          e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+      }}
+      onMouseLeave={(e) => {
+        if (!isLive) e.currentTarget.style.background = "transparent";
+      }}
     >
       {/* Rail dot */}
       <div
         style={{
-          position: "absolute", left: -22, top: 14,
-          width: 13, height: 13, borderRadius: 99,
+          position: "absolute",
+          left: -22,
+          top: 14,
+          width: 13,
+          height: 13,
+          borderRadius: 99,
           background: "#0b0b13",
-          display: "grid", placeItems: "center",
-          border: `1px solid ${isLive ? dotColor : "rgba(255,255,255,0.15)"}`,
-          boxShadow: isLive ? `0 0 10px ${dotColor}80` : "none",
+          display: "grid",
+          placeItems: "center",
+          border: `1px solid ${railBorderColor}`,
+          boxShadow: railGlow,
         }}
       >
         <div
           style={{
-            width: 5, height: 5, borderRadius: 99,
-            background: dotColor,
-            ...(isLive ? { animation: "dashPulse 2s ease-in-out infinite" } : {}),
+            width: 5,
+            height: 5,
+            borderRadius: 99,
+            background: effectiveRailDotColor,
+            ...(isLive
+              ? { animation: "dashPulse 2s ease-in-out infinite" }
+              : {}),
           }}
         />
       </div>
@@ -209,7 +265,9 @@ function TimelineRow({ item, now, accent, onJump }) {
       {/* Time column */}
       <div
         style={{
-          fontSize: 11.5, fontWeight: 500, fontVariantNumeric: "tabular-nums",
+          fontSize: 11.5,
+          fontWeight: 500,
+          fontVariantNumeric: "tabular-nums",
           color: isLive ? dotColor : "rgba(205,214,244,0.7)",
           letterSpacing: 0.2,
         }}
@@ -219,12 +277,23 @@ function TimelineRow({ item, now, accent, onJump }) {
 
       {/* Main */}
       <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 2,
+          }}
+        >
           <Icon size={11} color={iconColor || "rgba(205,214,244,0.55)"} />
           <div
             style={{
-              fontSize: 13, fontWeight: 500, color: "#cdd6f4",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              fontSize: 13,
+              fontWeight: 500,
+              color: "#cdd6f4",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
               textDecoration: isPast ? "line-through" : "none",
               textDecorationColor: "rgba(205,214,244,0.25)",
             }}
@@ -234,9 +303,14 @@ function TimelineRow({ item, now, accent, onJump }) {
           {isLive && (
             <span
               style={{
-                padding: "1px 6px", borderRadius: 99,
-                fontSize: 9, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 600,
-                background: `${dotColor}20`, color: dotColor,
+                padding: "1px 6px",
+                borderRadius: 99,
+                fontSize: 9,
+                letterSpacing: 0.5,
+                textTransform: "uppercase",
+                fontWeight: 600,
+                background: `${dotColor}20`,
+                color: dotColor,
               }}
             >
               Live
@@ -246,9 +320,14 @@ function TimelineRow({ item, now, accent, onJump }) {
           {overdueText && (
             <span
               style={{
-                padding: "1px 6px", borderRadius: 99,
-                fontSize: 9, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 600,
-                background: "#f38ba820", color: "#f38ba8",
+                padding: "1px 6px",
+                borderRadius: 99,
+                fontSize: 9,
+                letterSpacing: 0.5,
+                textTransform: "uppercase",
+                fontWeight: 600,
+                background: "#f38ba820",
+                color: "#f38ba8",
                 whiteSpace: "nowrap",
               }}
             >
@@ -259,8 +338,11 @@ function TimelineRow({ item, now, accent, onJump }) {
         {sub && (
           <div
             style={{
-              fontSize: 11, color: "rgba(205,214,244,0.45)",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              fontSize: 11,
+              color: "rgba(205,214,244,0.45)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
             {sub}
@@ -272,9 +354,11 @@ function TimelineRow({ item, now, accent, onJump }) {
       {meta && (
         <div
           style={{
-            fontSize: 10.5, color: "rgba(205,214,244,0.5)",
+            fontSize: 10.5,
+            color: "rgba(205,214,244,0.5)",
             fontVariantNumeric: "tabular-nums",
-            padding: "2px 8px", borderRadius: 6,
+            padding: "2px 8px",
+            borderRadius: 6,
             background: "rgba(255,255,255,0.03)",
           }}
         >
@@ -325,19 +409,34 @@ export default function TodayTimeline({
       if (!g.has(b)) g.set(b, []);
       g.get(b).push(it);
     }
+    if (filters.events && !filters.deadlines && !g.has(0)) {
+      g.set(0, []);
+    }
     return [...g.entries()].sort((a, b) => a[0] - b[0]);
-  }, [filtered, now]);
+  }, [filtered, now, filters.events, filters.deadlines]);
+
+  const todayLabel = formatFullDateForOffset(0, now);
 
   return (
-    <div data-sect="timeline" style={{ padding: density === "compact" ? "18px 32px" : "24px 36px" }}>
+    <div
+      data-sect="timeline"
+      style={{ padding: density === "compact" ? "18px 32px" : "24px 36px" }}
+    >
       <SectionHeader
-        title="Today"
+        title={
+          <Tooltip text={todayLabel} sideOffset={12}>
+            <span>Today</span>
+          </Tooltip>
+        }
         right={
           <div
             role="group"
             aria-label="Timeline filters"
             style={{
-              display: "flex", gap: 2, padding: 2, borderRadius: 8,
+              display: "flex",
+              gap: 2,
+              padding: 2,
+              borderRadius: 8,
               background: "rgba(255,255,255,0.03)",
               border: "1px solid rgba(255,255,255,0.05)",
             }}
@@ -353,27 +452,40 @@ export default function TodayTimeline({
                   type="button"
                   role="switch"
                   aria-checked={active}
-                  onClick={() => setFilters((prev) => ({ ...prev, [f.id]: !prev[f.id] }))}
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, [f.id]: !prev[f.id] }))
+                  }
                   style={{
-                    padding: "4px 10px", borderRadius: 6, cursor: "pointer",
-                    fontSize: 10.5, fontFamily: "inherit", letterSpacing: 0.2,
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    fontSize: 10.5,
+                    fontFamily: "inherit",
+                    letterSpacing: 0.2,
                     background: active ? `${accent}1f` : "transparent",
                     border: `1px solid ${active ? `${accent}38` : "transparent"}`,
                     color: active ? accent : "rgba(205,214,244,0.5)",
-                    transition: "background 130ms, color 130ms, border-color 130ms",
-                    display: "inline-flex", alignItems: "center", gap: 6,
+                    transition:
+                      "background 130ms, color 130ms, border-color 130ms",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
                   }}
                   onMouseEnter={(e) => {
-                    if (!active) e.currentTarget.style.color = "rgba(205,214,244,0.8)";
+                    if (!active)
+                      e.currentTarget.style.color = "rgba(205,214,244,0.8)";
                   }}
                   onMouseLeave={(e) => {
-                    if (!active) e.currentTarget.style.color = "rgba(205,214,244,0.5)";
+                    if (!active)
+                      e.currentTarget.style.color = "rgba(205,214,244,0.5)";
                   }}
                 >
                   <span
                     aria-hidden="true"
                     style={{
-                      width: 6, height: 6, borderRadius: 99,
+                      width: 6,
+                      height: 6,
+                      borderRadius: 99,
                       background: active ? accent : "transparent",
                       border: `1px solid ${active ? accent : "rgba(205,214,244,0.35)"}`,
                       boxShadow: active ? `0 0 6px ${accent}80` : "none",
@@ -403,8 +515,10 @@ export default function TodayTimeline({
         {groups.length === 0 && (
           <div
             style={{
-              padding: "40px 20px", textAlign: "center",
-              fontSize: 12, color: "rgba(205,214,244,0.4)",
+              padding: "40px 20px",
+              textAlign: "center",
+              fontSize: 12,
+              color: "rgba(205,214,244,0.4)",
             }}
           >
             Nothing on the calendar matching this filter.
@@ -427,6 +541,7 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
   const label = dayBucketLabel(day, now);
   const hideHeader = isFirst && day === 0;
   const isToday = day === 0;
+  const showRelativeTooltip = day === 1 || day <= -2 || (day >= 2 && day <= 6);
 
   const rowRefs = useRef([]);
   const [markerTop, setMarkerTop] = useState(null);
@@ -438,8 +553,12 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
   // layout then sync state before paint.
   /* eslint-disable react-hooks/set-state-in-effect */
   useLayoutEffect(() => {
-    if (!isToday || items.length === 0) {
+    if (!isToday) {
       setMarkerTop(null);
+      return;
+    }
+    if (items.length === 0) {
+      setMarkerTop(12);
       return;
     }
 
@@ -493,31 +612,75 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
   return (
     <div style={{ marginBottom: 28 }}>
       {!hideHeader && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingLeft: 2 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 10,
+            paddingLeft: 2,
+          }}
+        >
+          {showRelativeTooltip ? (
+            <Tooltip text={formatFullDateForOffset(day, now)} sideOffset={12}>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                  color: isToday ? "#cdd6f4" : "rgba(205,214,244,0.45)",
+                }}
+              >
+                {label}
+              </div>
+            </Tooltip>
+          ) : (
+            <div
+              style={{
+                fontSize: 10.5,
+                letterSpacing: 0.8,
+                textTransform: "uppercase",
+                fontWeight: 600,
+                color: isToday ? "#cdd6f4" : "rgba(205,214,244,0.45)",
+              }}
+            >
+              {label}
+            </div>
+          )}
           <div
-            style={{
-              fontSize: 10.5, letterSpacing: 0.8, textTransform: "uppercase", fontWeight: 600,
-              color: isToday ? "#cdd6f4" : "rgba(205,214,244,0.45)",
-            }}
-          >
-            {label}
-          </div>
-          <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.04)" }} />
+            style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.04)" }}
+          />
           <div style={{ fontSize: 10, color: "rgba(205,214,244,0.35)" }}>
             {items.length} {items.length === 1 ? "item" : "items"}
           </div>
         </div>
       )}
 
-      <div style={{ position: "relative", paddingLeft: GUTTER }}>
+      <div
+        style={{
+          position: "relative",
+          paddingLeft: GUTTER,
+          minHeight: isToday && items.length === 0 ? 28 : undefined,
+        }}
+      >
         <div
           style={{
-            position: "absolute", left: SPINE_LEFT, top: 8, bottom: 8, width: 1,
+            position: "absolute",
+            left: SPINE_LEFT,
+            top: 8,
+            bottom: 8,
+            width: 1,
             background: "rgba(255,255,255,0.06)",
           }}
         />
         {items.map((it, i) => (
-          <div key={`${it.kind}-${i}`} ref={(el) => { rowRefs.current[i] = el; }}>
+          <div
+            key={`${it.kind}-${i}`}
+            ref={(el) => {
+              rowRefs.current[i] = el;
+            }}
+          >
             <TimelineRow item={it} now={now} accent={accent} onJump={onJump} />
           </div>
         ))}

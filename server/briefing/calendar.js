@@ -143,6 +143,7 @@ export async function fetchCalendar(gmailAccounts, { startDate, endDate } = {}) 
             duration: isAllDay ? formatAllDayDuration(start, end) : formatDuration(start, end),
             title: event.summary || "(No title)",
             source: account.label,
+            sourceColor: account.color || calColorMap.get(calId) || "#4285f4",
             color: calColorMap.get(calId) || account.color || "#4285f4",
             flag: null,
             allDay: isAllDay,
