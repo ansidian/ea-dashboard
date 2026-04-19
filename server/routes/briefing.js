@@ -18,6 +18,7 @@ import { sendBill, markBillPaid, getAccounts as getActualAccounts, getCategories
 import { trimBillBody } from "../briefing/bill-extract.js";
 import { completeTodoistTask, deleteTodoistTask, fetchTodoistProjects, fetchTodoistLabels, createTodoistTask, updateTodoistTask } from "../briefing/todoist.js";
 import { buildSnapshot } from "../briefing/tombstones.js";
+import * as storedBriefingService from "../briefing/stored-briefing-service.js";
 import { updateCTMEventStatus } from "../briefing/ctm.js";
 import { generateEnrichedMock, generateMockHistory } from "../db/dev-fixture.js";
 import { seedEmbeddings } from "../db/dev-seed-embeddings.js";
@@ -48,27 +49,6 @@ router.post("/dev-reindex-emails", async (req, res) => {
   }
 });
 
-// Merge current account display preferences (label, color, icon) into a briefing object.
-// This ensures user changes are reflected immediately without regenerating.
-async function mergeAccountPrefs(briefing, userId) {
-  if (!briefing?.emails?.accounts?.length) return briefing;
-  const result = await db.execute({
-    sql: "SELECT id, email, label, color, icon FROM ea_accounts WHERE user_id = ?",
-    args: [userId],
-  });
-  const byEmail = new Map(result.rows.map(a => [a.email, a]));
-  const byLabel = new Map(result.rows.map(a => [a.label, a]));
-  for (const acc of briefing.emails.accounts) {
-    const dbAcc = byLabel.get(acc.name) || byEmail.get(acc.name);
-    if (dbAcc) {
-      acc.name = dbAcc.label;
-      acc.color = dbAcc.color || acc.color;
-      acc.icon = dbAcc.icon || acc.icon;
-    }
-  }
-  return briefing;
-}
-
 // Persist read status into the stored briefing so reloads reflect it
 async function markEmailsReadInIndex(userId, uids) {
   const list = Array.isArray(uids) ? uids : [uids];
@@ -80,33 +60,6 @@ async function markEmailsReadInIndex(userId, uids) {
   });
 }
 
-async function markEmailsReadInBriefing(userId, uids) {
-  const uidSet = new Set(Array.isArray(uids) ? uids : [uids]);
-  const latest = await db.execute({
-    sql: `SELECT id, briefing_json FROM ea_briefings
-          WHERE user_id = ? AND status = 'ready'
-          ORDER BY generated_at DESC LIMIT 1`,
-    args: [userId],
-  });
-  if (!latest.rows.length) return;
-  const briefing = JSON.parse(latest.rows[0].briefing_json);
-  let changed = false;
-  for (const acct of briefing.emails?.accounts || []) {
-    for (const email of acct.important) {
-      if ((uidSet.has(email.id) || uidSet.has(email.uid)) && !email.read) {
-        email.read = true;
-        changed = true;
-      }
-    }
-  }
-  if (changed) {
-    await db.execute({
-      sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
-      args: [JSON.stringify(briefing), latest.rows[0].id],
-    });
-  }
-}
-
 async function markEmailsUnreadInIndex(userId, uids) {
   const list = Array.isArray(uids) ? uids : [uids];
   if (!list.length) return;
@@ -115,33 +68,6 @@ async function markEmailsUnreadInIndex(userId, uids) {
     sql: `UPDATE ea_email_index SET read = 0 WHERE user_id = ? AND uid IN (${placeholders})`,
     args: [userId, ...list],
   });
-}
-
-async function markEmailsUnreadInBriefing(userId, uids) {
-  const uidSet = new Set(Array.isArray(uids) ? uids : [uids]);
-  const latest = await db.execute({
-    sql: `SELECT id, briefing_json FROM ea_briefings
-          WHERE user_id = ? AND status = 'ready'
-          ORDER BY generated_at DESC LIMIT 1`,
-    args: [userId],
-  });
-  if (!latest.rows.length) return;
-  const briefing = JSON.parse(latest.rows[0].briefing_json);
-  let changed = false;
-  for (const acct of briefing.emails?.accounts || []) {
-    for (const email of acct.important) {
-      if ((uidSet.has(email.id) || uidSet.has(email.uid)) && email.read) {
-        email.read = false;
-        changed = true;
-      }
-    }
-  }
-  if (changed) {
-    await db.execute({
-      sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
-      args: [JSON.stringify(briefing), latest.rows[0].id],
-    });
-  }
 }
 
 router.post("/generate", async (req, res) => {
@@ -185,7 +111,7 @@ router.post("/refresh", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const result = await quickRefresh(userId);
-    result.briefingJson = await mergeAccountPrefs(result.briefingJson, userId);
+    result.briefingJson = await storedBriefingService.mergeAccountPrefs(result.briefingJson, userId);
     res.json(result);
   } catch (err) {
     console.error("Error refreshing briefing:", err);
@@ -227,7 +153,7 @@ router.get("/latest", async (req, res) => {
     }
 
     const row = result.rows[0];
-    const briefing = await mergeAccountPrefs(JSON.parse(row.briefing_json), userId);
+    const briefing = await storedBriefingService.mergeAccountPrefs(JSON.parse(row.briefing_json), userId);
     res.json({
       id: row.id,
       status: row.status,
@@ -320,31 +246,7 @@ router.post("/dismiss/:emailId", async (req, res) => {
       args: [userId, emailId],
     });
 
-    // Also remove from the latest stored briefing so refreshes don't bring it back
-    const latest = await db.execute({
-      sql: `SELECT id, briefing_json FROM ea_briefings
-            WHERE user_id = ? AND status = 'ready'
-            ORDER BY generated_at DESC LIMIT 1`,
-      args: [userId],
-    });
-    if (latest.rows.length) {
-      const briefing = JSON.parse(latest.rows[0].briefing_json);
-      let changed = false;
-      for (const acct of briefing.emails?.accounts || []) {
-        const before = acct.important.length;
-        acct.important = acct.important.filter(e => e.id !== emailId);
-        if (acct.important.length !== before) {
-          acct.unread = acct.important.length;
-          changed = true;
-        }
-      }
-      if (changed) {
-        await db.execute({
-          sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
-          args: [JSON.stringify(briefing), latest.rows[0].id],
-        });
-      }
-    }
+    await storedBriefingService.removeDismissedEmailFromBriefing(userId, emailId);
 
     res.json({ ok: true });
   } catch (err) {
@@ -538,62 +440,11 @@ router.post("/complete-task/:taskId", async (req, res) => {
       );
     }
 
-    // Stored-briefing update policy:
-    //   - Recurring Todoist: leave alone — tombstone injection on next
-    //     refresh handles visibility.
-    //   - Non-recurring Todoist-only: flip status=complete in place. The
-    //     carry-forward step in generateBriefing/quickRefresh preserves this
-    //     row across refreshes until its due_date slips past the gate.
-    //   - CTM / CTM-linked: strip (no visibility-preservation path).
-    if (briefing && !isRecurringTodoist) {
-      const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
-      const today = fmt.format(new Date());
-      const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
-      let changed = false;
-
-      if (isTodoistOnly) {
-        const task = briefing.todoist?.upcoming?.find(
-          t => !t._tombstone && t.id === taskId,
-        );
-        if (task && task.status !== "complete") {
-          task.status = "complete";
-          let totalPoints = 0, dueToday = 0, dueThisWeek = 0, incomplete = 0;
-          for (const d of briefing.todoist.upcoming) {
-            if (d.status !== "complete") incomplete++;
-            if (d.due_date === today) dueToday++;
-            if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
-            if (d.points_possible) totalPoints += d.points_possible;
-          }
-          briefing.todoist.stats = { incomplete, dueToday, dueThisWeek, totalPoints };
-          changed = true;
-        }
-      } else {
-        for (const section of ["ctm", "todoist"]) {
-          if (!briefing[section]?.upcoming) continue;
-          const before = briefing[section].upcoming.length;
-          briefing[section].upcoming = briefing[section].upcoming.filter(
-            t => String(t.id) !== taskId && t.todoist_id !== taskId
-          );
-          if (briefing[section].upcoming.length !== before) {
-            let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
-            for (const d of briefing[section].upcoming) {
-              if (d.due_date === today) dueToday++;
-              if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
-              if (d.points_possible) totalPoints += d.points_possible;
-            }
-            briefing[section].stats = { incomplete: briefing[section].upcoming.length, dueToday, dueThisWeek, totalPoints };
-            changed = true;
-          }
-        }
-      }
-
-      if (changed) {
-        await db.execute({
-          sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
-          args: [JSON.stringify(briefing), latest.rows[0].id],
-        });
-      }
-    }
+    await storedBriefingService.applyTaskCompletion(userId, {
+      taskId,
+      isRecurringTodoist,
+      isTodoistOnly,
+    });
     res.json({ ok: true });
   } catch (err) {
     console.error("Error completing task:", err);
@@ -652,43 +503,10 @@ router.patch("/task-status/:taskId", async (req, res) => {
             args: [userId, ctmTask.todoist_id],
           });
         }
-
-        // Remove completed task from briefing
-        const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" });
-        const today = fmt.format(new Date());
-        const weekFromNow = fmt.format(new Date(Date.now() + 7 * 86400000));
-        briefing.ctm.upcoming = briefing.ctm.upcoming.filter(t => String(t.id) !== taskId);
-        let totalPoints = 0, dueToday = 0, dueThisWeek = 0;
-        for (const d of briefing.ctm.upcoming) {
-          if (d.due_date === today) dueToday++;
-          if (d.due_date >= today && d.due_date <= weekFromNow) dueThisWeek++;
-          if (d.points_possible) totalPoints += d.points_possible;
-        }
-        briefing.ctm.stats = { incomplete: briefing.ctm.upcoming.length, dueToday, dueThisWeek, totalPoints };
-        await db.execute({
-          sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
-          args: [JSON.stringify(briefing), latest.rows[0].id],
-        });
       }
+      await storedBriefingService.applyCTMCompletionAfterTodoistClose(userId, taskId);
     } else {
-      // Status change (not complete) — update in-place in briefing
-      const latest = await db.execute({
-        sql: `SELECT id, briefing_json FROM ea_briefings
-              WHERE user_id = ? AND status = 'ready'
-              ORDER BY generated_at DESC LIMIT 1`,
-        args: [userId],
-      });
-      if (latest.rows.length) {
-        const briefing = JSON.parse(latest.rows[0].briefing_json);
-        const task = briefing.ctm?.upcoming?.find(t => String(t.id) === taskId);
-        if (task) {
-          task.status = status;
-          await db.execute({
-            sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
-            args: [JSON.stringify(briefing), latest.rows[0].id],
-          });
-        }
-      }
+      await storedBriefingService.applyCTMStatusChange(userId, taskId, status);
     }
 
     res.json({ ok: true, status });
@@ -733,7 +551,7 @@ router.post("/email/:uid/mark-read", async (req, res) => {
     } else {
       await gmailMarkAsRead(found.account, uid);
     }
-    await markEmailsReadInBriefing(userId, uid);
+    await storedBriefingService.markEmailsRead(userId,uid);
     await markEmailsReadInIndex(userId, uid);
     res.json({ ok: true });
   } catch (err) {
@@ -755,7 +573,7 @@ router.post("/email/:uid/mark-unread", async (req, res) => {
     } else {
       await gmailMarkAsUnread(found.account, uid);
     }
-    await markEmailsUnreadInBriefing(userId, uid);
+    await storedBriefingService.markEmailsUnread(userId,uid);
     await markEmailsUnreadInIndex(userId, uid);
     res.json({ ok: true });
   } catch (err) {
@@ -837,7 +655,7 @@ router.post("/email/mark-all-read", async (req, res) => {
     }
 
     await Promise.all(ops);
-    await markEmailsReadInBriefing(userId, uids);
+    await storedBriefingService.markEmailsRead(userId,uids);
     await markEmailsReadInIndex(userId, uids);
     res.json({ ok: true });
   } catch (err) {
@@ -994,7 +812,7 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ message: "Briefing not found" });
     }
     const row = result.rows[0];
-    const briefing = await mergeAccountPrefs(JSON.parse(row.briefing_json), userId);
+    const briefing = await storedBriefingService.mergeAccountPrefs(JSON.parse(row.briefing_json), userId);
     res.json({
       id: row.id, status: row.status, briefing,
       generated_at: row.generated_at, generation_time_ms: row.generation_time_ms,
@@ -1244,52 +1062,11 @@ router.get("/todoist/labels", async (req, res) => {
   }
 });
 
-// Mirror a freshly-created or just-edited Todoist task into the latest stored
-// briefing. Without this, /complete-task can't find the task in briefing JSON
-// (since handleAddTask only updates client state), so its todoist close call
-// is skipped and the first completion silently no-ops on Todoist's side.
-async function mirrorTodoistTaskIntoStoredBriefing(userId, task, { replace }) {
-  const latest = await db.execute({
-    sql: `SELECT id, briefing_json FROM ea_briefings
-          WHERE user_id = ? AND status = 'ready'
-          ORDER BY generated_at DESC LIMIT 1`,
-    args: [userId],
-  });
-  if (!latest.rows.length) return;
-
-  const briefing = JSON.parse(latest.rows[0].briefing_json);
-  if (!briefing.todoist) briefing.todoist = { upcoming: [], stats: {} };
-  if (!Array.isArray(briefing.todoist.upcoming)) briefing.todoist.upcoming = [];
-
-  // Seed downstream fields the rest of the pipeline expects. The task returned
-  // from createTodoistTask omits `status` after the bug-1 fix; default it here
-  // for freshly-inserted rows. Skip tombstone rows when matching by id.
-  const newTask = { status: "incomplete", ...task };
-  const idx = briefing.todoist.upcoming.findIndex(
-    (t) => !t._tombstone && String(t.id) === String(task.id),
-  );
-
-  if (idx >= 0) {
-    if (!replace) return; // create path dedupes — don't double-insert
-    briefing.todoist.upcoming[idx] = {
-      ...briefing.todoist.upcoming[idx],
-      ...task,
-    };
-  } else {
-    briefing.todoist.upcoming.push(newTask);
-  }
-
-  await db.execute({
-    sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
-    args: [JSON.stringify(briefing), latest.rows[0].id],
-  });
-}
-
 router.post("/todoist/tasks", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const task = await createTodoistTask(userId, req.body);
-    await mirrorTodoistTaskIntoStoredBriefing(userId, task, { replace: false });
+    await storedBriefingService.upsertTodoistTask(userId, task, { replace: false });
     res.json(task);
   } catch (err) {
     console.error("Error creating Todoist task:", err.message);
@@ -1301,7 +1078,7 @@ router.post("/todoist/tasks/:id", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     const task = await updateTodoistTask(userId, req.params.id, req.body);
-    await mirrorTodoistTaskIntoStoredBriefing(userId, task, { replace: true });
+    await storedBriefingService.upsertTodoistTask(userId, task, { replace: true });
     res.json(task);
   } catch (err) {
     console.error("Error updating Todoist task:", err.message);
@@ -1313,40 +1090,12 @@ router.delete("/todoist/tasks/:id", async (req, res) => {
   const userId = process.env.EA_USER_ID;
   try {
     await deleteTodoistTask(userId, req.params.id);
-    await removeTodoistTaskFromStoredBriefing(userId, req.params.id);
+    await storedBriefingService.removeTodoistTask(userId, req.params.id);
     res.json({ ok: true });
   } catch (err) {
     console.error("Error deleting Todoist task:", err.message);
     res.status(400).json({ message: err.message });
   }
 });
-
-// Inverse of mirrorTodoistTaskIntoStoredBriefing — prunes the deleted task
-// from the persisted briefing so a reload doesn't resurrect it. Tombstones
-// share their id with the live next-occurrence of a recurring task; the
-// `!t._tombstone` guard keeps those rows intact when the live row is deleted.
-async function removeTodoistTaskFromStoredBriefing(userId, taskId) {
-  const latest = await db.execute({
-    sql: `SELECT id, briefing_json FROM ea_briefings
-          WHERE user_id = ? AND status = 'ready'
-          ORDER BY generated_at DESC LIMIT 1`,
-    args: [userId],
-  });
-  if (!latest.rows.length) return;
-
-  const briefing = JSON.parse(latest.rows[0].briefing_json);
-  if (!briefing?.todoist?.upcoming?.length) return;
-
-  const before = briefing.todoist.upcoming.length;
-  briefing.todoist.upcoming = briefing.todoist.upcoming.filter(
-    (t) => t._tombstone || String(t.id) !== String(taskId),
-  );
-  if (briefing.todoist.upcoming.length === before) return;
-
-  await db.execute({
-    sql: "UPDATE ea_briefings SET briefing_json = ? WHERE id = ?",
-    args: [JSON.stringify(briefing), latest.rows[0].id],
-  });
-}
 
 export default router;
