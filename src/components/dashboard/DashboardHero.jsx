@@ -115,15 +115,26 @@ export default function DashboardHero({
       style={{
         padding: compact ? "24px 28px 20px" : "40px 36px 32px",
         borderBottom: "1px solid rgba(255,255,255,0.05)",
-        position: "relative", overflow: "hidden",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
       {/* Ambient accent glow */}
       <div
         aria-hidden
         style={{
-          position: "absolute", top: -120, right: -80, width: 420, height: 420,
-          background: `radial-gradient(circle, ${accent}18, transparent 65%)`,
+          position: "absolute",
+          top: -152,
+          right: 0,
+          width: 250,
+          height: 250,
+          background: `radial-gradient(circle, ${accent}16 0%, ${accent}10 32%, transparent 74%)`,
+          filter: "blur(10px)",
+          opacity: 0.95,
+          WebkitMaskImage:
+            "linear-gradient(90deg, transparent 0%, black 20%, black 72%, transparent 100%)",
+          maskImage:
+            "linear-gradient(90deg, transparent 0%, black 20%, black 72%, transparent 100%)",
           pointerEvents: "none",
         }}
       />
@@ -133,22 +144,32 @@ export default function DashboardHero({
           display: "grid",
           gridTemplateColumns: stack ? "1fr" : "minmax(0, 1fr) 240px",
           gap: stack ? 18 : 40,
-          alignItems: "start", position: "relative",
+          alignItems: "start",
+          position: "relative",
         }}
       >
         {/* Greeting + state-of-day */}
         <div>
           <div
             style={{
-              fontSize: 10, fontWeight: 600, letterSpacing: 2.6, textTransform: "uppercase",
-              color: "rgba(205,214,244,0.55)", marginBottom: 10,
-              display: "inline-flex", alignItems: "center", gap: 6,
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: 2.6,
+              textTransform: "uppercase",
+              color: "rgba(205,214,244,0.55)",
+              marginBottom: 10,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
             <span
               style={{
-                width: 5, height: 5, borderRadius: 99,
-                background: accent, boxShadow: `0 0 6px ${accent}`,
+                width: 5,
+                height: 5,
+                borderRadius: 99,
+                background: accent,
+                boxShadow: `0 0 6px ${accent}`,
                 display: "inline-block",
               }}
             />
@@ -171,8 +192,11 @@ export default function DashboardHero({
             {stateOfDay.headline && (
               <span
                 style={{
-                  color: "rgba(205,214,244,0.5)", fontStyle: "italic",
-                  fontWeight: 300, display: "block", marginTop: 2,
+                  color: "rgba(205,214,244,0.5)",
+                  fontStyle: "italic",
+                  fontWeight: 300,
+                  display: "block",
+                  marginTop: 2,
                 }}
               >
                 {stateOfDay.headline}
@@ -183,8 +207,10 @@ export default function DashboardHero({
           {stateOfDay.summary && (
             <p
               style={{
-                margin: "0 0 8px", maxWidth: 680,
-                fontSize: compact ? 14 : 15, lineHeight: 1.65,
+                margin: "0 0 8px",
+                maxWidth: 680,
+                fontSize: compact ? 14 : 15,
+                lineHeight: 1.65,
                 color: "rgba(205,214,244,0.72)",
                 textWrap: "pretty",
               }}
@@ -196,16 +222,22 @@ export default function DashboardHero({
           {/* AI signature chip */}
           <div
             style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              marginTop: 6, padding: "3px 9px", borderRadius: 99,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 6,
+              padding: "3px 9px",
+              borderRadius: 99,
               background: "rgba(255,255,255,0.025)",
               border: "1px solid rgba(255,255,255,0.05)",
-              fontSize: 10, letterSpacing: 0.3,
+              fontSize: 10,
+              letterSpacing: 0.3,
               color: "rgba(205,214,244,0.4)",
             }}
           >
             <Sparkles size={9} color={accent} />
-            {briefing?.model || "Claude"} · {(briefing?.aiInsights || []).length} insights
+            {briefing?.model || "Claude"} ·{" "}
+            {(briefing?.aiInsights || []).length} insights
           </div>
         </div>
 
@@ -221,28 +253,45 @@ export default function DashboardHero({
           <div
             style={{
               flex: stack ? 1 : "unset",
-              padding: "14px 16px", borderRadius: 12,
-              background: "linear-gradient(155deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
+              padding: "14px 16px",
+              borderRadius: 12,
+              background:
+                "linear-gradient(155deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
               border: "1px solid rgba(255,255,255,0.06)",
-              display: "grid", gridTemplateColumns: "auto 1fr", gap: 12, alignItems: "center",
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: 12,
+              alignItems: "center",
             }}
           >
             <div
               style={{
-                width: 42, height: 42, borderRadius: 10,
+                width: 42,
+                height: 42,
+                borderRadius: 10,
                 background: "rgba(255,255,255,0.03)",
-                display: "grid", placeItems: "center",
+                display: "grid",
+                placeItems: "center",
               }}
             >
               <WeatherIcon size={20} color="#cdd6f4" />
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 500, color: "#cdd6f4", lineHeight: 1 }}>
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 500,
+                  color: "#cdd6f4",
+                  lineHeight: 1,
+                }}
+              >
                 {weather?.temp != null ? `${Math.round(weather.temp)}°` : "—"}
               </div>
               <div
                 style={{
-                  fontSize: 10.5, color: "rgba(205,214,244,0.5)", marginTop: 3,
+                  fontSize: 10.5,
+                  color: "rgba(205,214,244,0.5)",
+                  marginTop: 3,
                   letterSpacing: 0.2,
                 }}
               >
@@ -255,21 +304,26 @@ export default function DashboardHero({
           <div
             style={{
               flex: stack ? 1 : "unset",
-              padding: "10px 14px", borderRadius: 12,
+              padding: "10px 14px",
+              borderRadius: 12,
               background: "rgba(255,255,255,0.025)",
               border: "1px solid rgba(255,255,255,0.05)",
             }}
           >
             <div
               style={{
-                fontSize: 9.5, letterSpacing: 0.8, textTransform: "uppercase",
-                color: "rgba(205,214,244,0.4)", marginBottom: 6,
+                fontSize: 9.5,
+                letterSpacing: 0.8,
+                textTransform: "uppercase",
+                color: "rgba(205,214,244,0.4)",
+                marginBottom: 6,
               }}
             >
               Focus window
             </div>
             <div style={{ fontSize: 12, color: "#cdd6f4", lineHeight: 1.4 }}>
-              {nextFocusWindow(events, now) || "Calendar looks open — pick your block."}
+              {nextFocusWindow(events, now) ||
+                "Calendar looks open — pick your block."}
             </div>
           </div>
         </div>
@@ -286,7 +340,12 @@ export default function DashboardHero({
           }}
         >
           {theCallouts.map((c, i) => (
-            <Callout key={i} {...c} accent={accent} onJump={(anchor) => onJump?.(c, anchor)} />
+            <Callout
+              key={i}
+              {...c}
+              accent={accent}
+              onJump={(anchor) => onJump?.(c, anchor)}
+            />
           ))}
         </div>
       )}
