@@ -84,15 +84,26 @@ function NowMarker({ accent, now, top, spineLeft, pillGap }) {
       >
         Now · {pacificClock(new Date(now))}
       </div>
+      {/* Split: outer owns positioning + translateY centering; inner owns the
+         pulse animation. Combining both on one element breaks — dashPulse sets
+         `transform: scale(...)`, which replaces (not composes with) inline
+         `translateY(-50%)` and drops the dot ~6.5px below the marker line. */}
       <div
         style={{
-          position: "absolute", left: spineLeft - 6, top: 0, transform: "translateY(-50%)",
-          width: 13, height: 13, borderRadius: 99,
-          background: accent,
-          boxShadow: `0 0 12px ${accent}, 0 0 0 3px ${accent}25`,
-          animation: "dashPulse 2s ease-in-out infinite",
+          position: "absolute", left: spineLeft - 6, top: 0,
+          transform: "translateY(-50%)",
+          width: 13, height: 13,
         }}
-      />
+      >
+        <div
+          style={{
+            width: "100%", height: "100%", borderRadius: 99,
+            background: accent,
+            boxShadow: `0 0 12px ${accent}, 0 0 0 3px ${accent}25`,
+            animation: "dashPulse 2s ease-in-out infinite",
+          }}
+        />
+      </div>
       <div
         style={{
           position: "absolute", left: spineLeft + 8, right: 0, top: 0, height: 1,
