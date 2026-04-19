@@ -3,8 +3,8 @@ import ApiTokensCard from "@/components/settings/cards/ApiTokensCard";
 import {
   SettingsCard,
   StatusPill,
-  SURFACE_ROW_CLASS,
 } from "@/components/settings/settings-ui";
+import { SURFACE_ROW_CLASS } from "@/components/settings/settings-core";
 import { cn } from "@/lib/utils";
 
 export default function SystemSettingsSection({ settings }) {
