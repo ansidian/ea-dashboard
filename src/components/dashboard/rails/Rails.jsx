@@ -31,7 +31,18 @@ function SectionHeader({ title, subtitle, right }) {
   );
 }
 
-function UrgencyPill({ days, accent, compact }) {
+function verboseDaysLabel(days) {
+  if (days == null || Number.isNaN(days)) return "No due date";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days < 0) {
+    const count = Math.abs(days);
+    return `${count} ${count === 1 ? "day" : "days"} overdue`;
+  }
+  return `In ${days} days`;
+}
+
+function UrgencyPill({ days, accent, compact, verbose = false }) {
   const u = urgencyForDays(days, accent).key;
   const color = u === "high" ? "#f38ba8" : u === "medium" ? "#f9e2af" : accent;
   return (
@@ -43,7 +54,7 @@ function UrgencyPill({ days, accent, compact }) {
         fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
       }}
     >
-      {daysLabel(days)}
+      {verbose ? verboseDaysLabel(days) : daysLabel(days)}
     </div>
   );
 }
@@ -117,6 +128,42 @@ function CountBadge({ n }) {
       }}
     >
       {n}
+    </div>
+  );
+}
+
+function RailGroupLabel({ label, count, tone = "default" }) {
+  const color = tone === "success" ? "#a6e3a1" : "rgba(205,214,244,0.58)";
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+        marginBottom: 6,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: 1.4,
+          textTransform: "uppercase",
+          color,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 10,
+          color: "rgba(205,214,244,0.38)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {count}
+      </div>
     </div>
   );
 }
@@ -260,10 +307,9 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
   // Keep completed deadlines visible (strikethrough) only while the day isn't
   // past — once today has rolled past their due date they belong on the
   // calendar (which has its own visibility window), not on the dashboard.
-  // Incomplete/in-progress sort first by days-until; completed fall to the end.
-  const sorted = useMemo(() => {
+  const grouped = useMemo(() => {
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
-    return [...deadlines]
+    const visible = [...deadlines]
       .filter((d) => !(d.status === "complete" && d.due_date && d.due_date < today))
       .map((d) => ({ d, days: daysUntil(d.due_date) }))
       .sort((a, b) => {
@@ -273,8 +319,11 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
         if (a.days == null) return 1;
         if (b.days == null) return -1;
         return a.days - b.days;
-      })
-      .slice(0, 6);
+      });
+
+    const open = visible.filter(({ d }) => d.status !== "complete").slice(0, 4);
+    const completed = visible.filter(({ d }) => d.status === "complete").slice(0, 2);
+    return { open, completed };
   }, [deadlines]);
 
   const openCount = deadlines.filter((d) => d.status !== "complete").length;
@@ -307,56 +356,112 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
         />
       )}
       <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
-        {sorted.map(({ d, days }) => {
-          const isComplete = d.status === "complete";
-          const isTodoist = d.source === "todoist";
-          const showPriority = isTodoist && PRIORITY_COLOR[d.priority];
-          return (
-            <div
-              key={d.id}
-              role="button"
-              tabIndex={0}
-              onClick={(e) => onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget); }}
-              style={{
-                display: "grid",
-                gridTemplateColumns: showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
-                gap: 10, alignItems: "center",
-                padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
-                cursor: "pointer", transition: "background 150ms",
-                opacity: isComplete ? 0.55 : 1,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            >
-              <DeadlineStatusIcon status={d.status} />
-              <div style={{ minWidth: 0 }}>
+        {grouped.open.length > 0 && (
+          <div>
+            <RailGroupLabel label="Open" count={grouped.open.length} />
+            {grouped.open.map(({ d, days }) => {
+              const isTodoist = d.source === "todoist";
+              const showPriority = isTodoist && PRIORITY_COLOR[d.priority];
+              return (
                 <div
+                  key={d.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget); }}
                   style={{
-                    fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    marginBottom: 2,
-                    textDecoration: isComplete ? "line-through" : "none",
-                    textDecorationColor: "rgba(205,214,244,0.35)",
+                    display: "grid",
+                    gridTemplateColumns: showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
+                    gap: 10, alignItems: "center",
+                    padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    cursor: "pointer", transition: "background 150ms",
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                 >
-                  {d.title}
+                  <DeadlineStatusIcon status={d.status} />
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 12, color: "#cdd6f4", fontWeight: 500,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        marginBottom: 2,
+                      }}
+                    >
+                      {d.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10.5, color: "rgba(205,214,244,0.45)",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}
+                    >
+                      {d.class_name || d.source}
+                    </div>
+                  </div>
+                  {showPriority && <PriorityFlag level={d.priority} />}
+                  <UrgencyPill days={days} accent={accent} verbose />
                 </div>
+              );
+            })}
+          </div>
+        )}
+        {grouped.completed.length > 0 && (
+          <div style={{ marginTop: grouped.open.length > 0 ? 12 : 0 }}>
+            <RailGroupLabel label="Completed" count={grouped.completed.length} tone="success" />
+            {grouped.completed.map(({ d, days }) => {
+              const isTodoist = d.source === "todoist";
+              const showPriority = isTodoist && PRIORITY_COLOR[d.priority];
+              return (
                 <div
+                  key={d.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget); }}
                   style={{
-                    fontSize: 10.5, color: "rgba(205,214,244,0.45)",
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    display: "grid",
+                    gridTemplateColumns: showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
+                    gap: 10, alignItems: "center",
+                    padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    cursor: "pointer", transition: "background 150ms",
+                    opacity: 0.55,
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                 >
-                  {d.class_name || d.source}
+                  <DeadlineStatusIcon status={d.status} />
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 12, color: "#cdd6f4", fontWeight: 500,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        marginBottom: 2,
+                        textDecoration: "line-through",
+                        textDecorationColor: "rgba(205,214,244,0.35)",
+                      }}
+                    >
+                      {d.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10.5, color: "rgba(205,214,244,0.45)",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}
+                    >
+                      {d.class_name || d.source}
+                    </div>
+                  </div>
+                  {showPriority && <PriorityFlag level={d.priority} />}
+                  <UrgencyPill days={days} accent={accent} verbose />
                 </div>
-              </div>
-              {showPriority && <PriorityFlag level={d.priority} />}
-              <UrgencyPill days={days} accent={accent} />
-            </div>
-          );
-        })}
-        {sorted.length === 0 && <EmptyRow icon={AlertCircle} label="No deadlines" />}
+              );
+            })}
+          </div>
+        )}
+        {grouped.open.length === 0 && grouped.completed.length === 0 && (
+          <EmptyRow icon={AlertCircle} label="No deadlines" />
+        )}
       </div>
     </div>
   );
@@ -459,7 +564,7 @@ export function BillsRail({ accent, bills = [], onJump }) {
               >
                 {formatAmount(b.amount)}
               </div>
-              {paid ? <PaidChip /> : <UrgencyPill days={days} accent={accent} compact />}
+              {paid ? <PaidChip /> : <UrgencyPill days={days} accent={accent} compact verbose />}
             </div>
           );
         })}
