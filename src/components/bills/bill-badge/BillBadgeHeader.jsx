@@ -1,0 +1,147 @@
+import { Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { typeHints, typeLabels } from "./helpers";
+
+function ExtractButton({ extractState, onClick, className, variant = "pill" }) {
+  const isBlock = variant === "block";
+  const label = extractState === "extracting"
+    ? "Extracting…"
+    : extractState === "error"
+      ? "Retry extract"
+      : "Extract with Haiku";
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={extractState === "extracting"}
+      className={cn(
+        "group cursor-pointer inline-flex items-center justify-center gap-1.5",
+        "font-bold tracking-wider uppercase rounded-md",
+        "transition-all duration-200 ease-out",
+        "hover:-translate-y-px active:translate-y-0 active:scale-[0.98]",
+        "disabled:cursor-wait disabled:hover:translate-y-0",
+        isBlock ? "text-[11px] px-4 py-2 w-full" : "text-[10px] px-2.5 py-1 shrink-0",
+        className,
+      )}
+      style={
+        extractState === "error"
+          ? {
+            color: "#f38ba8",
+            background: "rgba(243,139,168,0.1)",
+            border: "1px solid rgba(243,139,168,0.3)",
+          }
+          : {
+            color: "#ffffff",
+            background:
+                "linear-gradient(120deg, #c88fa0 0%, #c89b85 25%, #8fb8c8 55%, #a89bc4 80%, #c88fa0 100%)",
+            backgroundSize: "240% 100%",
+            animation: `aiGradientShift ${extractState === "extracting" ? "2.5s" : "7s"} ease-in-out infinite`,
+            border: "1px solid rgba(255,255,255,0.1)",
+            boxShadow:
+                  extractState === "extracting"
+                    ? "0 0 10px rgba(168,155,196,0.35), 0 0 18px rgba(143,184,200,0.15)"
+                    : "0 1px 6px rgba(168,155,196,0.2)",
+            textShadow: "0 1px 1px rgba(0,0,0,0.2)",
+          }
+      }
+      onMouseEnter={(event) => {
+        if (extractState === "extracting" || extractState === "error") return;
+        event.currentTarget.style.boxShadow =
+          "0 2px 12px rgba(168,155,196,0.4), 0 0 20px rgba(143,184,200,0.2)";
+        event.currentTarget.style.animationDuration = "4s";
+      }}
+      onMouseLeave={(event) => {
+        if (extractState === "extracting" || extractState === "error") return;
+        event.currentTarget.style.boxShadow = "0 1px 6px rgba(168,155,196,0.2)";
+        event.currentTarget.style.animationDuration = "7s";
+      }}
+    >
+      <span
+        className={cn(
+          "inline-flex transition-transform duration-300",
+          extractState !== "extracting" && "group-hover:rotate-12 group-hover:scale-110",
+        )}
+      >
+        <Sparkles size={isBlock ? 13 : 11} strokeWidth={2} />
+      </span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+export default function BillBadgeHeader({
+  isMobile,
+  usesStackedLayout,
+  editType,
+  effectiveModel,
+  modelDisplayName,
+  canExtract,
+  extractState,
+  onExtract,
+  onTypeChange,
+}) {
+  return (
+    <>
+      <div className={cn("flex items-center gap-1.5 flex-wrap", isMobile && "grid grid-cols-2 gap-2")}>
+        {Object.entries(typeLabels).map(([key, info]) => {
+          const Icon = info.Icon;
+          const selected = editType === key;
+          return (
+            <button
+              key={key}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTypeChange(key);
+              }}
+              className={cn(
+                "inline-flex items-center gap-1 font-semibold tracking-wide rounded-md cursor-pointer transition-all duration-200",
+                isMobile ? "w-full justify-center text-[10.5px] px-3 py-2" : "text-[10px] px-2 py-1",
+              )}
+              style={{
+                color: selected ? info.color : "rgba(205,214,244,0.45)",
+                background: selected ? `${info.color}14` : "rgba(255,255,255,0.02)",
+                border: `1px solid ${selected ? `${info.color}38` : "rgba(255,255,255,0.04)"}`,
+              }}
+            >
+              <Icon size={11} strokeWidth={2} />
+              <span>{info.label}</span>
+            </button>
+          );
+        })}
+        {!usesStackedLayout && (
+          <span className="text-[10px] text-muted-foreground/40 italic ml-1 truncate">
+            {typeHints[editType]}
+          </span>
+        )}
+        {!usesStackedLayout && effectiveModel ? (
+          <span className="text-[10px] text-muted-foreground/40 ml-auto shrink-0">
+            detected by {modelDisplayName}
+          </span>
+        ) : !usesStackedLayout && canExtract ? (
+          <ExtractButton extractState={extractState} onClick={onExtract} className="ml-auto" />
+        ) : null}
+      </div>
+      {usesStackedLayout && (
+        <div className={cn("text-muted-foreground/45 italic", isMobile ? "text-[11px] mt-3" : "text-[10px] mt-1.5")}>
+          {typeHints[editType]}
+        </div>
+      )}
+      {usesStackedLayout && (
+        effectiveModel ? (
+          <div className={cn("text-muted-foreground/40 text-right", isMobile ? "text-[11px] mt-2.5" : "text-[10px] mt-2")}>
+            detected by {modelDisplayName}
+          </div>
+        ) : canExtract ? (
+          <div className={cn(isMobile ? "mt-3.5" : "mt-3")}>
+            <ExtractButton
+              extractState={extractState}
+              onClick={onExtract}
+              className="w-full justify-center"
+              variant="block"
+            />
+          </div>
+        ) : null
+      )}
+    </>
+  );
+}
