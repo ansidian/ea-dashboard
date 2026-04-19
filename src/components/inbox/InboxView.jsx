@@ -9,6 +9,8 @@ export default function InboxView({
   briefingSummary,
   briefingGeneratedAt,
   liveEmails = [],
+  liveReadOverrides = {},
+  onLiveReadOverrideChange,
   pinnedIds,
   pinnedSnapshots = [],
   snoozedEntries = [],
@@ -21,6 +23,8 @@ export default function InboxView({
   const controller = useInboxController({
     emailAccounts,
     liveEmails,
+    liveReadOverrides,
+    onLiveReadOverrideChange,
     pinnedIds,
     pinnedSnapshots,
     snoozedEntries,

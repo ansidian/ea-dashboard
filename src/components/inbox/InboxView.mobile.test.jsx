@@ -108,7 +108,26 @@ function makeAccounts() {
   ];
 }
 
-function renderInbox({ isMobile = true, seedSelectedId = null, customize = {} } = {}) {
+function renderInbox({
+  isMobile = true,
+  seedSelectedId = null,
+  customize = {},
+  liveEmails = [
+    {
+      uid: "live-1",
+      subject: "Fresh live ping",
+      from: "Morgan",
+      from_email: "morgan@example.com",
+      account_label: "Work",
+      account_email: "work@example.com",
+      account_color: "#89dceb",
+      date: "2026-04-19T16:15:00.000Z",
+      preview: "Just arrived after the briefing.",
+      body_preview: "Just arrived after the briefing.",
+      read: false,
+    },
+  ],
+} = {}) {
   const briefing = {
     emails: {
       summary: "Handle the approval first, then everything else can wait.",
@@ -132,21 +151,7 @@ function renderInbox({ isMobile = true, seedSelectedId = null, customize = {} } 
         emailAccounts={briefing.emails.accounts}
         briefingSummary={briefing.emails.summary}
         briefingGeneratedAt="2026-04-19 15:00:00"
-        liveEmails={[
-          {
-            uid: "live-1",
-            subject: "Fresh live ping",
-            from: "Morgan",
-            from_email: "morgan@example.com",
-            account_label: "Work",
-            account_email: "work@example.com",
-            account_color: "#89dceb",
-            date: "2026-04-19T16:15:00.000Z",
-            preview: "Just arrived after the briefing.",
-            body_preview: "Just arrived after the briefing.",
-            read: false,
-          },
-        ]}
+        liveEmails={liveEmails}
         pinnedIds={[]}
         pinnedSnapshots={[]}
         snoozedEntries={[]}
@@ -244,6 +249,34 @@ describe("InboxView mobile", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Claude draft reply/i }));
     expect(screen.getByTestId("draft-reply")).toBeTruthy();
+  });
+
+  it("closes the reader when marking a selected live email unread", () => {
+    renderInbox({
+      isMobile: true,
+      seedSelectedId: "live-1",
+      liveEmails: [
+        {
+          uid: "live-1",
+          subject: "Fresh live ping",
+          from: "Morgan",
+          from_email: "morgan@example.com",
+          account_label: "Work",
+          account_email: "work@example.com",
+          account_color: "#89dceb",
+          date: "2026-04-19T16:15:00.000Z",
+          preview: "Just arrived after the briefing.",
+          body_preview: "Just arrived after the briefing.",
+          read: true,
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("inbox-mobile-reader")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Unread$/i }));
+    expect(screen.queryByTestId("inbox-mobile-reader")).toBeNull();
+    expect(screen.getByTestId("inbox-mobile-list")).toBeTruthy();
+    expect(screen.getByText("Fresh live ping")).toBeTruthy();
   });
 
   it("keeps the desktop inbox path intact", () => {

@@ -24,6 +24,8 @@ import {
 export default function useInboxController({
   emailAccounts = [],
   liveEmails = [],
+  liveReadOverrides = {},
+  onLiveReadOverrideChange = () => {},
   pinnedIds,
   pinnedSnapshots = [],
   snoozedEntries = [],
@@ -52,7 +54,6 @@ export default function useInboxController({
     () => new Map((resurfacedEntries || []).map((entry) => [entry.uid, entry])),
   );
   const [nowTick, setNowTick] = useState(() => Date.now());
-  const [liveReadUids, setLiveReadUids] = useState(() => new Set());
   const [liveTrashedUids, setLiveTrashedUids] = useState(() => new Set());
   const [billOpen, setBillOpen] = useState(false);
   const { markEmailRead, markEmailUnread, handleDismiss } = useDashboard();
@@ -110,7 +111,7 @@ export default function useInboxController({
       liveEmails,
       synthAccount,
       liveTrashedUids,
-      liveReadUids,
+      liveReadOverrides,
       resurfacedMap,
     )) {
       pushEmail(entry);
@@ -118,7 +119,7 @@ export default function useInboxController({
     for (const entry of collectResurfaced(
       resurfacedMap,
       synthAccount,
-      liveReadUids,
+      liveReadOverrides,
       liveTrashedUids,
     )) {
       pushEmail(entry);
@@ -128,7 +129,7 @@ export default function useInboxController({
   }, [
     emailAccounts,
     liveEmails,
-    liveReadUids,
+    liveReadOverrides,
     liveTrashedUids,
     pinnedSnapshotMap,
     resurfacedMap,
@@ -236,16 +237,12 @@ export default function useInboxController({
     }
 
     if (liveUids.length) {
-      setLiveReadUids((prev) => {
-        const next = new Set(prev);
-        for (const uid of liveUids) next.add(uid);
-        return next;
-      });
+      for (const uid of liveUids) onLiveReadOverrideChange(uid, true);
     }
 
     const allUids = unread.map((email) => email.uid).filter(Boolean);
     if (allUids.length) markAllEmailsAsRead(allUids).catch(() => {});
-  }, [visibleEmails, markEmailRead]);
+  }, [visibleEmails, markEmailRead, onLiveReadOverrideChange]);
 
   const moveBy = useCallback((direction) => {
     const index = visibleEmails.findIndex((email) => email.id === selectedId || email.uid === selectedId);
@@ -352,12 +349,7 @@ export default function useInboxController({
     if (kind === "toggle-read") {
       const markingUnread = !!selectedEmail.read;
       if (selectedEmail._live) {
-        setLiveReadUids((prev) => {
-          const next = new Set(prev);
-          if (markingUnread) next.delete(uid);
-          else next.add(uid);
-          return next;
-        });
+        onLiveReadOverrideChange(uid, !markingUnread);
         const call = markingUnread ? markEmailAsUnread : markEmailAsRead;
         call(uid).catch(() => {});
       } else if (markingUnread) {
@@ -367,6 +359,7 @@ export default function useInboxController({
         markEmailRead(id);
         markEmailAsRead(uid).catch(() => {});
       }
+      if (markingUnread) setSelectedId(null);
       return;
     }
 
@@ -452,12 +445,7 @@ export default function useInboxController({
       if (!email || email.read) return;
 
       if (email._live) {
-        setLiveReadUids((prev) => {
-          if (prev.has(email.uid)) return prev;
-          const next = new Set(prev);
-          next.add(email.uid);
-          return next;
-        });
+        onLiveReadOverrideChange(email.uid, true);
         markEmailAsRead(email.uid).catch(() => {});
         return;
       }
@@ -467,7 +455,7 @@ export default function useInboxController({
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [selectedId]);
+  }, [selectedId, selectedEmail?.read, onLiveReadOverrideChange]);
 
   useEffect(() => {
     function onKey(event) {

@@ -16,6 +16,21 @@ export function makeSynthAccount(emailAccounts) {
   };
 }
 
+export function readOverrideForUid(readOverrides, uid) {
+  if (!uid || !readOverrides) return null;
+  if (readOverrides instanceof Map) {
+    return readOverrides.has(uid) ? readOverrides.get(uid) : null;
+  }
+  return Object.prototype.hasOwnProperty.call(readOverrides, uid)
+    ? readOverrides[uid]
+    : null;
+}
+
+export function mergeReadState(read, uid, readOverrides) {
+  const override = readOverrideForUid(readOverrides, uid);
+  return override == null ? !!read : !!override;
+}
+
 // Flatten briefing emailAccounts into email entries tagged with account
 // reference and lane. Important is iterated before noise so a uid appearing
 // in both wins the important lane (dedup is handled by the caller).
@@ -50,7 +65,7 @@ export function collectBriefingEmails(emailAccounts) {
 // present in resurfacedMap — Gmail's `newer_than:Nh` poll re-fetches
 // recently-woken snoozes on its own; without this merge the live entry wins
 // dedup and the Snoozed badge / wake-time sort would be lost.
-export function collectLiveEmails(liveEmails, synthAccount, liveTrashedUids, liveReadUids, resurfacedMap) {
+export function collectLiveEmails(liveEmails, synthAccount, liveTrashedUids, liveReadOverrides, resurfacedMap) {
   const out = [];
   for (const e of liveEmails) {
     if (liveTrashedUids.has(e.uid)) continue;
@@ -61,7 +76,7 @@ export function collectLiveEmails(liveEmails, synthAccount, liveTrashedUids, liv
       id: e.id || e.uid,
       preview: e.preview || e.body_preview || "",
       fromEmail: e.fromEmail || e.from_email,
-      read: e.read || liveReadUids.has(e.uid),
+      read: mergeReadState(e.read, e.uid, liveReadOverrides),
       _accountKey: acc.id || acc.name,
       _account: acc,
       _lane: null,
@@ -77,7 +92,7 @@ export function collectLiveEmails(liveEmails, synthAccount, liveTrashedUids, liv
 // uses original internalDate so these wouldn't reach the inbox on their own.
 // Caller dedups against previously-collected sources; this drops entries with
 // no key or that the user has locally trashed.
-export function collectResurfaced(resurfacedMap, synthAccount, liveReadUids, liveTrashedUids) {
+export function collectResurfaced(resurfacedMap, synthAccount, liveReadOverrides, liveTrashedUids) {
   const out = [];
   for (const entry of resurfacedMap.values()) {
     const snap = entry.snapshot;
@@ -91,9 +106,9 @@ export function collectResurfaced(resurfacedMap, synthAccount, liveReadUids, liv
       preview: snap.preview || snap.body_preview || "",
       fromEmail: snap.fromEmail || snap.from_email,
       // entry.read is Gmail's current UNREAD state as of this poll (server-side
-      // probe). Union with liveReadUids so a read triggered within the session
-      // wins immediately without waiting for the next poll.
-      read: liveReadUids.has(key) || entry.read === true,
+      // probe). A session override wins in both directions so mark-unread and
+      // re-read actions stay visible before the next live poll lands.
+      read: mergeReadState(entry.read, key, liveReadOverrides),
       _accountKey: acc.id || acc.name,
       _account: acc,
       _lane: null,

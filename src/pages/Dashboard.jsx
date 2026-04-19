@@ -26,6 +26,7 @@ import useCustomize from "../hooks/useCustomize";
 import useCalendarRange from "../hooks/useCalendarRange";
 import useIsMobile from "../hooks/useIsMobile";
 import { focusPressureDate } from "../lib/focus-windows";
+import { mergeReadState } from "../components/inbox/helpers";
 
 const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevPanel.jsx")) : null;
 
@@ -201,6 +202,7 @@ export function RedesignShell({
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [liveReadOverrides, setLiveReadOverrides] = useState({});
 
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarView, setCalendarView] = useState(() => {
@@ -301,10 +303,55 @@ export function RedesignShell({
 
   const nextBriefingLabel = formatNextBriefingLabel(bd.schedules);
 
+  useEffect(() => {
+    const activeUids = new Set();
+    for (const email of liveData.liveEmails || []) {
+      if (email?.uid) activeUids.add(email.uid);
+    }
+    for (const entry of liveData.resurfacedEntries || []) {
+      if (entry?.uid) activeUids.add(entry.uid);
+    }
+    setLiveReadOverrides((prev) => {
+      const next = {};
+      let changed = false;
+      for (const [uid, read] of Object.entries(prev)) {
+        if (activeUids.has(uid)) next[uid] = read;
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [liveData.liveEmails, liveData.resurfacedEntries]);
+
+  const handleLiveReadOverrideChange = useCallback((uid, read) => {
+    if (!uid) return;
+    setLiveReadOverrides((prev) => {
+      if (prev[uid] === read) return prev;
+      return { ...prev, [uid]: !!read };
+    });
+  }, []);
+
   // Unread-live count surfaced on the Inbox tab. Drives the little blue pill
   // next to the tab label so the user notices new untriaged email without
   // first switching away from the dashboard.
-  const liveUnreadCount = (liveData.liveEmails || []).filter((e) => !e.read).length;
+  const liveUnreadCount = useMemo(() => {
+    const seen = new Set();
+    let unread = 0;
+
+    for (const email of liveData.liveEmails || []) {
+      if (!email?.uid || seen.has(email.uid)) continue;
+      seen.add(email.uid);
+      if (!mergeReadState(email.read, email.uid, liveReadOverrides)) unread += 1;
+    }
+
+    for (const entry of liveData.resurfacedEntries || []) {
+      const uid = entry?.uid;
+      if (!uid || seen.has(uid)) continue;
+      seen.add(uid);
+      if (!mergeReadState(entry.read, uid, liveReadOverrides)) unread += 1;
+    }
+
+    return unread;
+  }, [liveData.liveEmails, liveData.resurfacedEntries, liveReadOverrides]);
 
   return (
     <div
@@ -371,6 +418,8 @@ export function RedesignShell({
             briefingSummary={briefing?.emails?.summary}
             briefingGeneratedAt={liveData.briefingGeneratedAt}
             liveEmails={liveData.liveEmails}
+            liveReadOverrides={liveReadOverrides}
+            onLiveReadOverrideChange={handleLiveReadOverrideChange}
             pinnedIds={liveData.pinnedIds}
             pinnedSnapshots={liveData.pinnedSnapshots}
             snoozedEntries={liveData.snoozedEntries}
