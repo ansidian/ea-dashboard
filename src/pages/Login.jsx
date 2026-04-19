@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
+import { KeyRound, Lock } from "lucide-react";
 import { login } from "../api";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Sun, Lock } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 
 export default function Login({ onLogin }) {
   const [password, setPassword] = useState("");
@@ -11,7 +12,6 @@ export default function Login({ onLogin }) {
   const [locked, setLocked] = useState(false);
   const inputRef = useRef(null);
 
-  // Auto-focus input on mount and after lockout clears
   useEffect(() => {
     if (!locked) inputRef.current?.focus();
   }, [locked]);
@@ -43,53 +43,80 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center text-foreground px-4">
-      <form
-        className="w-full max-w-[360px] rounded-xl border border-white/[0.04] bg-card p-8 text-center"
-        onSubmit={handleSubmit}
-      >
-        <div className="mb-6 flex justify-center text-[#f9e2af]"><Sun size={40} /></div>
-        <h1 className="font-serif text-[28px] font-normal text-white/95 mb-1">EA Dashboard</h1>
-        <p className="text-sm text-muted-foreground mb-8">Enter your password to continue</p>
+    <div className="relative isolate min-h-screen overflow-hidden px-4 py-8 text-foreground">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{ background: "radial-gradient(ellipse at top, #1a1a2a, #0b0b13 60%)" }}
+      />
 
-        <div className="mb-4">
-          <Input
-            ref={inputRef}
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              if (error && !locked) setError(null);
-            }}
-            disabled={locked}
-            autoFocus
-          />
-        </div>
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+        <form className="w-full max-w-[380px]" onSubmit={handleSubmit}>
+          <Card className="bg-card/85 backdrop-blur-[2px]">
+            <CardHeader className="items-center gap-2 border-b border-white/[0.04] pb-5 text-center">
+              <div className="flex size-10 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-primary shadow-[0_0_10px_rgba(203,166,218,0.2)]">
+                <KeyRound size={16} />
+              </div>
+              <div className="text-[11px] font-semibold tracking-[2.5px] uppercase text-muted-foreground">
+                Private Access
+              </div>
+              <h1 className="ea-display text-[32px] leading-none font-normal text-foreground">
+                EA Dashboard
+              </h1>
+              <CardDescription className="text-[13px] text-muted-foreground/70">
+                Enter your password to continue
+              </CardDescription>
+            </CardHeader>
 
-        {error && (
-          <div
-            className={`text-xs mb-4 rounded-lg px-3 py-2 ${
-              locked
-                ? "bg-[#f9e2af]/10 text-[#f9e2af] border border-[#f9e2af]/20"
-                : "bg-[#f38ba8]/10 text-[#f38ba8] border border-[#f38ba8]/20"
-            }`}
-          >
-            {locked && (
-              <Lock size={12} className="inline-block mr-1.5 -mt-0.5" />
-            )}
-            {error}
-          </div>
-        )}
+            <CardContent className="pt-5">
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-medium tracking-[1.5px] uppercase text-muted-foreground">
+                    Password
+                  </label>
+                  <Input
+                    ref={inputRef}
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (error && !locked) setError(null);
+                    }}
+                    disabled={locked}
+                    autoFocus
+                  />
+                </div>
 
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={loading || !password || locked}
-        >
-          {loading ? "Signing in..." : locked ? "Locked" : "Sign in"}
-        </Button>
-      </form>
+                {error ? (
+                  <div
+                    className={`rounded-lg border px-3 py-2 text-left text-[12px] leading-relaxed ${
+                      locked
+                        ? "border-[#f9e2af]/20 bg-[#f9e2af]/10 text-[#f9e2af]"
+                        : "border-[#f38ba8]/20 bg-[#f38ba8]/10 text-[#f38ba8]"
+                    }`}
+                    role="alert"
+                  >
+                    <span className="inline-flex items-center gap-1.5 font-medium">
+                      {locked ? <Lock size={12} /> : null}
+                      {error}
+                    </span>
+                  </div>
+                ) : null}
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={loading || !password || locked}
+                >
+                  {loading ? "Signing in..." : locked ? "Locked" : "Sign in"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </form>
+      </div>
     </div>
   );
 }
