@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
-import { CornerDownLeft, Trash2, X } from "lucide-react";
+import { CalendarClock, ChevronDown, CornerDownLeft, Trash2, X } from "lucide-react";
 import { Dropdown, LabelPicker, PriorityIndicator, RemoveLabelButton, TokenAutocomplete } from "./controls";
+import TodoistDuePicker from "./TodoistDuePicker";
 
 export default function AddTaskPanelView({
   controller,
@@ -16,7 +17,7 @@ export default function AddTaskPanelView({
     setManualPriority,
     setManualLabels,
     setOverrides,
-    seededDueDisplay,
+    pickerDueEpoch,
     submitting,
     error,
     deleteProgress,
@@ -30,10 +31,17 @@ export default function AddTaskPanelView({
     cursorPos,
     panelRef,
     inputRef,
-    parsed,
+    dueTriggerRef,
+    duePickerRef,
     resolvedProject,
     resolvedPriority,
     resolvedLabels,
+    dueDisplay,
+    duePickerOpen,
+    duePickerNow,
+    openDuePicker,
+    closeDuePicker,
+    handleDueSelect,
     handleInputChange,
     handleAutocompleteSelect,
     canSubmit,
@@ -289,68 +297,83 @@ export default function AddTaskPanelView({
             Due
           </div>
           <div style={{ position: "relative" }}>
-            <input
-              type="text"
-              value=""
-              readOnly
-              tabIndex={-1}
-              placeholder={parsed.dateFormatted || seededDueDisplay ? "" : "Set via task input — e.g. tomorrow, next monday at 8am"}
+            <button
+              ref={dueTriggerRef}
+              type="button"
+              onClick={openDuePicker}
+              aria-haspopup="dialog"
+              aria-expanded={duePickerOpen}
+              aria-label="Set due date"
               style={{
                 width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
                 background:
-                  parsed.dateFormatted || seededDueDisplay
-                    ? "rgba(249,226,175,0.06)"
+                  dueDisplay
+                    ? "color-mix(in srgb, var(--ea-accent) 8%, transparent)"
                     : "rgba(205,214,244,0.04)",
                 border:
-                  parsed.dateFormatted || seededDueDisplay
-                    ? "1px solid rgba(249,226,175,0.15)"
+                  dueDisplay
+                    ? "1px solid color-mix(in srgb, var(--ea-accent) 24%, transparent)"
                     : "1px solid rgba(205,214,244,0.08)",
                 borderRadius: 8,
-                padding: "8px 12px",
-                color: parsed.dateFormatted ? "#f9e2af" : "rgba(205,214,244,0.35)",
+                padding: "9px 12px",
+                color: dueDisplay ? "var(--ea-accent)" : "rgba(205,214,244,0.35)",
                 fontSize: 12,
                 outline: "none",
                 boxSizing: "border-box",
-                transition: "all 0.2s",
-                cursor: "default",
-                pointerEvents: "none",
+                transition: "border-color 0.2s, background 0.2s, color 0.2s",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                textAlign: "left",
               }}
-            />
-            {(parsed.dateFormatted || seededDueDisplay) && (
-              <div
+            >
+              <span
                 style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
                   display: "flex",
                   alignItems: "center",
-                  padding: "8px 12px",
-                  color: "#f9e2af",
+                  minWidth: 0,
+                  color: dueDisplay ? "var(--ea-accent)" : "rgba(205,214,244,0.35)",
                   fontSize: 12,
-                  pointerEvents: "none",
                   gap: 6,
                 }}
               >
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8" y1="2" x2="8" y2="6" />
-                  <line x1="3" y1="10" x2="21" y2="10" />
-                </svg>
-                {parsed.dateFormatted || seededDueDisplay}
-              </div>
-            )}
+                <CalendarClock size={13} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {dueDisplay || "Pick a due date and time"}
+                </span>
+              </span>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: dueDisplay ? "var(--ea-accent)" : "rgba(205,214,244,0.42)",
+                  flexShrink: 0,
+                }}
+              >
+                {!dueDisplay && (
+                  <span style={{ fontSize: 10.5, letterSpacing: 0.2 }}>
+                    Or type one
+                  </span>
+                )}
+                <ChevronDown size={13} />
+              </span>
+            </button>
+          </div>
+          <div
+            style={{
+              color: "rgba(205,214,244,0.35)",
+              fontSize: 10.5,
+              marginTop: 5,
+              lineHeight: 1.45,
+            }}
+          >
+            {dueDisplay
+              ? "Manual picker selection overrides any date parsed from the task text."
+              : "You can also type a natural-language date directly in the task text."}
           </div>
         </div>
 
@@ -553,6 +576,16 @@ export default function AddTaskPanelView({
           </div>
         </div>
       </div>
+      {duePickerOpen && (
+        <TodoistDuePicker
+          anchorRef={dueTriggerRef}
+          panelRef={duePickerRef}
+          nowTick={duePickerNow}
+          initialEpoch={pickerDueEpoch}
+          onSelect={handleDueSelect}
+          onClose={closeDuePicker}
+        />
+      )}
     </div>,
     document.body,
   );

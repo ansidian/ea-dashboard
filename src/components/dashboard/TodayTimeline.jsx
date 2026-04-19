@@ -10,6 +10,7 @@ import {
 } from "../../lib/redesign-helpers";
 import { daysUntil } from "../../lib/bill-utils";
 import Tooltip from "../shared/Tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Matches Rails.jsx. Todoist priority: 1=urgent, 2=high, 3=medium, 4=low; we
 // only surface 1–3 because "no flag" is the expected baseline.
@@ -410,6 +411,7 @@ export default function TodayTimeline({
   events = [],
   deadlines = [],
   onJump,
+  showEventSkeletons = false,
 }) {
   const [filters, setFilters] = useState({ events: true, deadlines: true });
   const [now, setNow] = useState(() => Date.now());
@@ -534,6 +536,67 @@ export default function TodayTimeline({
       />
 
       <div style={{ marginTop: 16 }}>
+        {showEventSkeletons && (
+          <div
+            data-testid="dashboard-event-skeletons"
+            style={{
+              marginBottom: 18,
+              paddingLeft: isMobile ? 30 : 130,
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  left: isMobile ? 6 : 114,
+                  top: 8,
+                  bottom: 8,
+                  width: 1,
+                  background: "rgba(255,255,255,0.06)",
+                }}
+              />
+              {[0, 1].map((index) => (
+                <div
+                  key={index}
+                  style={{
+                    position: "relative",
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "52px minmax(0, 1fr)" : "54px 1fr auto",
+                    gap: isMobile ? 10 : 14,
+                    alignItems: "center",
+                    padding: isMobile ? "10px 10px 10px 22px" : "9px 12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: isMobile ? -30 : -22,
+                      top: isMobile ? 13 : 14,
+                      width: 13,
+                      height: 13,
+                      borderRadius: 99,
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      background: "#0b0b13",
+                    }}
+                  />
+                  <Skeleton className="h-[12px] w-[42px] bg-white/8" />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                    <Skeleton className="h-[12px] w-[58%] bg-white/10" />
+                    <Skeleton className="h-[10px] w-[42%] bg-white/7" />
+                  </div>
+                  {!isMobile && <Skeleton className="h-[18px] w-[56px] bg-white/8" />}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {groups.map(([day, dayItems], gi) => (
           <DayGroup
             key={day}
@@ -546,7 +609,7 @@ export default function TodayTimeline({
             isMobile={isMobile}
           />
         ))}
-        {groups.length === 0 && (
+        {groups.length === 0 && !showEventSkeletons && (
           <div
             style={{
               padding: "40px 20px",

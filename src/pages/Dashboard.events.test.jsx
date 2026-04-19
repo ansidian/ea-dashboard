@@ -1,0 +1,114 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DashboardBody } from "./Dashboard.jsx";
+import { DashboardProvider } from "../context/DashboardContext.jsx";
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+function makeEvent(now, title) {
+  return {
+    id: title,
+    title,
+    startMs: now + 60 * 60000,
+    endMs: now + 120 * 60000,
+    allDay: false,
+    color: "#4285f4",
+    location: "Room 1",
+  };
+}
+
+function makeBriefing(events = []) {
+  return {
+    model: "Claude",
+    aiInsights: [],
+    weather: { temp: 71, condition: "Sunny", city: "Los Angeles" },
+    calendar: events,
+    ctm: { upcoming: [{ id: "ctm-1", title: "Essay", due_date: "2026-04-20", source: "canvas", status: "open" }] },
+    todoist: { upcoming: [] },
+    emails: { summary: "", accounts: [] },
+  };
+}
+
+function renderDashboardBody({ briefing, ensureRange, onOpenDeadlinesCalendar = () => {} }) {
+  return render(
+    <DashboardProvider briefing={briefing} setBriefing={() => {}} setCalendarDeadlines={() => {}}>
+      <DashboardBody
+        briefing={briefing}
+        liveData={{ liveBills: [], liveWeather: briefing.weather, liveEmails: [] }}
+        calendarRange={{
+          ensureRange,
+          getEvents: vi.fn(),
+          hasMonth: vi.fn(),
+          isMonthLoading: vi.fn(),
+          loading: false,
+          error: null,
+        }}
+        customize={{
+          dashboardLayout: "focus",
+          density: "comfortable",
+          showInsights: true,
+          showInboxPeek: false,
+        }}
+        accent="#cba6da"
+        isMobile={false}
+        onOpenEmail={() => {}}
+        onOpenDeadline={() => {}}
+        onOpenBillsCalendar={() => {}}
+        onOpenEventsCalendar={() => {}}
+        onOpenDeadlinesCalendar={onOpenDeadlinesCalendar}
+        onJumpSection={() => {}}
+      />
+    </DashboardProvider>,
+  );
+}
+
+describe("Dashboard event loading", () => {
+  it("renders seeded briefing events immediately while live refresh is pending", () => {
+    const now = new Date("2026-04-19T16:00:00.000Z").getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const event = makeEvent(now, "Seeded focus block");
+    renderDashboardBody({
+      briefing: makeBriefing([event]),
+      ensureRange: vi.fn(() => new Promise(() => {})),
+    });
+
+    expect(screen.getAllByText("Seeded focus block").length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("dashboard-event-skeletons")).toBeNull();
+  });
+
+  it("shows event skeletons only when there is no seed data and the first fetch is pending", () => {
+    const now = new Date("2026-04-19T16:00:00.000Z").getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    renderDashboardBody({
+      briefing: makeBriefing([]),
+      ensureRange: vi.fn(() => new Promise(() => {})),
+    });
+
+    expect(screen.getByTestId("dashboard-event-skeletons")).toBeTruthy();
+    expect(screen.getByTestId("focus-window-skeleton")).toBeTruthy();
+    expect(screen.getAllByText("Essay").length).toBeGreaterThan(0);
+  });
+
+  it("deep links the pressure pill to the nearest deadline day", () => {
+    const now = new Date("2026-04-19T16:00:00.000Z").getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const onOpenDeadlinesCalendar = vi.fn();
+    renderDashboardBody({
+      briefing: makeBriefing([]),
+      ensureRange: vi.fn().mockResolvedValue([]),
+      onOpenDeadlinesCalendar,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /deadline soon/i }));
+    expect(onOpenDeadlinesCalendar).toHaveBeenCalledWith("2026-04-20");
+  });
+});

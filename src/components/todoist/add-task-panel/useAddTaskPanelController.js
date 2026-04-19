@@ -7,6 +7,7 @@ import {
   updateTodoistTask,
 } from "../../../api";
 import { formatResolvedDate, parseTokens } from "./parsing";
+import { buildManualDue, getInitialDueEpoch } from "./due";
 
 export default function useAddTaskPanelController({
   anchorRef,
@@ -28,7 +29,8 @@ export default function useAddTaskPanelController({
       ? editingTask.labels.map((name) => ({ id: `name:${name}`, name, color: "#cba6da" }))
       : null,
   );
-  const manualDue = "";
+  const seededDueEpoch = useMemo(() => getInitialDueEpoch(editingTask), [editingTask]);
+  const [manualDue, setManualDue] = useState(null);
   const [overrides, setOverrides] = useState(
     editingTask
       ? {
@@ -72,9 +74,13 @@ export default function useAddTaskPanelController({
   const [cursorPos, setCursorPos] = useState(0);
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [duePickerOpen, setDuePickerOpen] = useState(false);
+  const [duePickerNow, setDuePickerNow] = useState(() => Date.now());
   const panelRef = useRef(null);
   const closeTimerRef = useRef(null);
   const inputRef = useRef(null);
+  const dueTriggerRef = useRef(null);
+  const duePickerRef = useRef(null);
   const DELETE_HOLD_MS = 500;
 
   const requestClose = useCallback(() => {
@@ -176,7 +182,27 @@ export default function useAddTaskPanelController({
     : parsed.labels.length
       ? parsed.labels
       : [];
-  const resolvedDue = overrides.due ? manualDue : parsed.datePhrase || manualDue;
+  const resolvedDue = overrides.due ? manualDue?.dueString || null : parsed.datePhrase || null;
+  const dueDisplay = manualDue?.display || parsed.dateFormatted || seededDueDisplay || "";
+  const pickerDueEpoch = manualDue?.epochMs ?? seededDueEpoch;
+
+  const openDuePicker = useCallback(() => {
+    setDuePickerOpen((prev) => {
+      const next = !prev;
+      if (next) setDuePickerNow(Date.now());
+      return next;
+    });
+  }, []);
+
+  const closeDuePicker = useCallback(() => {
+    setDuePickerOpen(false);
+  }, []);
+
+  const handleDueSelect = useCallback((epochMs) => {
+    setManualDue(buildManualDue(epochMs));
+    setOverrides((prev) => ({ ...prev, due: true }));
+    setDuePickerOpen(false);
+  }, []);
 
   const handleInputChange = (event) => {
     const value = event.target.value;
@@ -278,7 +304,9 @@ export default function useAddTaskPanelController({
 
   useEffect(() => {
     function handleClick(event) {
-      if (anchorRef?.current?.contains(event.target) || panelRef.current?.contains(event.target)) return;
+      if (anchorRef?.current?.contains(event.target)) return;
+      if (panelRef.current?.contains(event.target)) return;
+      if (duePickerRef.current?.contains(event.target)) return;
       requestClose();
     }
     document.addEventListener("pointerdown", handleClick);
@@ -287,11 +315,17 @@ export default function useAddTaskPanelController({
 
   useEffect(() => {
     function handleKey(event) {
-      if (event.key === "Escape") requestClose();
+      if (event.key !== "Escape") return;
+      if (duePickerOpen) {
+        event.preventDefault();
+        setDuePickerOpen(false);
+        return;
+      }
+      requestClose();
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [requestClose]);
+  }, [duePickerOpen, requestClose]);
 
   useEffect(() => {
     const element = panelRef.current;
@@ -371,6 +405,8 @@ export default function useAddTaskPanelController({
     overrides,
     setOverrides,
     seededDueDisplay,
+    seededDueEpoch,
+    pickerDueEpoch,
     submitting,
     error,
     deleteProgress,
@@ -384,11 +420,19 @@ export default function useAddTaskPanelController({
     cursorPos,
     panelRef,
     inputRef,
+    dueTriggerRef,
+    duePickerRef,
     parsed,
     resolvedProject,
     resolvedPriority,
     resolvedLabels,
     resolvedDue,
+    dueDisplay,
+    duePickerOpen,
+    duePickerNow,
+    openDuePicker,
+    closeDuePicker,
+    handleDueSelect,
     handleInputChange,
     handleAutocompleteSelect,
     canSubmit,

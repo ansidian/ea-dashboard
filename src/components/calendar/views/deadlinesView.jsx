@@ -1,8 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState } from "react";
-import { Circle, CircleDashed, CheckCircle2 } from "lucide-react";
 import { parseDueDate } from "../../../lib/dashboard-helpers";
+import { dueDateToMs } from "../../../lib/redesign-helpers";
 import DeadlineDetailPopover from "../../dashboard/DeadlineDetailPopover";
+import TimelineDetailRail from "../TimelineDetailRail.jsx";
 
 const MAX_PILLS = 2;
 
@@ -14,12 +15,6 @@ const SOURCE_COLORS = {
 
 function sourceOf(task) {
   return task?.source || "canvas";
-}
-
-function DeadlineStatusIcon({ status, size = 12 }) {
-  if (status === "complete") return <CheckCircle2 size={size} color="#a6e3a1" />;
-  if (status === "in_progress") return <CircleDashed size={size} color="#89dceb" />;
-  return <Circle size={size} color="rgba(205,214,244,0.45)" />;
 }
 
 function compute({ data, viewYear, viewMonth }) {
@@ -139,77 +134,6 @@ function formatFullDate(year, month, day) {
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
-function DeadlineDetailRow({ task, onOpen }) {
-  const isComplete = task.status === "complete";
-  const source = sourceOf(task);
-  const dot = SOURCE_COLORS[source] || "rgba(255,255,255,0.3)";
-  const sourceLabel = source === "todoist" ? "Todoist" : source === "canvas" ? "Canvas" : "CTM";
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={(e) => onOpen(task, e.currentTarget)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen(task, e.currentTarget);
-        }
-      }}
-      style={{
-        display: "grid", gridTemplateColumns: "16px 1fr auto", gap: 10, alignItems: "center",
-        padding: "9px 4px", borderBottom: "1px solid rgba(255,255,255,0.04)",
-        cursor: "pointer", transition: "background 150ms",
-        opacity: isComplete ? 0.55 : 1,
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-    >
-      <DeadlineStatusIcon status={task.status} />
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            marginBottom: 2,
-            textDecoration: isComplete ? "line-through" : "none",
-            textDecorationColor: "rgba(205,214,244,0.35)",
-          }}
-        >
-          {task.title || task.name || "Untitled"}
-        </div>
-        <div
-          style={{
-            fontSize: 10.5, color: "rgba(205,214,244,0.45)",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            display: "flex", alignItems: "center", gap: 6,
-          }}
-        >
-          <span
-            style={{
-              width: 6, height: 6, borderRadius: "50%", background: dot,
-              opacity: 0.85, flexShrink: 0,
-            }}
-          />
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {task.class_name || task.project_name || sourceLabel}
-          </span>
-        </div>
-      </div>
-      {task.due_time && (
-        <div
-          style={{
-            fontSize: 10.5, color: "rgba(205,214,244,0.55)",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {task.due_time}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function DeadlinesDetail({ selectedDay, viewYear, viewMonth, items }) {
   const [popover, setPopover] = useState(null);
 
@@ -222,25 +146,50 @@ function DeadlinesDetail({ selectedDay, viewYear, viewMonth, items }) {
     });
   };
 
+  const ordered = [...items].sort((a, b) => {
+    const aMs = dueDateToMs(a.due_date, a.due_time) ?? Number.POSITIVE_INFINITY;
+    const bMs = dueDateToMs(b.due_date, b.due_time) ?? Number.POSITIVE_INFINITY;
+    if (aMs !== bMs) return aMs - bMs;
+    const aComplete = a.status === "complete" ? 1 : 0;
+    const bComplete = b.status === "complete" ? 1 : 0;
+    if (aComplete !== bComplete) return aComplete - bComplete;
+    return (a.title || "").localeCompare(b.title || "");
+  });
+
+  const railItems = ordered.map((task) => {
+    const source = sourceOf(task);
+    const sourceLabel = source === "todoist" ? "Todoist" : source === "canvas" ? "Canvas" : "CTM";
+    const subtitle = task.class_name || task.project_name || sourceLabel;
+    const metaParts = [];
+    if (subtitle !== sourceLabel) metaParts.push(sourceLabel);
+    if (task.status === "in_progress") metaParts.push("In progress");
+    if (task.status === "complete") metaParts.push("Complete");
+
+    return {
+      id: `${source}-${task.id}`,
+      timeLabel: task.due_time || "End of day",
+      title: task.title || task.name || "Untitled",
+      subtitle,
+      meta: metaParts.join(" · "),
+      dotColor: SOURCE_COLORS[source] || "rgba(255,255,255,0.3)",
+      complete: task.status === "complete",
+      onClick: (event) => openPopover(task, event.currentTarget),
+    };
+  });
+
   return (
-    <div style={{ padding: "16px 20px", overflow: "auto", flex: 1 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontSize: 14, color: "#cba6da", fontWeight: 500 }}>
-          {formatFullDate(viewYear, viewMonth, selectedDay)}
-        </div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
-          {incompleteCount} open · {items.length} total
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {items.map((item) => (
-          <DeadlineDetailRow
-            key={`${sourceOf(item)}-${item.id}`}
-            task={item}
-            onOpen={openPopover}
-          />
-        ))}
-      </div>
+    <>
+      <TimelineDetailRail
+        title={formatFullDate(viewYear, viewMonth, selectedDay)}
+        summary={`${incompleteCount} open · ${items.length} total`}
+        sections={[
+          {
+            id: "deadlines",
+            label: "Chronological",
+            items: railItems,
+          },
+        ]}
+      />
       {popover && (
         <DeadlineDetailPopover
           task={popover.task}
@@ -248,7 +197,7 @@ function DeadlinesDetail({ selectedDay, viewYear, viewMonth, items }) {
           onClose={() => setPopover(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 

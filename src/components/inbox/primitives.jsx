@@ -115,7 +115,15 @@ export function LaneIcon({ laneKey }) {
 // `buffer` is null and the displayed value is derived from props — no
 // synchronizing effect required. Tab/Shift+Tab navigation is native since
 // the element is a real <input>.
-export function NumberField({ value, onChange, min, max, pad = 0, ariaLabel }) {
+export function NumberField({
+  value,
+  onChange,
+  min,
+  max,
+  pad = 0,
+  ariaLabel,
+  accent = "#f97316",
+}) {
   const formatted = pad ? String(value).padStart(pad, "0") : String(value);
   const [buffer, setBuffer] = useState(null);
   const focused = buffer !== null;
@@ -149,7 +157,7 @@ export function NumberField({ value, onChange, min, max, pad = 0, ariaLabel }) {
         onClick={inc}
         aria-label={`Increase ${ariaLabel}`}
         style={stepperBtn}
-        onMouseEnter={(e) => { e.currentTarget.style.color = "#f97316"; }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = accent; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(205,214,244,0.55)"; }}
       >
         <ArrowUp size={10} />
@@ -177,7 +185,9 @@ export function NumberField({ value, onChange, min, max, pad = 0, ariaLabel }) {
         style={{
           width: 28, padding: "2px 0",
           background: focused ? "rgba(255,255,255,0.06)" : "transparent",
-          border: focused ? "1px solid rgba(249,115,22,0.5)" : "1px solid transparent",
+          border: focused
+            ? `1px solid color-mix(in srgb, ${accent} 55%, transparent)`
+            : "1px solid transparent",
           borderRadius: 4, outline: "none",
           textAlign: "center",
           fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums",
@@ -190,7 +200,7 @@ export function NumberField({ value, onChange, min, max, pad = 0, ariaLabel }) {
         onClick={dec}
         aria-label={`Decrease ${ariaLabel}`}
         style={stepperBtn}
-        onMouseEnter={(e) => { e.currentTarget.style.color = "#f97316"; }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = accent; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(205,214,244,0.55)"; }}
       >
         <ArrowDown size={10} />

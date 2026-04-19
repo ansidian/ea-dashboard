@@ -3,6 +3,8 @@ import { Sparkles, Sun, Cloud, CloudSun, CloudRain, Snowflake, CloudFog, Moon, C
 import { greetingFor, pacificClock, pacificDate, urgencyForDays, daysLabel } from "../../lib/redesign-helpers";
 import { daysUntil } from "../../lib/bill-utils";
 import { resolveInsight } from "../../lib/insight-resolver";
+import { deriveFocusWindows } from "../../lib/focus-windows";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const WEATHER_ICONS = {
   Sun, Cloud, CloudSun, CloudRain, Snowflake, CloudFog, Moon,
@@ -75,6 +77,8 @@ export default function DashboardHero({
   liveBills,
   userName = "",
   onJump,
+  onOpenPressure,
+  showEventSkeletons = false,
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -106,6 +110,10 @@ export default function DashboardHero({
   const theCallouts = useMemo(
     () => callouts({ events, deadlines, bills, now }),
     [events, deadlines, bills, now],
+  );
+  const focusWindows = useMemo(
+    () => deriveFocusWindows({ events, deadlines, now }),
+    [events, deadlines, now],
   );
 
   const compact = density === "compact";
@@ -308,31 +316,13 @@ export default function DashboardHero({
             </div>
           </div>
 
-          <div
-            style={{
-              flex: stacked && !isMobile ? 1 : "unset",
-              padding: isMobile ? "10px 12px" : "10px 14px",
-              borderRadius: 12,
-              background: "rgba(255,255,255,0.025)",
-              border: "1px solid rgba(255,255,255,0.05)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: isMobile ? 9 : 9.5,
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                color: "rgba(205,214,244,0.4)",
-                marginBottom: 6,
-              }}
-            >
-              Focus window
-            </div>
-            <div style={{ fontSize: isMobile ? 11.5 : 12, color: "#cdd6f4", lineHeight: 1.4 }}>
-              {nextFocusWindow(events, now) ||
-                "Calendar looks open — pick your block."}
-            </div>
-          </div>
+          <FocusCard
+            focusWindows={focusWindows}
+            accent={accent}
+            isMobile={isMobile}
+            onOpenPressure={onOpenPressure}
+            showSkeletons={showEventSkeletons}
+          />
         </div>
       </div>
 
@@ -356,6 +346,173 @@ export default function DashboardHero({
               onJump={(anchor) => onJump?.(c, anchor)}
             />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FocusCard({ focusWindows, accent, isMobile = false, onOpenPressure, showSkeletons = false }) {
+  const pressureLabel = focusWindows.pressure.level === "high"
+    ? `${focusWindows.pressure.overdue + focusWindows.pressure.today} urgent deadline${focusWindows.pressure.overdue + focusWindows.pressure.today === 1 ? "" : "s"}`
+    : focusWindows.pressure.level === "medium"
+      ? `${focusWindows.pressure.soon} deadline${focusWindows.pressure.soon === 1 ? "" : "s"} soon`
+      : "Low pressure";
+  const primary = focusWindows.primaryWindow;
+  const backup = focusWindows.backupWindow;
+  const fallback = focusWindows.fallback;
+  const isOpenDay = primary?.quality === "Rest of day open";
+
+  return (
+    <div
+      data-testid="focus-window-card"
+      style={{
+        flex: "unset",
+        padding: isMobile ? "12px 14px" : "12px 14px 14px",
+        borderRadius: 12,
+        background: "rgba(255,255,255,0.025)",
+        border: "1px solid rgba(255,255,255,0.05)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          marginBottom: 8,
+        }}
+      >
+        <div
+          style={{
+            fontSize: isMobile ? 9 : 9.5,
+            letterSpacing: 0.8,
+            textTransform: "uppercase",
+            color: "rgba(205,214,244,0.4)",
+          }}
+        >
+          Focus blocks
+        </div>
+        {focusWindows.pressure.level === "low" ? (
+          <div
+            style={{
+              fontSize: 10,
+              color: "rgba(205,214,244,0.42)",
+            }}
+          >
+            {pressureLabel}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onOpenPressure?.()}
+            style={{
+              fontSize: 10,
+              color: "#f9e2af",
+              fontFamily: "inherit",
+              background: "rgba(249,226,175,0.08)",
+              border: "1px solid rgba(249,226,175,0.18)",
+              borderRadius: 9999,
+              padding: "3px 8px",
+              cursor: "pointer",
+            }}
+          >
+            {pressureLabel}
+          </button>
+        )}
+      </div>
+
+      {showSkeletons ? (
+        <div data-testid="focus-window-skeleton" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Skeleton className="h-[18px] w-[62%] bg-white/10" />
+          <Skeleton className="h-[12px] w-[90%] bg-white/8" />
+          <Skeleton className="h-[12px] w-[72%] bg-white/8" />
+        </div>
+      ) : primary ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: `${accent}0d`,
+              border: `1px solid ${accent}22`,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 10, color: "rgba(205,214,244,0.45)", textTransform: "uppercase", letterSpacing: 0.7 }}>
+                Best block
+              </div>
+              <span
+                style={{
+                  fontSize: 9.5,
+                  fontWeight: 600,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  color: accent,
+                  background: `${accent}18`,
+                  border: `1px solid ${accent}30`,
+                  borderRadius: 9999,
+                  padding: "2px 7px",
+                }}
+              >
+                {primary.quality}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+              {!isOpenDay && (
+                <div style={{ fontSize: isMobile ? 14 : 15, fontWeight: 600, color: "#cdd6f4", letterSpacing: -0.2 }}>
+                  {primary.timeRangeLabel}
+                </div>
+              )}
+              <div
+                data-testid={isOpenDay ? "focus-window-open-day-duration" : undefined}
+                style={{ fontSize: isOpenDay ? (isMobile ? 14 : 15) : 10.5, color: isOpenDay ? "#cdd6f4" : "rgba(205,214,244,0.52)", fontWeight: isOpenDay ? 600 : 400 }}
+              >
+                {primary.durationLabel}
+              </div>
+            </div>
+            <div style={{ marginTop: 6, fontSize: isMobile ? 10.5 : 11, color: "rgba(205,214,244,0.68)", lineHeight: 1.45 }}>
+              {primary.explanation}
+            </div>
+          </div>
+
+          {backup && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                paddingTop: 8,
+                borderTop: "1px solid rgba(255,255,255,0.05)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10, color: "rgba(205,214,244,0.42)", textTransform: "uppercase", letterSpacing: 0.7 }}>
+                  Backup
+                </div>
+                <div style={{ marginTop: 4, fontSize: 11.5, color: "#cdd6f4" }}>
+                  {backup.timeRangeLabel}
+                </div>
+              </div>
+              <div style={{ fontSize: 10.5, color: "rgba(205,214,244,0.5)", whiteSpace: "nowrap" }}>
+                {backup.durationLabel}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : fallback?.kind === "short-window" ? (
+        <div style={{ fontSize: isMobile ? 11 : 11.5, color: "#cdd6f4", lineHeight: 1.45 }}>
+          <div style={{ fontWeight: 500 }}>No protected block left today.</div>
+          <div style={{ marginTop: 4, color: "rgba(205,214,244,0.62)" }}>
+            Next short opening: {fallback.timeRangeLabel} · {fallback.durationLabel}.
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: isMobile ? 11 : 11.5, color: "#cdd6f4", lineHeight: 1.45 }}>
+          {focusWindows.fallback?.kind === "open-day"
+            ? "Rest of day looks open. Pick the block that matters most."
+            : "No protected block left today."}
         </div>
       )}
     </div>
@@ -445,20 +602,4 @@ function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind, isMobi
       )}
     </div>
   );
-}
-
-function nextFocusWindow(events, now) {
-  const future = (events || [])
-    .filter((e) => e.startMs && e.startMs > now)
-    .sort((a, b) => a.startMs - b.startMs);
-  if (future.length === 0) return null;
-  const first = future[0];
-  const time = new Date(first.startMs).toLocaleTimeString("en-US", {
-    timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit",
-  }).toLowerCase();
-  const gap = first.startMs - now;
-  const gapMin = Math.round(gap / 60000);
-  if (gapMin < 15) return `Heads up — ${first.title} at ${time}.`;
-  const gapLabel = gapMin < 60 ? `${gapMin} min` : `${Math.round(gapMin / 60 * 10) / 10}h`;
-  return `Clear for the next ${gapLabel} — next up: ${first.title} at ${time}.`;
 }

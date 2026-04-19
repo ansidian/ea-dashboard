@@ -1,4 +1,6 @@
 import { ExternalLink, Calendar as CalendarIcon } from "lucide-react";
+import TimelineDetailRail from "../TimelineDetailRail.jsx";
+import { formatEventDuration } from "../../../lib/redesign-helpers";
 
 const EVENT_ROW_HEIGHT = 12;
 const STACK_GAP = 2;
@@ -152,97 +154,71 @@ function formatFullDate(year, month, day) {
   });
 }
 
-function renderDetail({ selectedDay, viewYear, viewMonth, items }) {
-  return (
-    <div style={{ padding: "16px 20px", overflow: "auto", flex: 1 }}>
-      <div
+function eventSubtitle(ev) {
+  if (ev.attendees?.length) {
+    return `with ${ev.attendees.slice(0, 3).join(", ")}${ev.attendees.length > 3 ? ` +${ev.attendees.length - 3}` : ""}`;
+  }
+  return ev.location || ev.subtitle || "";
+}
+
+function eventMeta(ev) {
+  if (ev.allDay) return ev.duration || "All day";
+  return formatEventDuration(ev.startMs, ev.endMs) || ev.duration || "";
+}
+
+function toRailItem(ev, index) {
+  return {
+    id: `${ev.id || ev.htmlLink || ev.title || "event"}-${index}`,
+    timeLabel: ev.allDay ? "All day" : pacificTime(ev.startMs),
+    title: ev.title || "(No title)",
+    subtitle: eventSubtitle(ev),
+    meta: eventMeta(ev),
+    dotColor: ev.color || ev.sourceColor || "#4285f4",
+    trailing: ev.htmlLink ? (
+      <a
+        href={ev.htmlLink}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Open in Google Calendar"
+        onClick={(event) => event.stopPropagation()}
         style={{
-          display: "flex",
-          justifyContent: "space-between",
+          color: "rgba(205,214,244,0.4)",
+          padding: 4,
+          display: "inline-flex",
           alignItems: "center",
-          marginBottom: 12,
         }}
       >
-        <div style={{ fontSize: 14, color: "#cba6da", fontWeight: 500 }}>
-          {formatFullDate(viewYear, viewMonth, selectedDay)}
-        </div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
-          {items.length} event{items.length !== 1 ? "s" : ""}
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {items.map((ev, i) => (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              gap: 10,
-              padding: "10px 12px",
-              borderRadius: 8,
-              background: "rgba(255,255,255,0.02)",
-              border: "1px solid rgba(255,255,255,0.05)",
-              alignItems: "flex-start",
-            }}
-          >
-            <span
-              aria-hidden
-              style={{
-                width: 3,
-                alignSelf: "stretch",
-                borderRadius: 2,
-                background: ev.color,
-                flexShrink: 0,
-                marginTop: 2,
-              }}
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{ fontSize: 12.5, color: "#e2e8f0", fontWeight: 500 }}
-              >
-                {ev.title || "(No title)"}
-              </div>
-              <div
-                style={{
-                  fontSize: 10.5,
-                  color: "rgba(205,214,244,0.55)",
-                  marginTop: 2,
-                }}
-              >
-                {ev.allDay ? "All day" : pacificTime(ev.startMs)} · {ev.source}
-              </div>
-              {ev.location && (
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: "rgba(205,214,244,0.4)",
-                    marginTop: 2,
-                  }}
-                >
-                  {ev.location}
-                </div>
-              )}
-            </div>
-            {ev.htmlLink && (
-              <a
-                href={ev.htmlLink}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Open in Google Calendar"
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  color: "rgba(205,214,244,0.4)",
-                  padding: 4,
-                  display: "inline-flex",
-                  alignItems: "center",
-                }}
-              >
-                <ExternalLink size={12} />
-              </a>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
+        <ExternalLink size={12} />
+      </a>
+    ) : null,
+  };
+}
+
+function renderDetail({ selectedDay, viewYear, viewMonth, items }) {
+  const ordered = [...items].sort((a, b) => {
+    if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+    return (a.startMs || 0) - (b.startMs || 0);
+  });
+  const allDayItems = ordered.filter((item) => item.allDay);
+  const timedItems = ordered.filter((item) => !item.allDay);
+
+  return (
+    <TimelineDetailRail
+      title={formatFullDate(viewYear, viewMonth, selectedDay)}
+      summary={`${items.length} event${items.length !== 1 ? "s" : ""}`}
+      sections={[
+        {
+          id: "all-day",
+          label: "All day",
+          items: allDayItems.map(toRailItem),
+        },
+        {
+          id: "timed",
+          label: "By time",
+          items: timedItems.map(toRailItem),
+        },
+      ]}
+    />
   );
 }
 

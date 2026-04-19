@@ -1,0 +1,41 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { CustomDateTimeView } from "./SnoozePicker";
+import { epochFromLa } from "./helpers";
+
+afterEach(() => {
+  cleanup();
+});
+
+describe("CustomDateTimeView", () => {
+  it("supports keyboard AM/PM selection from a single tab stop", () => {
+    const onSelect = vi.fn();
+    const initialEpoch = epochFromLa(2026, 3, 19, 9, 15);
+    const nowTick = epochFromLa(2026, 3, 19, 9, 14);
+
+    render(
+      <CustomDateTimeView
+        nowTick={nowTick}
+        initialEpoch={initialEpoch}
+        onSelect={onSelect}
+        onBack={() => {}}
+      />,
+    );
+
+    const ampmGroup = screen.getByRole("group", { name: "AM or PM" });
+    const amButton = screen.getByRole("button", { name: "AM" });
+    const pmButton = screen.getByRole("button", { name: "PM" });
+    const confirmButton = screen.getByRole("button", { name: "Snooze" });
+
+    expect(ampmGroup.getAttribute("tabindex")).toBe("0");
+    expect(amButton.getAttribute("tabindex")).toBe("-1");
+    expect(pmButton.getAttribute("tabindex")).toBe("-1");
+
+    ampmGroup.focus();
+    fireEvent.keyDown(ampmGroup, { key: "p" });
+    expect(document.activeElement).toBe(confirmButton);
+    fireEvent.click(confirmButton);
+
+    expect(onSelect).toHaveBeenCalledWith(epochFromLa(2026, 3, 19, 21, 15));
+  });
+});

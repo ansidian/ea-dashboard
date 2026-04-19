@@ -12,7 +12,16 @@ import {
 // hour, minute} in DASHBOARD_TZ so display and editing never touch the
 // browser's ambient timezone — we only convert to/from epoch at the edges
 // (default init, confirm).
-export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
+export function CustomDateTimeView({
+  nowTick,
+  onSelect,
+  onBack,
+  initialEpoch = null,
+  accent = "#f97316",
+  confirmLabel = "Snooze",
+}) {
+  const confirmButtonRef = useRef(null);
+  const advanceFocusToConfirmRef = useRef(false);
   // "today" in dashboard TZ — used to disable past days.
   const today = useMemo(() => laComponents(nowTick), [nowTick]);
 
@@ -21,6 +30,7 @@ export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
   // shortcuts — and rounding ensures draftEpoch > nowTick so the Snooze button
   // is enabled without forcing an adjustment first.
   const [draft, setDraft] = useState(() => {
+    if (Number.isFinite(initialEpoch)) return laComponents(initialEpoch);
     const nextMinute = Math.ceil(nowTick / 60_000) * 60_000;
     return laComponents(nextMinute);
   });
@@ -28,6 +38,7 @@ export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
   // navigated months without yet picking a day).
   const [viewYear, setViewYear] = useState(draft.year);
   const [viewMonth, setViewMonth] = useState(draft.month);
+  const [ampmFocused, setAmPmFocused] = useState(false);
 
   // Build 42 day cells for the calendar — identified by {year, month, day}
   // rather than JS Date objects so we stay timezone-neutral throughout.
@@ -86,6 +97,42 @@ export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
     setDraft((prev) => ({ ...prev, hour: newHour24 }));
   };
 
+  const handleAmPmKeyDown = (event) => {
+    const key = event.key.toLowerCase();
+    if (key === "a") {
+      event.preventDefault();
+      advanceFocusToConfirmRef.current = true;
+      setAmPm(false);
+      return;
+    }
+    if (key === "p") {
+      event.preventDefault();
+      advanceFocusToConfirmRef.current = true;
+      setAmPm(true);
+      return;
+    }
+    if (key === "arrowleft" || key === "arrowdown") {
+      event.preventDefault();
+      setAmPm(false);
+      return;
+    }
+    if (key === "arrowright" || key === "arrowup") {
+      event.preventDefault();
+      setAmPm(true);
+      return;
+    }
+    if (key === " " || key === "enter") {
+      event.preventDefault();
+      setAmPm(!isPm);
+    }
+  };
+
+  useEffect(() => {
+    if (!advanceFocusToConfirmRef.current) return;
+    advanceFocusToConfirmRef.current = false;
+    confirmButtonRef.current?.focus();
+  }, [draft.hour]);
+
   const draftEpoch = epochFromLa(draft.year, draft.month, draft.day, draft.hour, draft.minute);
   const confirmDisabled = draftEpoch <= nowTick;
 
@@ -108,7 +155,7 @@ export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
   const segmentBtn = (selected) => ({
     padding: "4px 10px", fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
     fontFamily: "inherit", border: "none", cursor: "pointer", borderRadius: 6,
-    background: selected ? "#f97316" : "transparent",
+    background: selected ? accent : "transparent",
     color: selected ? "#ffffff" : "rgba(205,214,244,0.65)",
     transition: "background 120ms, color 120ms",
   });
@@ -201,8 +248,10 @@ export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
                 fontSize: 12, fontFamily: "inherit", fontWeight: isSelected ? 700 : 500,
                 fontVariantNumeric: "tabular-nums",
                 color: isSelected ? "#ffffff" : baseColor,
-                background: isSelected ? "#f97316" : "transparent",
-                border: isToday && !isSelected ? "1px solid rgba(249,115,22,0.6)" : "1px solid transparent",
+                background: isSelected ? accent : "transparent",
+                border: isToday && !isSelected
+                  ? `1px solid color-mix(in srgb, ${accent} 60%, transparent)`
+                  : "1px solid transparent",
                 borderRadius: 6,
                 cursor: isPast ? "not-allowed" : "pointer",
                 transition: "background 120ms, color 120ms",
@@ -224,21 +273,54 @@ export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
         <NumberField
           value={hour12} onChange={setHour12} min={1} max={12}
           ariaLabel="hour"
+          accent={accent}
         />
         <div style={{ fontSize: 14, fontWeight: 600, color: "rgba(205,214,244,0.5)" }}>:</div>
         <NumberField
           value={minute} onChange={setMinuteVal} min={0} max={59} pad={2}
           ariaLabel="minute"
+          accent={accent}
         />
         <div
           style={{
             display: "inline-flex", marginLeft: 4, padding: 2, gap: 2,
-            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
+            background: "rgba(255,255,255,0.04)",
+            border: ampmFocused
+              ? `1px solid color-mix(in srgb, ${accent} 55%, transparent)`
+              : "1px solid rgba(255,255,255,0.06)",
             borderRadius: 8,
+            boxShadow: ampmFocused
+              ? `0 0 0 1px color-mix(in srgb, ${accent} 14%, transparent)`
+              : "none",
+            transition: "border-color 120ms, box-shadow 120ms",
           }}
+          role="group"
+          aria-label="AM or PM"
+          tabIndex={0}
+          onFocus={() => setAmPmFocused(true)}
+          onBlur={() => setAmPmFocused(false)}
+          onKeyDown={handleAmPmKeyDown}
         >
-          <button type="button" onClick={() => setAmPm(false)} style={segmentBtn(!isPm)}>AM</button>
-          <button type="button" onClick={() => setAmPm(true)} style={segmentBtn(isPm)}>PM</button>
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-pressed={!isPm}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setAmPm(false)}
+            style={segmentBtn(!isPm)}
+          >
+            AM
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-pressed={isPm}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setAmPm(true)}
+            style={segmentBtn(isPm)}
+          >
+            PM
+          </button>
         </div>
       </div>
 
@@ -267,13 +349,18 @@ export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
           Back
         </button>
         <button
+          ref={confirmButtonRef}
           type="button"
           disabled={confirmDisabled}
           onClick={() => onSelect(draftEpoch)}
           style={{
             padding: "6px 14px", borderRadius: 8,
-            background: confirmDisabled ? "rgba(249,115,22,0.2)" : "#f97316",
-            border: confirmDisabled ? "1px solid rgba(249,115,22,0.25)" : "1px solid #f97316",
+            background: confirmDisabled
+              ? `color-mix(in srgb, ${accent} 20%, transparent)`
+              : accent,
+            border: confirmDisabled
+              ? `1px solid color-mix(in srgb, ${accent} 25%, transparent)`
+              : `1px solid ${accent}`,
             color: confirmDisabled ? "rgba(255,255,255,0.5)" : "#ffffff",
             fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
             fontFamily: "inherit",
@@ -282,14 +369,14 @@ export function CustomDateTimeView({ nowTick, onSelect, onBack }) {
           }}
           onMouseEnter={(e) => {
             if (confirmDisabled) return;
-            e.currentTarget.style.background = "#fb923c";
+            e.currentTarget.style.background = `color-mix(in srgb, ${accent} 82%, white)`;
           }}
           onMouseLeave={(e) => {
             if (confirmDisabled) return;
-            e.currentTarget.style.background = "#f97316";
+            e.currentTarget.style.background = accent;
           }}
         >
-          Snooze
+          {confirmLabel}
         </button>
       </div>
     </div>

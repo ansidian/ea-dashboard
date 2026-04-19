@@ -138,6 +138,37 @@ describe("DashboardHero mobile layout", () => {
     expect(screen.getByTestId("dashboard-hero-callouts").style.gridTemplateColumns).toBe("1fr");
     expect(screen.queryByText("You have a heavier deadline cluster than usual.")).toBeNull();
   });
+
+  it("hides the explicit time range for rest-of-day-open focus states", () => {
+    const now = new Date("2026-04-19T16:00:00.000Z").getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    render(
+      <DashboardHero
+        accent="#cba6da"
+        density="comfortable"
+        briefing={makeBriefing({
+          calendar: [],
+          ctm: {
+            upcoming: [
+              { id: "ctm-1", title: "Finalize deck", due_date: "2026-04-20", source: "canvas", class_name: "Ops", status: "open" },
+            ],
+          },
+          todoist: { upcoming: [] },
+        })}
+        liveBills={[]}
+        liveCalendar={[]}
+        liveWeather={{ temp: 71, condition: "Sunny", city: "Los Angeles" }}
+        onJump={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Rest of day open")).toBeTruthy();
+    expect(screen.getByTestId("focus-window-open-day-duration")).toBeTruthy();
+    expect(screen.queryByText(/\d{1,2}:\d{2}\s?[AP]M-\d{1,2}:\d{2}\s?[AP]M/i)).toBeNull();
+    expect(screen.getByText(/No more events today/i)).toBeTruthy();
+  });
 });
 
 describe("CustomizePanel mobile options", () => {

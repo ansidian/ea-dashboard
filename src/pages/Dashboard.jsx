@@ -25,6 +25,7 @@ import useNotifications from "../hooks/useNotifications";
 import useCustomize from "../hooks/useCustomize";
 import useCalendarRange from "../hooks/useCalendarRange";
 import useIsMobile from "../hooks/useIsMobile";
+import { focusPressureDate } from "../lib/focus-windows";
 
 const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevPanel.jsx")) : null;
 
@@ -359,6 +360,7 @@ export function RedesignShell({
             }}
             onOpenBillsCalendar={(date) => openCalendar("bills", date || null)}
             onOpenEventsCalendar={(date) => openCalendar("events", date || null)}
+            onOpenDeadlinesCalendar={(date) => openCalendar("deadlines", date || null)}
             onJumpSection={jumpToSection}
           />
         ) : (
@@ -445,26 +447,46 @@ export function RedesignShell({
 export function DashboardBody({
   briefing, liveData, calendarRange, customize, accent,
   isMobile = false,
-  onOpenEmail, onOpenDeadline, onOpenBillsCalendar, onOpenEventsCalendar, onJumpSection,
+  onOpenEmail, onOpenDeadline, onOpenBillsCalendar, onOpenEventsCalendar, onOpenDeadlinesCalendar, onJumpSection,
 }) {
   const { dashboardLayout, density, showInsights, showInboxPeek } = customize;
   const effectiveLayout = isMobile ? "paper" : dashboardLayout;
   const ctx = useDashboard();
 
-  const [events, setEvents] = useState([]);
+  const seededEvents = briefing?.calendar || [];
+  const [events, setEvents] = useState(() => seededEvents);
+  const [liveEventsReady, setLiveEventsReady] = useState(() => seededEvents.length > 0);
   const today = useMemo(
     () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date()),
     [],
   );
   const ensureCalendarRange = calendarRange.ensureRange;
+
+  useEffect(() => {
+    if (seededEvents.length > 0) {
+      setEvents(seededEvents);
+      setLiveEventsReady(true);
+    }
+  }, [seededEvents]);
+
   useEffect(() => {
     const endDate = new Date(`${today}T12:00:00Z`);
     endDate.setUTCDate(endDate.getUTCDate() + 14);
     const end = endDate.toISOString().slice(0, 10);
     let cancelled = false;
     ensureCalendarRange(today, end)
-      .then((result) => { if (!cancelled) setEvents(result); })
-      .catch(() => { if (!cancelled) setEvents(briefing?.calendar || []); });
+      .then((result) => {
+        if (!cancelled) {
+          setEvents(result);
+          setLiveEventsReady(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEvents((prev) => (prev.length > 0 ? prev : (briefing?.calendar || [])));
+          setLiveEventsReady(true);
+        }
+      });
     return () => { cancelled = true; };
   }, [ensureCalendarRange, today, briefing?.calendar]);
   const ctm = briefing?.ctm?.upcoming || [];
@@ -473,6 +495,10 @@ export function DashboardBody({
   const bills = liveData.liveBills || [];
   const insights = briefing?.aiInsights || [];
   const emailAccounts = ctx.emailAccounts;
+  const pressureFocusDate = useMemo(
+    () => focusPressureDate(deadlines, Date.now()),
+    [deadlines],
+  );
 
   const handleRailJump = useCallback((payload, anchor) => {
     if (!payload) return;
@@ -500,6 +526,8 @@ export function DashboardBody({
       liveWeather={liveData.liveWeather}
       liveCalendar={events}
       liveBills={bills}
+      onOpenPressure={() => onOpenDeadlinesCalendar?.(pressureFocusDate)}
+      showEventSkeletons={!seededEvents.length && !liveEventsReady}
       onJump={(payload, anchor) => {
         if (payload?.kind === "deadline") {
           // Callout carries { title, sub, ... } but not the full task — find it.
@@ -523,6 +551,7 @@ export function DashboardBody({
       events={events}
       deadlines={deadlines}
       onJump={handleRailJump}
+      showEventSkeletons={!seededEvents.length && !liveEventsReady}
     />
   );
 
