@@ -1,8 +1,9 @@
 import { createPortal } from "react-dom";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { ChevronLeft, ChevronRight, X, Receipt, ListChecks } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Receipt, ListChecks, Calendar as CalendarIcon } from "lucide-react";
 import billsView from "./views/billsView.jsx";
 import deadlinesView from "./views/deadlinesView.jsx";
+import eventsView from "./views/eventsView.jsx";
 
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const GRID_ROWS = 6;
@@ -10,6 +11,7 @@ const CELL_HEIGHT = 84;
 const SIDEBAR_WIDTH = 340;
 
 const VIEWS = {
+  events: eventsView,
   bills: billsView,
   deadlines: deadlinesView,
 };
@@ -134,6 +136,7 @@ export default function CalendarModal({
   onClose,
   view,
   onViewChange,
+  eventsData,
   billsData,
   deadlinesData,
   focusDate,
@@ -151,7 +154,10 @@ export default function CalendarModal({
   const viewYear = viewDate.year;
 
   const activeView = VIEWS[view] || billsView;
-  const viewData = view === "deadlines" ? deadlinesData : billsData;
+  const viewData =
+    view === "events" ? eventsData
+    : view === "deadlines" ? deadlinesData
+    : billsData;
 
   const navigateMonthRef = useRef(null);
   useEffect(() => {
@@ -283,11 +289,16 @@ export default function CalendarModal({
         case "1":
           // Scoped to the modal — stopPropagation prevents the shell's
           // 1=Dashboard hotkey from firing underneath.
-          if (view !== "bills") onViewChange?.("bills");
+          if (view !== "events") onViewChange?.("events");
           e.preventDefault();
           e.stopPropagation();
           break;
         case "2":
+          if (view !== "bills") onViewChange?.("bills");
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        case "3":
           if (view !== "deadlines") onViewChange?.("deadlines");
           e.preventDefault();
           e.stopPropagation();
@@ -353,7 +364,7 @@ export default function CalendarModal({
                       color: "rgba(205,214,244,0.55)",
                     }}
                   >
-                    Calendar · {view === "bills" ? "Bills" : "Deadlines"}
+                    Calendar · {VIEWS[view]?.label || "Bills"}
                   </div>
                   <div
                     className="ea-display"
@@ -419,8 +430,9 @@ export default function CalendarModal({
                 }}
               >
                 {[
-                  { key: "bills", label: "Bills", Icon: Receipt, hint: "1" },
-                  { key: "deadlines", label: "Deadlines", Icon: ListChecks, hint: "2" },
+                  { key: "events", label: "Events", Icon: CalendarIcon, hint: "1" },
+                  { key: "bills", label: "Bills", Icon: Receipt, hint: "2" },
+                  { key: "deadlines", label: "Deadlines", Icon: ListChecks, hint: "3" },
                 ].map((opt) => {
                   const active = view === opt.key;
                   const { Icon } = opt;
@@ -579,7 +591,11 @@ export default function CalendarModal({
                   overflow: "hidden",
                 }}
               >
-                {showDetail ? (
+                {activeView.renderSidebar ? (
+                  <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                    {activeView.renderSidebar({ selectedDay, itemsByDay, viewYear, viewMonth, data: viewData })}
+                  </div>
+                ) : showDetail ? (
                   <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                     {activeView.renderDetail?.({
                       selectedDay,
