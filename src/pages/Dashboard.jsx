@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, lazy, Suspense, useCallback } from "react";
 import { getCalendarDeadlines, deleteBriefing } from "../api";
 import LoadingSkeleton from "../components/layout/LoadingSkeleton";
 import ErrorState from "../components/layout/ErrorState";
@@ -412,7 +412,31 @@ function DashboardBody({
 }) {
   const { dashboardLayout, density, showInsights, showInboxPeek } = customize;
   const ctx = useDashboard();
-  const events = liveData.liveCalendar || briefing?.calendar || [];
+  // Merge today + tomorrow + next-week arrays so the timeline can bucket
+  // events into "Today", "Tomorrow", "In N days" groups. Dedup by startMs+title
+  // because tomorrowCalendar's single day overlaps nextWeekCalendar's Sun–Sat
+  // range whenever today is Saturday.
+  const events = useMemo(() => {
+    const parts = [
+      liveData.liveCalendar || briefing?.calendar || [],
+      liveData.liveTomorrowCalendar || briefing?.tomorrowCalendar || [],
+      liveData.liveNextWeekCalendar || briefing?.nextWeekCalendar || [],
+    ];
+    const seen = new Set();
+    const merged = [];
+    for (const arr of parts) {
+      for (const ev of arr) {
+        const key = `${ev.startMs}:${ev.title}:${ev.source}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(ev);
+      }
+    }
+    return merged;
+  }, [
+    liveData.liveCalendar, liveData.liveTomorrowCalendar, liveData.liveNextWeekCalendar,
+    briefing?.calendar, briefing?.tomorrowCalendar, briefing?.nextWeekCalendar,
+  ]);
   const ctm = briefing?.ctm?.upcoming || [];
   const todoist = briefing?.todoist?.upcoming || [];
   const deadlines = [...ctm, ...todoist];
