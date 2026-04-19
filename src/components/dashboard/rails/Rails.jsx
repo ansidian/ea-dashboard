@@ -10,9 +10,9 @@ import { Icon } from "@/lib/icons.jsx";
 import AddTaskPanel from "../../todoist/AddTaskPanel";
 import { useDashboard } from "../../../context/DashboardContext";
 
-function SectionHeader({ title, subtitle, right }) {
+function SectionHeader({ title, subtitle, right, isMobile = false }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 10 }}>
+    <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "flex-end", justifyContent: "space-between", gap: 10, flexWrap: isMobile ? "wrap" : "nowrap" }}>
       <div style={{ minWidth: 0 }}>
         <div
           style={{
@@ -170,35 +170,41 @@ function RailGroupLabel({ label, count, tone = "default" }) {
 
 const AI_GRADIENT = "linear-gradient(120deg, #c88fa0 0%, #c89b85 25%, #8fb8c8 55%, #a89bc4 80%, #c88fa0 100%)";
 
-export function InsightsRail({ accent, insights = [], onJump }) {
+export function InsightsRail({ accent, insights = [], onJump, isMobile = false, maxItems = 5 }) {
   const [, forceTick] = useReducer((x) => x + 1, 0);
   useEffect(() => {
     const id = setInterval(forceTick, 60_000);
     return () => clearInterval(id);
   }, []);
   const now = new Date();
+  const visibleInsights = insights.slice(0, maxItems);
 
   return (
     <div data-sect="insights">
-      <SectionHeader title="AI noticed" subtitle="Pattern-level signal across your data" />
-      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-        {insights.slice(0, 5).map((ins, i) => (
+      <SectionHeader
+        title="AI noticed"
+        subtitle={isMobile ? "One quick pattern worth surfacing" : "Pattern-level signal across your data"}
+        isMobile={isMobile}
+      />
+      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: isMobile ? 6 : 8 }}>
+        {visibleInsights.map((ins, i) => (
           <InsightRow
             key={ins.id || i}
             insight={ins}
             accent={accent}
             onJump={onJump}
             now={now}
-            featured={i === 0}
+            featured={!isMobile && i === 0}
+            isMobile={isMobile}
           />
         ))}
-        {insights.length === 0 && (
+        {visibleInsights.length === 0 && (
           <div
             style={{
-              padding: "16px 14px", borderRadius: 10,
+              padding: isMobile ? "14px 12px" : "16px 14px", borderRadius: 10,
               background: "rgba(255,255,255,0.02)",
               border: "1px solid rgba(255,255,255,0.05)",
-              fontSize: 11.5, color: "rgba(205,214,244,0.5)", lineHeight: 1.5,
+              fontSize: isMobile ? 11 : 11.5, color: "rgba(205,214,244,0.5)", lineHeight: 1.5,
             }}
           >
             No AI insights yet — run a fresh briefing to see what Claude notices.
@@ -209,7 +215,7 @@ export function InsightsRail({ accent, insights = [], onJump }) {
   );
 }
 
-function InsightRow({ insight, accent, onJump, now, featured }) {
+function InsightRow({ insight, accent, onJump, now, featured, isMobile = false }) {
   const [hovered, setHovered] = useState(false);
   const text = resolveInsight(insight, now);
   if (!text) return null;
@@ -266,7 +272,7 @@ function InsightRow({ insight, accent, onJump, now, featured }) {
     <div
       {...handlers}
       style={{
-        padding: "12px 14px", borderRadius: 10,
+        padding: isMobile ? "10px 12px" : "12px 14px", borderRadius: 10,
         background: innerBg,
         border: hovered ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(255,255,255,0.05)",
         cursor: "pointer", position: "relative",
@@ -274,26 +280,26 @@ function InsightRow({ insight, accent, onJump, now, featured }) {
         display: "flex", alignItems: "flex-start", gap: 10,
       }}
     >
-      <InsightRowContent accent={accent} insight={insight} text={text} />
+      <InsightRowContent accent={accent} insight={insight} text={text} isMobile={isMobile} />
     </div>
   );
 }
 
-function InsightRowContent({ accent, insight, text }) {
+function InsightRowContent({ accent, insight, text, isMobile = false }) {
   return (
     <>
       <div
         style={{
-          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          width: isMobile ? 20 : 22, height: isMobile ? 20 : 22, borderRadius: 6, flexShrink: 0,
           background: `${accent}14`, display: "grid", placeItems: "center",
           marginTop: 1,
         }}
       >
-        <Icon name={insight.icon || "Sparkles"} size={11} color={accent} />
+        <Icon name={insight.icon || "Sparkles"} size={isMobile ? 10 : 11} color={accent} />
       </div>
       <div
         style={{
-          fontSize: 12, color: "rgba(205,214,244,0.85)",
+          fontSize: isMobile ? 11.5 : 12, color: "rgba(205,214,244,0.85)",
           lineHeight: 1.5, textWrap: "pretty", minWidth: 0,
         }}
       >
@@ -303,7 +309,7 @@ function InsightRowContent({ accent, insight, text }) {
   );
 }
 
-export function DeadlinesRail({ accent, deadlines = [], onJump }) {
+export function DeadlinesRail({ accent, deadlines = [], onJump, isMobile = false }) {
   // Keep completed deadlines visible (strikethrough) only while the day isn't
   // past — once today has rolled past their due date they belong on the
   // calendar (which has its own visibility window), not on the dashboard.
@@ -336,6 +342,7 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
     <div data-sect="deadlines">
       <SectionHeader
         title="Deadlines"
+        isMobile={isMobile}
         right={
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <CountBadge n={openCount} />
@@ -371,9 +378,9 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget); }}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
-                    gap: 10, alignItems: "center",
-                    padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    gridTemplateColumns: isMobile ? "16px minmax(0, 1fr)" : showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
+                    gap: 10, alignItems: isMobile ? "start" : "center",
+                    padding: isMobile ? "10px 2px" : "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
                     cursor: "pointer", transition: "background 150ms",
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
@@ -384,7 +391,7 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
                     <div
                       style={{
                         fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
                         marginBottom: 2,
                       }}
                     >
@@ -393,14 +400,20 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
                     <div
                       style={{
                         fontSize: 10.5, color: "rgba(205,214,244,0.45)",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
                       }}
                     >
                       {d.class_name || d.source}
                     </div>
+                    {isMobile && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                        {showPriority && <PriorityFlag level={d.priority} />}
+                        <UrgencyPill days={days} accent={accent} verbose />
+                      </div>
+                    )}
                   </div>
-                  {showPriority && <PriorityFlag level={d.priority} />}
-                  <UrgencyPill days={days} accent={accent} verbose />
+                  {!isMobile && showPriority && <PriorityFlag level={d.priority} />}
+                  {!isMobile && <UrgencyPill days={days} accent={accent} verbose />}
                 </div>
               );
             })}
@@ -421,9 +434,9 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget); }}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
-                    gap: 10, alignItems: "center",
-                    padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    gridTemplateColumns: isMobile ? "16px minmax(0, 1fr)" : showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
+                    gap: 10, alignItems: isMobile ? "start" : "center",
+                    padding: isMobile ? "10px 2px" : "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
                     cursor: "pointer", transition: "background 150ms",
                     opacity: 0.55,
                   }}
@@ -435,7 +448,7 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
                     <div
                       style={{
                         fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
                         marginBottom: 2,
                         textDecoration: "line-through",
                         textDecorationColor: "rgba(205,214,244,0.35)",
@@ -446,14 +459,20 @@ export function DeadlinesRail({ accent, deadlines = [], onJump }) {
                     <div
                       style={{
                         fontSize: 10.5, color: "rgba(205,214,244,0.45)",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
                       }}
                     >
                       {d.class_name || d.source}
                     </div>
+                    {isMobile && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                        {showPriority && <PriorityFlag level={d.priority} />}
+                        <UrgencyPill days={days} accent={accent} verbose />
+                      </div>
+                    )}
                   </div>
-                  {showPriority && <PriorityFlag level={d.priority} />}
-                  <UrgencyPill days={days} accent={accent} verbose />
+                  {!isMobile && showPriority && <PriorityFlag level={d.priority} />}
+                  {!isMobile && <UrgencyPill days={days} accent={accent} verbose />}
                 </div>
               );
             })}
@@ -485,7 +504,7 @@ function PaidChip() {
   );
 }
 
-export function BillsRail({ accent, bills = [], onJump }) {
+export function BillsRail({ accent, bills = [], onJump, isMobile = false }) {
   // Show paid AND unpaid upcoming bills. Drop bills whose due date is strictly
   // in the past (days < 0) — once overdue, they belong on the calendar's
   // history, not the dashboard. Paid bills that are still upcoming remain
@@ -512,6 +531,7 @@ export function BillsRail({ accent, bills = [], onJump }) {
     <div data-sect="bills">
       <SectionHeader
         title="Bills"
+        isMobile={isMobile}
         right={
           <div style={{ fontSize: 10, color: "rgba(205,214,244,0.5)" }}>
             Next 7d ·{" "}
@@ -530,8 +550,8 @@ export function BillsRail({ accent, bills = [], onJump }) {
               onClick={(e) => onJump?.({ kind: "bill", id: b.id, data: b }, e.currentTarget)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "bill", id: b.id, data: b }, e.currentTarget); }}
               style={{
-                display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center",
-                padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+                display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "1fr auto auto", gap: 10, alignItems: isMobile ? "start" : "center",
+                padding: isMobile ? "10px 2px" : "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
                 cursor: "pointer", transition: "background 150ms",
                 opacity: paid ? 0.72 : 1,
               }}
@@ -540,9 +560,9 @@ export function BillsRail({ accent, bills = [], onJump }) {
             >
               <div style={{ minWidth: 0 }}>
                 <div
-                  style={{
-                    fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                style={{
+                  fontSize: 12, color: "#cdd6f4", fontWeight: 500,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     textDecoration: paid ? "line-through" : "none",
                     textDecorationColor: "rgba(205,214,244,0.35)",
                   }}
@@ -552,19 +572,37 @@ export function BillsRail({ accent, bills = [], onJump }) {
                 <div style={{ fontSize: 10.5, color: "rgba(205,214,244,0.45)", marginTop: 2 }}>
                   {b.payee || ""}
                 </div>
+                {isMobile && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                    <div
+                      style={{
+                        fontSize: 11.5, fontWeight: 500,
+                        color: paid ? "#a6e3a1" : "#cdd6f4",
+                        fontVariantNumeric: "tabular-nums",
+                        textDecoration: paid ? "line-through" : "none",
+                        textDecorationColor: paid ? "rgba(166,227,161,0.5)" : "transparent",
+                      }}
+                    >
+                      {formatAmount(b.amount)}
+                    </div>
+                    {paid ? <PaidChip /> : <UrgencyPill days={days} accent={accent} compact verbose />}
+                  </div>
+                )}
               </div>
-              <div
-                style={{
-                  fontSize: 11.5, fontWeight: 500,
-                  color: paid ? "#a6e3a1" : "#cdd6f4",
-                  fontVariantNumeric: "tabular-nums",
-                  textDecoration: paid ? "line-through" : "none",
-                  textDecorationColor: paid ? "rgba(166,227,161,0.5)" : "transparent",
-                }}
-              >
-                {formatAmount(b.amount)}
-              </div>
-              {paid ? <PaidChip /> : <UrgencyPill days={days} accent={accent} compact verbose />}
+              {!isMobile && (
+                <div
+                  style={{
+                    fontSize: 11.5, fontWeight: 500,
+                    color: paid ? "#a6e3a1" : "#cdd6f4",
+                    fontVariantNumeric: "tabular-nums",
+                    textDecoration: paid ? "line-through" : "none",
+                    textDecorationColor: paid ? "rgba(166,227,161,0.5)" : "transparent",
+                  }}
+                >
+                  {formatAmount(b.amount)}
+                </div>
+              )}
+              {!isMobile && (paid ? <PaidChip /> : <UrgencyPill days={days} accent={accent} compact verbose />)}
             </div>
           );
         })}
@@ -574,7 +612,7 @@ export function BillsRail({ accent, bills = [], onJump }) {
   );
 }
 
-export function InboxPeek({ emailAccounts = [], onJump, onOpenInbox }) {
+export function InboxPeek({ emailAccounts = [], onJump, onOpenInbox, isMobile = false }) {
   const flat = useMemo(() => {
     const all = [];
     for (const acc of emailAccounts) {
@@ -593,6 +631,7 @@ export function InboxPeek({ emailAccounts = [], onJump, onOpenInbox }) {
     <div data-sect="inbox-peek">
       <SectionHeader
         title="Inbox peek"
+        isMobile={isMobile}
         right={
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {needsYou > 0 && (
@@ -630,8 +669,8 @@ export function InboxPeek({ emailAccounts = [], onJump, onOpenInbox }) {
             onClick={() => onJump?.({ kind: "email", id: e.id, email: e })}
             onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") onJump?.({ kind: "email", id: e.id, email: e }); }}
             style={{
-              display: "grid", gridTemplateColumns: "18px 1fr auto", gap: 10, alignItems: "center",
-              padding: "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
+              display: "grid", gridTemplateColumns: isMobile ? "18px minmax(0, 1fr)" : "18px 1fr auto", gap: 10, alignItems: isMobile ? "start" : "center",
+              padding: isMobile ? "10px 2px" : "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
               cursor: "pointer",
             }}
             onMouseEnter={(ev) => { ev.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
@@ -653,7 +692,7 @@ export function InboxPeek({ emailAccounts = [], onJump, onOpenInbox }) {
                 style={{
                   fontSize: 12, color: e.read ? "rgba(205,214,244,0.65)" : "#cdd6f4",
                   fontWeight: e.read ? 400 : 600,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
                   marginBottom: 2,
                 }}
               >
@@ -662,20 +701,33 @@ export function InboxPeek({ emailAccounts = [], onJump, onOpenInbox }) {
               <div
                 style={{
                   fontSize: 10.5, color: "rgba(205,214,244,0.45)",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
                 }}
               >
                 {e.from}
               </div>
+              {isMobile && (
+                <div
+                  style={{
+                    fontSize: 9.5, color: "rgba(205,214,244,0.35)",
+                    fontVariantNumeric: "tabular-nums",
+                    marginTop: 6,
+                  }}
+                >
+                  {timeAgo(e.date)}
+                </div>
+              )}
             </div>
-            <div
-              style={{
-                fontSize: 9.5, color: "rgba(205,214,244,0.35)",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {timeAgo(e.date)}
-            </div>
+            {!isMobile && (
+              <div
+                style={{
+                  fontSize: 9.5, color: "rgba(205,214,244,0.35)",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {timeAgo(e.date)}
+              </div>
+            )}
           </div>
         ))}
         {flat.length === 0 && <EmptyRow icon={Inbox} label="Nothing new — inbox is calm" />}

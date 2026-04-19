@@ -24,6 +24,7 @@ import useAutoRefresh from "../hooks/useAutoRefresh";
 import useNotifications from "../hooks/useNotifications";
 import useCustomize from "../hooks/useCustomize";
 import useCalendarRange from "../hooks/useCalendarRange";
+import useIsMobile from "../hooks/useIsMobile";
 
 const DevPanel = import.meta.env.DEV ? lazy(() => import("../components/dev/DevPanel.jsx")) : null;
 
@@ -178,12 +179,13 @@ export default function Dashboard() {
 /* ======================================================================
  * REDESIGN SHELL — tabs + palette + customize + routed body
  * ====================================================================== */
-function RedesignShell({
+export function RedesignShell({
   bd, liveData, calendarRange, refreshHold, handleFullGeneration,
   historyOpen, setHistoryOpen, historyTriggerRef,
   calendarDeadlines, loadCalendarDeadlines,
 }) {
   const customize = useCustomize();
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState(() => {
     try {
       const saved = localStorage.getItem("ea:tab");
@@ -210,6 +212,7 @@ function RedesignShell({
   const showBills = !!liveData.actualConfigured;
   const [calendarFocus, setCalendarFocus] = useState(null);
   const openCalendar = (viewKey, focusDate = null) => {
+    if (isMobile) return;
     const resolved = viewKey === "bills" && !showBills ? "deadlines" : viewKey || calendarView;
     setCalendarView(resolved);
     try { localStorage.setItem("calendar:lastView", resolved); } catch { /* ignore */ }
@@ -222,6 +225,10 @@ function RedesignShell({
     try { localStorage.setItem("calendar:lastView", v); } catch { /* ignore */ }
     if (v === "deadlines") loadCalendarDeadlines();
   };
+
+  useEffect(() => {
+    if (isMobile && calendarOpen) setCalendarOpen(false);
+  }, [isMobile, calendarOpen]);
 
   // Global hotkeys: ⌘K palette, c calendar
   useEffect(() => {
@@ -239,7 +246,7 @@ function RedesignShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calendarOpen]);
+  }, [calendarOpen, isMobile]);
 
   const { accent } = customize;
   const briefing = bd.briefing;
@@ -312,6 +319,7 @@ function RedesignShell({
 
       <ShellHeader
         accent={accent}
+        isMobile={isMobile}
         tab={tab}
         onTab={setTab}
         onOpenPalette={() => setPaletteOpen(true)}
@@ -340,6 +348,7 @@ function RedesignShell({
             calendarRange={calendarRange}
             customize={customize}
             accent={accent}
+            isMobile={isMobile}
             viewingPast={bd.viewingPast}
             onOpenEmail={openEmailInInbox}
             onOpenDeadline={(task, anchor) => {
@@ -392,6 +401,7 @@ function RedesignShell({
         onClose={() => setCustomizeOpen(false)}
         customize={customize}
         tab={tab}
+        isMobile={isMobile}
       />
 
       {historyOpen && (
@@ -404,24 +414,26 @@ function RedesignShell({
         />
       )}
 
-      <CalendarModal
-        open={calendarOpen}
-        onClose={() => setCalendarOpen(false)}
-        view={calendarView}
-        onViewChange={changeCalendarView}
-        focusDate={calendarFocus}
-        eventsData={eventsData}
-        billsData={{
-          schedules: liveData.allSchedules,
-          recentTransactions: liveData.recentTransactions,
-          payeeMap: liveData.payeeMap,
-          actualBudgetUrl: liveData.actualBudgetUrl,
-        }}
-        deadlinesData={{
-          ctm: calendarDeadlines?.ctm || briefing?.ctm,
-          todoist: calendarDeadlines?.todoist || briefing?.todoist,
-        }}
-      />
+      {!isMobile && (
+        <CalendarModal
+          open={calendarOpen}
+          onClose={() => setCalendarOpen(false)}
+          view={calendarView}
+          onViewChange={changeCalendarView}
+          focusDate={calendarFocus}
+          eventsData={eventsData}
+          billsData={{
+            schedules: liveData.allSchedules,
+            recentTransactions: liveData.recentTransactions,
+            payeeMap: liveData.payeeMap,
+            actualBudgetUrl: liveData.actualBudgetUrl,
+          }}
+          deadlinesData={{
+            ctm: calendarDeadlines?.ctm || briefing?.ctm,
+            todoist: calendarDeadlines?.todoist || briefing?.todoist,
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -429,11 +441,13 @@ function RedesignShell({
 /* ======================================================================
  * DASHBOARD BODY — hero + timeline + rails (layout variants)
  * ====================================================================== */
-function DashboardBody({
+export function DashboardBody({
   briefing, liveData, calendarRange, customize, accent,
+  isMobile = false,
   onOpenEmail, onOpenDeadline, onOpenBillsCalendar, onOpenEventsCalendar, onJumpSection,
 }) {
   const { dashboardLayout, density, showInsights, showInboxPeek } = customize;
+  const effectiveLayout = isMobile ? "paper" : dashboardLayout;
   const ctx = useDashboard();
 
   const [events, setEvents] = useState([]);
@@ -479,6 +493,8 @@ function DashboardBody({
     <DashboardHero
       accent={accent}
       density={density}
+      isMobile={isMobile}
+      stack={isMobile}
       briefing={briefing}
       liveWeather={liveData.liveWeather}
       liveCalendar={events}
@@ -502,6 +518,7 @@ function DashboardBody({
     <TodayTimeline
       accent={accent}
       density={density}
+      isMobile={isMobile}
       events={events}
       deadlines={deadlines}
       onJump={handleRailJump}
@@ -513,11 +530,12 @@ function DashboardBody({
       {showInsights && (
         <InsightsRail accent={accent} insights={insights} onJump={handleRailJump} />
       )}
-      <DeadlinesRail accent={accent} deadlines={deadlines} onJump={handleRailJump} />
-      <BillsRail accent={accent} bills={bills} onJump={handleRailJump} />
+      <DeadlinesRail accent={accent} deadlines={deadlines} onJump={handleRailJump} isMobile={isMobile} />
+      <BillsRail accent={accent} bills={bills} onJump={handleRailJump} isMobile={isMobile} />
       {showInboxPeek && (
         <InboxPeek
           accent={accent}
+          isMobile={isMobile}
           emailAccounts={emailAccounts}
           onJump={handleRailJump}
           onOpenInbox={() => onOpenEmail(null)}
@@ -526,9 +544,45 @@ function DashboardBody({
     </>
   );
 
-  if (dashboardLayout === "paper") {
+  if (isMobile) {
     return (
-      <div style={{ maxWidth: 820, margin: "0 auto", padding: "0 20px 80px" }}>
+      <div
+        data-testid="dashboard-body-mobile"
+        data-layout-mode={effectiveLayout}
+        style={{ width: "100%", maxWidth: 640, margin: "0 auto", padding: "0 0 32px" }}
+      >
+        {hero}
+        <div style={{ padding: "20px 16px 0", display: "flex", flexDirection: "column", gap: 24 }}>
+          <DeadlinesRail accent={accent} deadlines={deadlines} onJump={handleRailJump} isMobile />
+          <BillsRail accent={accent} bills={bills} onJump={handleRailJump} isMobile />
+          {showInboxPeek && (
+            <InboxPeek
+              accent={accent}
+              isMobile
+              emailAccounts={emailAccounts}
+              onJump={handleRailJump}
+              onOpenInbox={() => onOpenEmail(null)}
+            />
+          )}
+          {showInsights && (
+            <InsightsRail
+              accent={accent}
+              insights={insights}
+              onJump={handleRailJump}
+              isMobile
+              maxItems={2}
+            />
+          )}
+        </div>
+        <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "20px 16px 0" }} />
+        {timeline}
+      </div>
+    );
+  }
+
+  if (effectiveLayout === "paper") {
+    return (
+      <div data-layout-mode={effectiveLayout} style={{ maxWidth: 820, margin: "0 auto", padding: "0 20px 80px" }}>
         {hero}
         {timeline}
         <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "0 36px" }} />
@@ -539,9 +593,9 @@ function DashboardBody({
     );
   }
 
-  if (dashboardLayout === "command") {
+  if (effectiveLayout === "command") {
     return (
-      <div style={{ maxWidth: 1520, margin: "0 auto" }}>
+      <div data-layout-mode={effectiveLayout} style={{ maxWidth: 1520, margin: "0 auto" }}>
         {hero}
         <div
           style={{
@@ -578,7 +632,7 @@ function DashboardBody({
 
   // focus (default)
   return (
-    <div style={{ maxWidth: 1440, margin: "0 auto" }}>
+    <div data-layout-mode={effectiveLayout} style={{ maxWidth: 1440, margin: "0 auto" }}>
       {hero}
       <div
         style={{

@@ -1,0 +1,202 @@
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import DashboardHero from "./DashboardHero.jsx";
+import TodayTimeline from "./TodayTimeline.jsx";
+import { DashboardProvider } from "../../context/DashboardContext.jsx";
+import { DashboardBody } from "../../pages/Dashboard.jsx";
+import CustomizePanel from "../shell/CustomizePanel.jsx";
+
+afterEach(() => {
+  cleanup();
+});
+
+function makeBriefing(overrides = {}) {
+  return {
+    model: "Claude",
+    aiInsights: [{ id: "ins-1", text: "You have a heavier deadline cluster than usual." }],
+    weather: { temp: 71, condition: "Sunny", city: "Los Angeles" },
+    calendar: [],
+    ctm: {
+      upcoming: [
+        { id: "ctm-1", title: "Finalize deck", due_date: "2026-04-20", source: "canvas", class_name: "Ops" },
+      ],
+    },
+    todoist: {
+      upcoming: [
+        { id: "todo-1", title: "Reply to recruiter", due_date: "2026-04-19", source: "todoist", priority: 1, status: "open" },
+      ],
+    },
+    emails: {
+      summary: "The day is manageable if you handle the near-term deadlines first.",
+      accounts: [
+        {
+          important: [
+            {
+              id: "email-1",
+              subject: "Need approval on the revised timeline",
+              from: "Alex",
+              date: "2026-04-19T15:30:00.000Z",
+              read: false,
+            },
+          ],
+          unread: 1,
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
+function renderDashboardBody({ isMobile = false, dashboardLayout = "focus", showInsights = true } = {}) {
+  const briefing = makeBriefing();
+  const liveData = {
+    liveBills: [{ id: "bill-1", name: "Rent", amount: 1800, next_date: "2026-04-21", payee: "Landlord", paid: false }],
+    liveWeather: briefing.weather,
+    liveEmails: [],
+  };
+
+  return render(
+    <DashboardProvider briefing={briefing} setBriefing={() => {}} setCalendarDeadlines={() => {}}>
+      <DashboardBody
+        briefing={briefing}
+        liveData={liveData}
+        calendarRange={{
+          ensureRange: vi.fn().mockResolvedValue([]),
+          getEvents: vi.fn(),
+          hasMonth: vi.fn(),
+          isMonthLoading: vi.fn(),
+          loading: false,
+          error: null,
+        }}
+        customize={{
+          dashboardLayout,
+          density: "comfortable",
+          showInsights,
+          showInboxPeek: true,
+        }}
+        accent="#cba6da"
+        isMobile={isMobile}
+        onOpenEmail={() => {}}
+        onOpenDeadline={() => {}}
+        onOpenBillsCalendar={() => {}}
+        onOpenEventsCalendar={() => {}}
+        onJumpSection={() => {}}
+      />
+    </DashboardProvider>,
+  );
+}
+
+describe("mobile dashboard layout", () => {
+  it("forces the mobile dashboard body into paper mode and keeps insights as a compact section", () => {
+    renderDashboardBody({ isMobile: true, dashboardLayout: "command", showInsights: true });
+
+    const body = screen.getByTestId("dashboard-body-mobile");
+    expect(body.getAttribute("data-layout-mode")).toBe("paper");
+    expect(screen.getByText("AI noticed")).toBeTruthy();
+    expect(document.querySelector('[data-sect="deadlines"]')).toBeTruthy();
+    expect(document.querySelector('[data-sect="bills"]')).toBeTruthy();
+    expect(document.querySelector('[data-sect="inbox-peek"]')).toBeTruthy();
+    expect(document.querySelector('[data-sect="insights"]')).toBeTruthy();
+    expect(document.querySelector('[data-sect="timeline"]')).toBeTruthy();
+
+    const deadlines = document.querySelector('[data-sect="deadlines"]');
+    const bills = document.querySelector('[data-sect="bills"]');
+    const inboxPeek = document.querySelector('[data-sect="inbox-peek"]');
+    const insights = document.querySelector('[data-sect="insights"]');
+    const timeline = document.querySelector('[data-sect="timeline"]');
+    expect(deadlines.compareDocumentPosition(bills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bills.compareDocumentPosition(inboxPeek) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(inboxPeek.compareDocumentPosition(insights) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(insights.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps desktop layout selection when not mobile", () => {
+    renderDashboardBody({ isMobile: false, dashboardLayout: "command" });
+
+    expect(screen.getByText("AI noticed")).toBeTruthy();
+    const layoutRoot = document.querySelector('[data-layout-mode="command"]');
+    expect(layoutRoot).toBeTruthy();
+  });
+});
+
+describe("DashboardHero mobile layout", () => {
+  it("stacks mobile callouts into a single column", () => {
+    render(
+      <DashboardHero
+        accent="#cba6da"
+        density="comfortable"
+        isMobile
+        briefing={makeBriefing()}
+        liveBills={[{ id: "bill-1", name: "Rent", amount: 1800, next_date: "2026-04-21", payee: "Landlord", paid: false }]}
+        liveCalendar={[]}
+        liveWeather={{ temp: 71, condition: "Sunny", city: "Los Angeles" }}
+        onJump={() => {}}
+      />,
+    );
+
+    expect(screen.getByTestId("dashboard-hero-mobile")).toBeTruthy();
+    expect(screen.getByTestId("dashboard-hero-callouts").style.gridTemplateColumns).toBe("1fr");
+    expect(screen.queryByText("You have a heavier deadline cluster than usual.")).toBeNull();
+  });
+});
+
+describe("CustomizePanel mobile options", () => {
+  it("hides dashboard layout and density controls on mobile", () => {
+    render(
+      <CustomizePanel
+        open
+        onClose={() => {}}
+        tab="dashboard"
+        isMobile
+        customize={{
+          accent: "#cba6da",
+          serifChoice: "Instrument Serif",
+          dashboardLayout: "focus",
+          inboxLayout: "two-pane",
+          inboxGrouping: "swimlanes",
+          density: "comfortable",
+          inboxDensity: "default",
+          aiVerbosity: "standard",
+          showInsights: true,
+          showInboxPeek: true,
+          showPreview: true,
+          sidebarCompact: false,
+          setKey: () => {},
+          reset: () => {},
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Dashboard layout")).toBeNull();
+    expect(screen.queryByText("Dashboard density")).toBeNull();
+    expect(screen.getByText("Show AI insights")).toBeTruthy();
+  });
+});
+
+describe("TodayTimeline mobile layout", () => {
+  it("uses the mobile row layout without the desktop hanging gutter", () => {
+    render(
+      <TodayTimeline
+        accent="#cba6da"
+        isMobile
+        events={[
+          {
+            id: "ev-1",
+            title: "Staff sync",
+            startMs: new Date("2026-04-19T18:00:00.000Z").getTime(),
+            endMs: new Date("2026-04-19T18:30:00.000Z").getTime(),
+            location: "Zoom",
+          },
+        ]}
+        deadlines={[]}
+        onJump={() => {}}
+      />,
+    );
+
+    const row = screen.getByTestId("timeline-row-mobile");
+    const dot = screen.getByTestId("timeline-row-dot");
+
+    expect(row.style.gridTemplateColumns).toBe("52px minmax(0, 1fr)");
+    expect(dot.style.left).toBe("-30px");
+  });
+});

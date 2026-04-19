@@ -79,7 +79,7 @@ function SectionHeader({ title, right }) {
 // event text, and the gradient line fades from the spine rightward across the
 // content area. `top` is computed from DOM measurements of row refs so the
 // marker slides smoothly within a live event and at row boundaries.
-function NowMarker({ accent, now, top, spineLeft, pillGap }) {
+function NowMarker({ accent, now, top, spineLeft, pillGap, isMobile = false }) {
   return (
     <div
       style={{
@@ -91,10 +91,12 @@ function NowMarker({ accent, now, top, spineLeft, pillGap }) {
       <div
         style={{
           position: "absolute",
-          right: `calc(100% - ${spineLeft - 6 - pillGap}px)`,
+          ...(isMobile
+            ? { left: spineLeft + 10 }
+            : { right: `calc(100% - ${spineLeft - 6 - pillGap}px)` }),
           top: 0, transform: "translateY(-50%)",
-          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase",
-          color: accent, padding: "2px 8px",
+          fontSize: isMobile ? 9 : 9.5, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase",
+          color: accent, padding: isMobile ? "2px 7px" : "2px 8px",
           background: `${accent}15`, borderRadius: 99, border: `1px solid ${accent}30`,
           whiteSpace: "nowrap",
         }}
@@ -131,7 +133,7 @@ function NowMarker({ accent, now, top, spineLeft, pillGap }) {
   );
 }
 
-function TimelineRow({ item, now, accent, onJump }) {
+function TimelineRow({ item, now, accent, onJump, isMobile = false }) {
   let Icon, iconColor, title, sub, meta, leftLabel, urgency, jumpPayload;
   let isPast = false, isLive = false;
   let priorityLevel = null;
@@ -199,9 +201,11 @@ function TimelineRow({ item, now, accent, onJump }) {
     : railDotColor
       ? `0 0 0 1px ${effectiveRailDotColor}18`
       : "none";
+  const timeColumnWidth = isMobile ? 52 : 54;
 
   return (
     <div
+      data-testid={isMobile ? "timeline-row-mobile" : "timeline-row-desktop"}
       role="button"
       tabIndex={0}
       onClick={(e) => onJump?.(jumpPayload, e.currentTarget)}
@@ -211,7 +215,7 @@ function TimelineRow({ item, now, accent, onJump }) {
       }}
       style={{
         position: "relative",
-        padding: "9px 12px",
+        padding: isMobile ? "10px 10px 10px 22px" : "9px 12px",
         marginBottom: 4,
         borderRadius: 9,
         cursor: "pointer",
@@ -219,9 +223,9 @@ function TimelineRow({ item, now, accent, onJump }) {
         border: "1px solid transparent",
         transition: "all 130ms",
         display: "grid",
-        gridTemplateColumns: "54px 1fr auto",
-        gap: 14,
-        alignItems: "center",
+        gridTemplateColumns: isMobile ? `${timeColumnWidth}px minmax(0, 1fr)` : `${timeColumnWidth}px 1fr auto`,
+        gap: isMobile ? 10 : 14,
+        alignItems: isMobile ? "start" : "center",
         background: isLive ? `${accent}08` : "transparent",
         ...(isLive ? { borderColor: `${accent}30` } : {}),
       }}
@@ -235,10 +239,11 @@ function TimelineRow({ item, now, accent, onJump }) {
     >
       {/* Rail dot */}
       <div
+        data-testid="timeline-row-dot"
         style={{
           position: "absolute",
-          left: -22,
-          top: 14,
+          left: isMobile ? -30 : -22,
+          top: isMobile ? 13 : 14,
           width: 13,
           height: 13,
           borderRadius: 99,
@@ -265,11 +270,12 @@ function TimelineRow({ item, now, accent, onJump }) {
       {/* Time column */}
       <div
         style={{
-          fontSize: 11.5,
+          fontSize: isMobile ? 10.5 : 11.5,
           fontWeight: 500,
           fontVariantNumeric: "tabular-nums",
           color: isLive ? dotColor : "rgba(205,214,244,0.7)",
           letterSpacing: 0.2,
+          paddingTop: isMobile ? 1 : 0,
         }}
       >
         {leftLabel}
@@ -280,20 +286,24 @@ function TimelineRow({ item, now, accent, onJump }) {
         <div
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: isMobile ? "flex-start" : "center",
+            flexWrap: isMobile ? "wrap" : "nowrap",
             gap: 8,
             marginBottom: 2,
           }}
         >
-          <Icon size={11} color={iconColor || "rgba(205,214,244,0.55)"} />
+          <Icon size={isMobile ? 10 : 11} color={iconColor || "rgba(205,214,244,0.55)"} />
           <div
             style={{
-              fontSize: 13,
+              fontSize: isMobile ? 12.5 : 13,
               fontWeight: 500,
               color: "#cdd6f4",
               overflow: "hidden",
               textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              whiteSpace: isMobile ? "normal" : "nowrap",
+              lineHeight: isMobile ? 1.35 : "normal",
+              flex: 1,
+              minWidth: 0,
               textDecoration: isPast ? "line-through" : "none",
               textDecorationColor: "rgba(205,214,244,0.25)",
             }}
@@ -338,20 +348,38 @@ function TimelineRow({ item, now, accent, onJump }) {
         {sub && (
           <div
             style={{
-              fontSize: 11,
+              fontSize: isMobile ? 10.5 : 11,
               color: "rgba(205,214,244,0.45)",
               overflow: "hidden",
               textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              whiteSpace: isMobile ? "normal" : "nowrap",
+              lineHeight: isMobile ? 1.35 : "normal",
             }}
           >
             {sub}
           </div>
         )}
+        {isMobile && meta && (
+          <div
+            style={{
+              marginTop: 6,
+              display: "inline-flex",
+              maxWidth: "100%",
+              fontSize: isMobile ? 10 : 10.5,
+              color: "rgba(205,214,244,0.5)",
+              fontVariantNumeric: "tabular-nums",
+              padding: "2px 8px",
+              borderRadius: 6,
+              background: "rgba(255,255,255,0.03)",
+            }}
+          >
+            {meta}
+          </div>
+        )}
       </div>
 
       {/* Meta */}
-      {meta && (
+      {!isMobile && meta && (
         <div
           style={{
             fontSize: 10.5,
@@ -378,6 +406,7 @@ function TimelineRow({ item, now, accent, onJump }) {
 export default function TodayTimeline({
   accent = "#cba6da",
   density = "comfortable",
+  isMobile = false,
   events = [],
   deadlines = [],
   onJump,
@@ -420,7 +449,8 @@ export default function TodayTimeline({
   return (
     <div
       data-sect="timeline"
-      style={{ padding: density === "compact" ? "18px 32px" : "24px 36px" }}
+      data-testid={isMobile ? "today-timeline-mobile" : "today-timeline"}
+      style={{ padding: isMobile ? "18px 16px 20px" : density === "compact" ? "18px 32px" : "24px 36px" }}
     >
       <SectionHeader
         title={
@@ -434,11 +464,14 @@ export default function TodayTimeline({
             aria-label="Timeline filters"
             style={{
               display: "flex",
+              flexWrap: isMobile ? "wrap" : "nowrap",
               gap: 2,
               padding: 2,
               borderRadius: 8,
               background: "rgba(255,255,255,0.03)",
               border: "1px solid rgba(255,255,255,0.05)",
+              justifyContent: isMobile ? "flex-start" : "flex-end",
+              maxWidth: isMobile ? "100%" : "none",
             }}
           >
             {[
@@ -456,10 +489,10 @@ export default function TodayTimeline({
                     setFilters((prev) => ({ ...prev, [f.id]: !prev[f.id] }))
                   }
                   style={{
-                    padding: "4px 10px",
+                    padding: isMobile ? "6px 9px" : "4px 10px",
                     borderRadius: 6,
                     cursor: "pointer",
-                    fontSize: 10.5,
+                    fontSize: isMobile ? 10 : 10.5,
                     fontFamily: "inherit",
                     letterSpacing: 0.2,
                     background: active ? `${accent}1f` : "transparent",
@@ -510,6 +543,7 @@ export default function TodayTimeline({
             accent={accent}
             onJump={onJump}
             isFirst={gi === 0}
+            isMobile={isMobile}
           />
         ))}
         {groups.length === 0 && (
@@ -536,8 +570,10 @@ export default function TodayTimeline({
 const GUTTER = 130;
 const SPINE_LEFT = GUTTER - 16; // spine sits 16px before row content
 const PILL_SPINE_GAP = 16; // horizontal gap between pill's right edge and the spine dot
+const MOBILE_GUTTER = 30;
+const MOBILE_SPINE_LEFT = 6;
 
-function DayGroup({ day, items, now, accent, onJump, isFirst }) {
+function DayGroup({ day, items, now, accent, onJump, isFirst, isMobile = false }) {
   const label = dayBucketLabel(day, now);
   const hideHeader = isFirst && day === 0;
   const isToday = day === 0;
@@ -545,6 +581,9 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
 
   const rowRefs = useRef([]);
   const [markerTop, setMarkerTop] = useState(null);
+
+  const gutter = isMobile ? MOBILE_GUTTER : GUTTER;
+  const spineLeft = isMobile ? MOBILE_SPINE_LEFT : SPINE_LEFT;
 
   // Position the now-marker by measuring rendered row offsets. Live events
   // get a proportional slide (progress through their duration); elsewhere the
@@ -619,13 +658,14 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
             gap: 10,
             marginBottom: 10,
             paddingLeft: 2,
+            flexWrap: isMobile ? "wrap" : "nowrap",
           }}
         >
           {showRelativeTooltip ? (
             <Tooltip text={formatFullDateForOffset(day, now)} sideOffset={12}>
               <div
                 style={{
-                  fontSize: 10.5,
+                  fontSize: isMobile ? 10 : 10.5,
                   letterSpacing: 0.8,
                   textTransform: "uppercase",
                   fontWeight: 600,
@@ -638,7 +678,7 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
           ) : (
             <div
               style={{
-                fontSize: 10.5,
+                fontSize: isMobile ? 10 : 10.5,
                 letterSpacing: 0.8,
                 textTransform: "uppercase",
                 fontWeight: 600,
@@ -660,14 +700,14 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
       <div
         style={{
           position: "relative",
-          paddingLeft: GUTTER,
+          paddingLeft: gutter,
           minHeight: isToday && items.length === 0 ? 28 : undefined,
         }}
       >
         <div
           style={{
             position: "absolute",
-            left: SPINE_LEFT,
+            left: spineLeft,
             top: 8,
             bottom: 8,
             width: 1,
@@ -681,15 +721,15 @@ function DayGroup({ day, items, now, accent, onJump, isFirst }) {
               rowRefs.current[i] = el;
             }}
           >
-            <TimelineRow item={it} now={now} accent={accent} onJump={onJump} />
+            <TimelineRow item={it} now={now} accent={accent} onJump={onJump} isMobile={isMobile} />
           </div>
         ))}
-        {isToday && markerTop != null && (
+        {!isMobile && isToday && markerTop != null && (
           <NowMarker
             accent={accent}
             now={now}
             top={markerTop}
-            spineLeft={SPINE_LEFT}
+            spineLeft={spineLeft}
             pillGap={PILL_SPINE_GAP}
           />
         )}

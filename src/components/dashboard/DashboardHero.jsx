@@ -68,6 +68,7 @@ export default function DashboardHero({
   accent = "#cba6da",
   density = "comfortable",
   stack = false,
+  isMobile = false,
   briefing,
   liveWeather,
   liveCalendar,
@@ -108,12 +109,17 @@ export default function DashboardHero({
   );
 
   const compact = density === "compact";
+  const stacked = stack || isMobile;
+  const outerPadding = isMobile
+    ? "20px 16px 18px"
+    : compact ? "24px 28px 20px" : "40px 36px 32px";
   const WeatherIcon = (weather?.icon && WEATHER_ICONS[weather.icon]) || Sun;
 
   return (
     <div
+      data-testid={isMobile ? "dashboard-hero-mobile" : "dashboard-hero"}
       style={{
-        padding: compact ? "24px 28px 20px" : "40px 36px 32px",
+        padding: outerPadding,
         borderBottom: "1px solid rgba(255,255,255,0.05)",
         position: "relative",
         overflow: "hidden",
@@ -142,8 +148,8 @@ export default function DashboardHero({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: stack ? "1fr" : "minmax(0, 1fr) 240px",
-          gap: stack ? 18 : 40,
+          gridTemplateColumns: stacked ? "1fr" : "minmax(0, 1fr) 240px",
+          gap: stacked ? (isMobile ? 14 : 18) : 40,
           alignItems: "start",
           position: "relative",
         }}
@@ -154,13 +160,14 @@ export default function DashboardHero({
             style={{
               fontSize: 10,
               fontWeight: 600,
-              letterSpacing: 2.6,
+              letterSpacing: isMobile ? 2 : 2.6,
               textTransform: "uppercase",
               color: "rgba(205,214,244,0.55)",
-              marginBottom: 10,
+              marginBottom: isMobile ? 8 : 10,
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
+              flexWrap: "wrap",
             }}
           >
             <span
@@ -179,24 +186,24 @@ export default function DashboardHero({
           <h1
             className="ea-display"
             style={{
-              margin: "0 0 14px",
-              fontSize: compact ? 28 : 40,
+              margin: isMobile ? "0 0 10px" : "0 0 14px",
+              fontSize: isMobile ? 24 : compact ? 28 : 40,
               fontWeight: 300,
-              letterSpacing: -0.6,
-              lineHeight: 1.1,
+              letterSpacing: isMobile ? -0.4 : -0.6,
+              lineHeight: isMobile ? 1.08 : 1.1,
               color: "#cdd6f4",
               textWrap: "balance",
             }}
           >
             <span style={{ display: "block" }}>{greet.text}.</span>
-            {stateOfDay.headline && (
+            {!isMobile && stateOfDay.headline && (
               <span
                 style={{
                   color: "rgba(205,214,244,0.5)",
                   fontStyle: "italic",
                   fontWeight: 300,
                   display: "block",
-                  marginTop: 2,
+                  marginTop: isMobile ? 4 : 2,
                 }}
               >
                 {stateOfDay.headline}
@@ -207,10 +214,10 @@ export default function DashboardHero({
           {stateOfDay.summary && (
             <p
               style={{
-                margin: "0 0 8px",
-                maxWidth: 680,
-                fontSize: compact ? 14 : 15,
-                lineHeight: 1.65,
+                margin: "0 0 6px",
+                maxWidth: isMobile ? "100%" : 680,
+                fontSize: isMobile ? 13 : compact ? 14 : 15,
+                lineHeight: isMobile ? 1.55 : 1.65,
                 color: "rgba(205,214,244,0.72)",
                 textWrap: "pretty",
               }}
@@ -225,12 +232,12 @@ export default function DashboardHero({
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              marginTop: 6,
-              padding: "3px 9px",
+              marginTop: isMobile ? 4 : 6,
+              padding: isMobile ? "2px 8px" : "3px 9px",
               borderRadius: 99,
               background: "rgba(255,255,255,0.025)",
               border: "1px solid rgba(255,255,255,0.05)",
-              fontSize: 10,
+              fontSize: isMobile ? 9 : 10,
               letterSpacing: 0.3,
               color: "rgba(205,214,244,0.4)",
             }}
@@ -245,15 +252,15 @@ export default function DashboardHero({
         <div
           style={{
             display: "flex",
-            flexDirection: stack ? "row" : "column",
-            gap: 10,
+            flexDirection: stacked && !isMobile ? "row" : "column",
+            gap: isMobile ? 8 : 10,
             minWidth: 0,
           }}
         >
           <div
             style={{
-              flex: stack ? 1 : "unset",
-              padding: "14px 16px",
+              flex: stacked && !isMobile ? 1 : "unset",
+              padding: isMobile ? "12px 14px" : "14px 16px",
               borderRadius: 12,
               background:
                 "linear-gradient(155deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
@@ -266,8 +273,8 @@ export default function DashboardHero({
           >
             <div
               style={{
-                width: 42,
-                height: 42,
+                width: isMobile ? 38 : 42,
+                height: isMobile ? 38 : 42,
                 borderRadius: 10,
                 background: "rgba(255,255,255,0.03)",
                 display: "grid",
@@ -278,18 +285,18 @@ export default function DashboardHero({
             </div>
             <div>
               <div
-                style={{
-                  fontSize: 18,
-                  fontWeight: 500,
-                  color: "#cdd6f4",
-                  lineHeight: 1,
+              style={{
+                fontSize: isMobile ? 16 : 18,
+                fontWeight: 500,
+                color: "#cdd6f4",
+                lineHeight: 1,
                 }}
               >
                 {weather?.temp != null ? `${Math.round(weather.temp)}°` : "—"}
               </div>
               <div
-                style={{
-                  fontSize: 10.5,
+              style={{
+                  fontSize: isMobile ? 10 : 10.5,
                   color: "rgba(205,214,244,0.5)",
                   marginTop: 3,
                   letterSpacing: 0.2,
@@ -303,8 +310,8 @@ export default function DashboardHero({
 
           <div
             style={{
-              flex: stack ? 1 : "unset",
-              padding: "10px 14px",
+              flex: stacked && !isMobile ? 1 : "unset",
+              padding: isMobile ? "10px 12px" : "10px 14px",
               borderRadius: 12,
               background: "rgba(255,255,255,0.025)",
               border: "1px solid rgba(255,255,255,0.05)",
@@ -312,7 +319,7 @@ export default function DashboardHero({
           >
             <div
               style={{
-                fontSize: 9.5,
+                fontSize: isMobile ? 9 : 9.5,
                 letterSpacing: 0.8,
                 textTransform: "uppercase",
                 color: "rgba(205,214,244,0.4)",
@@ -321,7 +328,7 @@ export default function DashboardHero({
             >
               Focus window
             </div>
-            <div style={{ fontSize: 12, color: "#cdd6f4", lineHeight: 1.4 }}>
+            <div style={{ fontSize: isMobile ? 11.5 : 12, color: "#cdd6f4", lineHeight: 1.4 }}>
               {nextFocusWindow(events, now) ||
                 "Calendar looks open — pick your block."}
             </div>
@@ -331,11 +338,12 @@ export default function DashboardHero({
 
       {theCallouts.length > 0 && (
         <div
+          data-testid="dashboard-hero-callouts"
           style={{
             display: "grid",
-            gridTemplateColumns: `repeat(${theCallouts.length}, 1fr)`,
-            gap: 10,
-            marginTop: compact ? 22 : 28,
+            gridTemplateColumns: isMobile ? "1fr" : `repeat(${theCallouts.length}, 1fr)`,
+            gap: isMobile ? 8 : 10,
+            marginTop: isMobile ? 16 : compact ? 22 : 28,
             position: "relative",
           }}
         >
@@ -344,6 +352,7 @@ export default function DashboardHero({
               key={i}
               {...c}
               accent={accent}
+              isMobile={isMobile}
               onJump={(anchor) => onJump?.(c, anchor)}
             />
           ))}
@@ -353,7 +362,7 @@ export default function DashboardHero({
   );
 }
 
-function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind }) {
+function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind, isMobile = false }) {
   const Icon = icon;
   const colors = {
     high:   { bar: "#f38ba8", dot: "#f38ba8" },
@@ -370,7 +379,7 @@ function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind }) {
       onClick={(e) => onJump?.(e.currentTarget)}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.(e.currentTarget); }}
       style={{
-        padding: "14px 16px", borderRadius: 11,
+        padding: isMobile ? "12px 14px" : "14px 16px", borderRadius: 11,
         background: "rgba(255,255,255,0.025)",
         border: "1px solid rgba(255,255,255,0.06)",
         cursor: "pointer", position: "relative", overflow: "hidden",
@@ -390,16 +399,16 @@ function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind }) {
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         <div
           style={{
-            width: 22, height: 22, borderRadius: 6,
+            width: isMobile ? 20 : 22, height: isMobile ? 20 : 22, borderRadius: 6,
             background: "rgba(255,255,255,0.04)",
             display: "grid", placeItems: "center",
           }}
         >
-          <Icon size={11} color={uc.dot} />
+          <Icon size={isMobile ? 10 : 11} color={uc.dot} />
         </div>
         <div
           style={{
-            fontSize: 9.5, letterSpacing: 0.6, textTransform: "uppercase",
+            fontSize: isMobile ? 9 : 9.5, letterSpacing: 0.6, textTransform: "uppercase",
             color: "rgba(205,214,244,0.45)",
           }}
         >
@@ -408,7 +417,7 @@ function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind }) {
         <div style={{ flex: 1 }} />
         <div
           style={{
-            fontSize: 10.5, fontWeight: 600, letterSpacing: 0.2,
+            fontSize: isMobile ? 10 : 10.5, fontWeight: 600, letterSpacing: 0.2,
             color: uc.dot,
           }}
         >
@@ -418,7 +427,7 @@ function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind }) {
 
       <div
         style={{
-          fontSize: 14, fontWeight: 500, color: "#cdd6f4", lineHeight: 1.35,
+          fontSize: isMobile ? 13 : 14, fontWeight: 500, color: "#cdd6f4", lineHeight: 1.35,
           marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}
       >
@@ -427,7 +436,7 @@ function Callout({ icon, lead, title, sub, urgency, accent, onJump, kind }) {
       {sub && (
         <div
           style={{
-            fontSize: 11.5, color: "rgba(205,214,244,0.55)",
+            fontSize: isMobile ? 11 : 11.5, color: "rgba(205,214,244,0.55)",
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}
         >

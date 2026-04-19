@@ -37,6 +37,7 @@ function Kbd({ children }) {
  */
 export default function ShellHeader({
   accent,
+  isMobile = false,
   tab,
   onTab,
   onOpenPalette,
@@ -78,9 +79,10 @@ export default function ShellHeader({
 
   return (
     <div
+      data-testid={isMobile ? "shell-header-mobile" : "shell-header-desktop"}
       style={{
         display: "flex", alignItems: "center", gap: 12,
-        padding: "12px 20px",
+        padding: isMobile ? "10px 12px" : "12px 20px",
         borderBottom: "1px solid rgba(255,255,255,0.05)",
         background: "rgba(11,11,19,0.6)",
         backdropFilter: "blur(12px)",
@@ -88,10 +90,10 @@ export default function ShellHeader({
       }}
     >
       {/* Logo identity */}
-      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 7 : 9, flexShrink: 0 }}>
         <div
           style={{
-            width: 22, height: 22, borderRadius: 7,
+            width: isMobile ? 20 : 22, height: isMobile ? 20 : 22, borderRadius: 7,
             background: `linear-gradient(135deg, ${accent}, ${accent}60)`,
             display: "grid", placeItems: "center",
             boxShadow: `0 0 18px ${accent}38`,
@@ -101,7 +103,7 @@ export default function ShellHeader({
         </div>
         <div
           style={{
-            fontSize: 12, fontWeight: 600, letterSpacing: 0.4,
+            fontSize: isMobile ? 11 : 12, fontWeight: 600, letterSpacing: 0.4,
             color: "rgba(205,214,244,0.85)",
           }}
         >
@@ -115,6 +117,7 @@ export default function ShellHeader({
           display: "flex", gap: 2, padding: 3, borderRadius: 10,
           background: "rgba(255,255,255,0.03)",
           border: "1px solid rgba(255,255,255,0.05)",
+          minWidth: 0,
         }}
       >
         {["dashboard", "inbox"].map((t) => {
@@ -125,15 +128,17 @@ export default function ShellHeader({
               type="button"
               onClick={() => onTab(t)}
               style={{
-                padding: "5px 12px", borderRadius: 7, border: "none", cursor: "pointer",
-                fontSize: 11.5, fontWeight: 600, letterSpacing: 0.3, fontFamily: "inherit",
+                padding: isMobile ? "7px 10px" : "5px 12px",
+                borderRadius: 7, border: "none", cursor: "pointer",
+                fontSize: isMobile ? 10.5 : 11.5, fontWeight: 600, letterSpacing: 0.3, fontFamily: "inherit",
                 background: tab === t ? "rgba(255,255,255,0.06)" : "transparent",
                 color: tab === t ? "#cdd6f4" : "rgba(205,214,244,0.45)",
                 display: "inline-flex", alignItems: "center", gap: 6,
                 transition: "all 150ms",
+                minWidth: 0,
               }}
             >
-              {t === "dashboard" ? <LayoutList size={12} /> : <Inbox size={12} />}
+              {t === "dashboard" ? <LayoutList size={isMobile ? 11 : 12} /> : <Inbox size={isMobile ? 11 : 12} />}
               {showUnread && (
                 <span
                   title={`${liveUnreadCount} untriaged`}
@@ -150,8 +155,8 @@ export default function ShellHeader({
                   {liveUnreadCount > 99 ? "99+" : liveUnreadCount}
                 </span>
               )}
-              {t === "dashboard" ? "Dashboard" : "Inbox"}
-              <Kbd>{t === "dashboard" ? "1" : "2"}</Kbd>
+              <span>{t === "dashboard" ? "Dashboard" : "Inbox"}</span>
+              {!isMobile && <Kbd>{t === "dashboard" ? "1" : "2"}</Kbd>}
             </button>
           );
         })}
@@ -160,11 +165,12 @@ export default function ShellHeader({
       <div style={{ flex: 1 }} />
 
       {/* Palette trigger */}
-      <PaletteTriggerButton onOpenPalette={onOpenPalette} />
+      {!isMobile && <PaletteTriggerButton onOpenPalette={onOpenPalette} />}
 
       {/* Next briefing pill */}
-      {nextBriefingLabel && (
+      {!isMobile && nextBriefingLabel && (
         <div
+          data-testid="shell-header-next-briefing"
           style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: "4px 10px", borderRadius: 8,
@@ -187,6 +193,7 @@ export default function ShellHeader({
       {/* Refresh — tap for quick, hold for full AI regen */}
       <RefreshButton
         accent={accent}
+        isMobile={isMobile}
         refreshHold={refreshHold}
         refreshing={refreshing}
         generating={generating}
@@ -211,15 +218,17 @@ export default function ShellHeader({
             <MenuItem
               icon={History}
               label="Briefing history"
-              kbd="H"
+              kbd={isMobile ? null : "H"}
               onClick={() => { setMenuOpen(false); onOpenHistory?.(); }}
             />
-            <MenuItem
-              icon={LayoutList}
-              label="Calendar"
-              kbd="C"
-              onClick={() => { setMenuOpen(false); onOpenCalendar?.(); }}
-            />
+            {!isMobile && (
+              <MenuItem
+                icon={LayoutList}
+                label="Calendar"
+                kbd="C"
+                onClick={() => { setMenuOpen(false); onOpenCalendar?.(); }}
+              />
+            )}
             <MenuItem
               icon={SettingsIcon}
               label="Customize"
@@ -347,6 +356,7 @@ function PaletteTriggerButton({ onOpenPalette }) {
   return (
     <button
       type="button"
+      aria-label="Open command palette"
       onClick={onOpenPalette}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => { setHover(false); setPressed(false); }}
@@ -376,7 +386,7 @@ function PaletteTriggerButton({ onOpenPalette }) {
 // Refresh pill. Hover treatment is suppressed while refreshing/generating (the
 // button is disabled-looking) and the lift is only applied when no hold is in
 // progress — otherwise the translate fights the hold-progress fill overlay.
-function RefreshButton({ accent, refreshHold, refreshing, generating, holdPct, onQuickRefresh }) {
+function RefreshButton({ accent, isMobile = false, refreshHold, refreshing, generating, holdPct, onQuickRefresh }) {
   const [hover, setHover] = useState(false);
   const [pressed, setPressed] = useState(false);
   const busy = refreshing || generating;
@@ -385,6 +395,7 @@ function RefreshButton({ accent, refreshHold, refreshing, generating, holdPct, o
   return (
     <button
       type="button"
+      aria-label="Refresh dashboard"
       onPointerDown={(e) => { setPressed(true); refreshHold?.startHold?.(e); }}
       onPointerUp={(e) => { setPressed(false); refreshHold?.endHold?.(e); }}
       onPointerLeave={() => { setPressed(false); setHover(false); refreshHold?.endHold?.(true); }}
@@ -393,18 +404,18 @@ function RefreshButton({ accent, refreshHold, refreshing, generating, holdPct, o
       disabled={busy}
       style={{
         position: "relative", overflow: "hidden",
-        padding: "5px 10px", borderRadius: 8,
+        padding: isMobile ? "7px 9px" : "5px 10px", borderRadius: 8,
         border: `1px solid ${hover && !busy ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.08)"}`,
         background: hover && !busy ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
         color: hover && !busy ? "#cdd6f4" : "rgba(205,214,244,0.85)",
-        fontFamily: "inherit", fontSize: 11, fontWeight: 500, letterSpacing: 0.2,
+        fontFamily: "inherit", fontSize: isMobile ? 10.5 : 11, fontWeight: 500, letterSpacing: 0.2,
         cursor: refreshing ? "wait" : "pointer",
         display: "inline-flex", alignItems: "center", gap: 5,
         opacity: busy ? 0.6 : 1,
         transform: lifted ? "translateY(-1px)" : "translateY(0)",
         transition: "transform 150ms, background 150ms, border-color 150ms, color 150ms",
       }}
-      title="Tap to refresh · Hold for full AI briefing · R"
+      title={isMobile ? "Tap to refresh · Hold for full AI briefing" : "Tap to refresh · Hold for full AI briefing · R"}
     >
       {holdPct > 0 && (
         <div
@@ -415,13 +426,13 @@ function RefreshButton({ accent, refreshHold, refreshing, generating, holdPct, o
         />
       )}
       <RefreshCw
-        size={11}
+        size={isMobile ? 10 : 11}
         style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }}
       />
       <span style={{ position: "relative" }}>
-        {refreshing ? "Refreshing…" : holdPct > 0 ? "Hold…" : "Refresh"}
+        {refreshing ? "Refreshing…" : holdPct > 0 ? "Hold…" : isMobile ? "Refresh" : "Refresh"}
       </span>
-      <Kbd>R</Kbd>
+      {!isMobile && <Kbd>R</Kbd>}
     </button>
   );
 }
@@ -437,6 +448,7 @@ function OverflowButton({ open, onClick }) {
   return (
     <button
       type="button"
+      aria-label="Open more actions"
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => { setHover(false); setPressed(false); }}
@@ -464,6 +476,7 @@ function ConfirmCancelButton({ onClick }) {
   return (
     <button
       type="button"
+      aria-label="Cancel full generation"
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => { setHover(false); setPressed(false); }}

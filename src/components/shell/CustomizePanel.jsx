@@ -117,6 +117,7 @@ export default function CustomizePanel({
   onClose,
   customize,
   tab,
+  isMobile = false,
 }) {
   if (!open) return null;
   const {
@@ -180,29 +181,33 @@ export default function CustomizePanel({
 
       {tab === "dashboard" && (
         <>
-          <Row label="Dashboard layout">
-            <Seg
-              value={dashboardLayout}
-              onChange={(v) => setKey("dashboardLayout", v)}
-              options={[
-                { value: "focus", label: "Focus" },
-                { value: "command", label: "Command" },
-                { value: "paper", label: "Paper" },
-              ]}
-              accent={accent}
-            />
-          </Row>
-          <Row label="Dashboard density">
-            <Seg
-              value={density}
-              onChange={(v) => setKey("density", v)}
-              options={[
-                { value: "comfortable", label: "Comfy" },
-                { value: "compact", label: "Compact" },
-              ]}
-              accent={accent}
-            />
-          </Row>
+          {!isMobile && (
+            <Row label="Dashboard layout">
+              <Seg
+                value={dashboardLayout}
+                onChange={(v) => setKey("dashboardLayout", v)}
+                options={[
+                  { value: "focus", label: "Focus" },
+                  { value: "command", label: "Command" },
+                  { value: "paper", label: "Paper" },
+                ]}
+                accent={accent}
+              />
+            </Row>
+          )}
+          {!isMobile && (
+            <Row label="Dashboard density">
+              <Seg
+                value={density}
+                onChange={(v) => setKey("density", v)}
+                options={[
+                  { value: "comfortable", label: "Comfy" },
+                  { value: "compact", label: "Compact" },
+                ]}
+                accent={accent}
+              />
+            </Row>
+          )}
           <Row label="Show AI insights">
             <Toggle value={showInsights} onChange={(v) => setKey("showInsights", v)} accent={accent} />
           </Row>
