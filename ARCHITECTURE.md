@@ -74,6 +74,12 @@ ea-dashboard/
 │   ├── index.js                    # Express entry: middleware, routes, migrations, scheduler
 │   ├── briefing/
 │   │   ├── index.js                # Orchestrator: generateBriefing, quickRefresh, delta merge
+│   │   ├── stored-briefing-service.js # Sole funnel for `briefing_json` mutations (email reads, task completion, Todoist mirror)
+│   │   ├── lifecycle-service.js    # Briefing lifecycle: trigger, poll, refresh, latest/history/by-id, delete
+│   │   ├── email-service.js        # Email read/unread/trash/snooze/pin/dismiss, FTS search, body fetch
+│   │   ├── tasks-service.js        # Complete task (CTM+Todoist), CTM status, tombstone dismiss, Todoist CRUD
+│   │   ├── bills-service.js        # Actual Budget wrappers + Haiku-powered bill extraction
+│   │   ├── dev-service.js          # Dev-only helpers (reindex emails)
 │   │   ├── claude.js               # Claude API: tool_choice-forced submit_briefing, slot minting, validator retry
 │   │   ├── insight-validator.js    # Pure-function insight validator (forbidden words, slot refs)
 │   │   ├── insight-icons.js        # Icon selection for AI-generated insights
@@ -94,7 +100,7 @@ ea-dashboard/
 │   ├── embeddings/                 # Vector search: chunk, embed, query (RAG)
 │   ├── routes/
 │   │   ├── auth.js                 # Login, session check, logout (rate-limited)
-│   │   ├── briefing.js             # Generate, poll, refresh, email ops, task ops, Actual, pin/snooze
+│   │   ├── briefing/               # Thin HTTP handlers split by domain (index, lifecycle, email, tasks, bills, dev)
 │   │   ├── accounts.js             # Account CRUD, Gmail OAuth, settings, schedules, API tokens
 │   │   ├── search.js               # Vector search + Claude analysis
 │   │   ├── calendar.js             # Read-only calendar endpoints (mounted at /api/calendar)
@@ -716,7 +722,7 @@ When a recurring Todoist task is completed, the Todoist API advances it to the n
 | POST | `/api/briefing/email/:uid/snooze` | Snooze email until `until_ts` |
 | POST | `/api/briefing/email/:uid/unsnooze` | Cancel snooze and resurface |
 
-Exact paths drift as the briefing route file grows; the source of truth is `server/routes/briefing.js` (38 handlers at last count).
+Exact paths drift; the source of truth is `server/routes/briefing/*.js` (per-domain sub-routers: `lifecycle.js`, `email.js`, `tasks.js`, `bills.js`, `dev.js`, all composed by `index.js`). Route handlers stay thin — business logic + DB live in `server/briefing/*-service.js` (every `briefing_json` mutation funnels through `stored-briefing-service.js`).
 
 ### Tasks
 
