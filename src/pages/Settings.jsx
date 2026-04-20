@@ -49,7 +49,7 @@ export default function Settings() {
         />
       );
     } else {
-      content = <SystemSettingsSection settings={settings} />;
+      content = <SystemSettingsSection settings={settings} setSettings={setSettings} patch={patch} />;
     }
   }
 

@@ -8,7 +8,7 @@ function ExtractButton({ extractState, onClick, className, variant = "pill" }) {
     ? "Extracting…"
     : extractState === "error"
       ? "Retry extract"
-      : "Extract with Haiku";
+      : "Extract bill";
 
   return (
     <button

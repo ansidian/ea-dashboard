@@ -9,6 +9,12 @@ import { geocodeLocation } from "../briefing/weather.js";
 import { listModels } from "../briefing/claude.js";
 import { initScheduler } from "../briefing/scheduler.js";
 import { isEmbeddingAvailable } from "../embeddings/index.js";
+import {
+  billExtractAvailability,
+  isAllowedBillExtractModel,
+  DEFAULT_BILL_EXTRACT_PROVIDER,
+  DEFAULT_BILL_EXTRACT_MODEL,
+} from "../briefing/bill-extractors/catalog.js";
 
 const router = Router();
 
@@ -318,6 +324,9 @@ router.get("/settings", async (req, res) => {
       ? JSON.parse(email_interests_json)
       : [];
 
+    safe.bill_extract_provider = safe.bill_extract_provider || DEFAULT_BILL_EXTRACT_PROVIDER;
+    safe.bill_extract_model = safe.bill_extract_model || DEFAULT_BILL_EXTRACT_MODEL;
+
     // Render suspend availability
     safe.render_configured =
       !!(process.env.RENDER_API_KEY && process.env.RENDER_SERVICE_ID) ||
@@ -344,7 +353,7 @@ router.get("/settings", async (req, res) => {
 
 router.put("/settings", async (req, res) => {
   const userId = process.env.EA_USER_ID;
-  const { schedules_json, email_lookback_hours, weather_lat, weather_lng, weather_location, actual_budget_url, actual_budget_password, actual_budget_sync_id, claude_model, email_interests_json, todoist_api_token } = req.body;
+  const { schedules_json, email_lookback_hours, weather_lat, weather_lng, weather_location, actual_budget_url, actual_budget_password, actual_budget_sync_id, claude_model, email_interests_json, todoist_api_token, bill_extract_provider, bill_extract_model } = req.body;
 
   try {
     await db.execute({ sql: "INSERT OR IGNORE INTO ea_settings (user_id) VALUES (?)", args: [userId] });
@@ -362,6 +371,15 @@ router.put("/settings", async (req, res) => {
     if (claude_model !== undefined) { updates.push("claude_model = ?"); args.push(claude_model || null); }
     if (email_interests_json !== undefined) { updates.push("email_interests_json = ?"); args.push(typeof email_interests_json === "string" ? email_interests_json : JSON.stringify(email_interests_json)); }
     if (todoist_api_token !== undefined) { updates.push("todoist_api_token_encrypted = ?"); args.push(todoist_api_token ? encrypt(todoist_api_token) : null); }
+    if (bill_extract_provider !== undefined || bill_extract_model !== undefined) {
+      const provider = bill_extract_provider ?? DEFAULT_BILL_EXTRACT_PROVIDER;
+      const model = bill_extract_model ?? DEFAULT_BILL_EXTRACT_MODEL;
+      if (!isAllowedBillExtractModel(provider, model)) {
+        return res.status(400).json({ message: "Invalid bill_extract_provider/model combination" });
+      }
+      if (bill_extract_provider !== undefined) { updates.push("bill_extract_provider = ?"); args.push(provider); }
+      if (bill_extract_model !== undefined) { updates.push("bill_extract_model = ?"); args.push(model); }
+    }
 
     if (updates.length > 0) {
       args.push(userId);
@@ -452,6 +470,15 @@ router.get("/models", async (req, res) => {
     res.json(models);
   } catch (err) {
     console.error("Error fetching models:", err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/bill-extract-models", async (_req, res) => {
+  try {
+    res.json(billExtractAvailability());
+  } catch (err) {
+    console.error("Error fetching bill-extract catalog:", err.message);
     res.status(500).json({ message: err.message });
   }
 });

@@ -35,13 +35,18 @@ export function detectFee(payeeName) {
 
 export function formatModelName(model) {
   if (!model) return "Claude";
-  const match = model.match(/(opus|sonnet|haiku)-(\d+)-?(\d+)?/i);
-  if (match) {
-    const family = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
-    const version = match[3] ? `${match[2]}.${match[3]}` : match[2];
+  const claudeMatch = model.match(/(opus|sonnet|haiku)-(\d+)-?(\d+)?/i);
+  if (claudeMatch) {
+    const family = claudeMatch[1].charAt(0).toUpperCase() + claudeMatch[1].slice(1).toLowerCase();
+    const version = claudeMatch[3] ? `${claudeMatch[2]}.${claudeMatch[3]}` : claudeMatch[2];
     return `${family} ${version}`;
   }
-  return "Claude";
+  const gptMatch = model.match(/^gpt-(\d+(?:\.\d+)?)(?:-(mini|nano|small|micro))?$/i);
+  if (gptMatch) {
+    const variant = gptMatch[2] ? ` ${gptMatch[2].toLowerCase()}` : "";
+    return `GPT-${gptMatch[1]}${variant}`;
+  }
+  return model;
 }
 
 export function pickDefaultFromAccount(accounts) {

@@ -1,5 +1,6 @@
 import { Database } from "lucide-react";
 import ApiTokensCard from "@/components/settings/cards/ApiTokensCard";
+import BillExtractionAiCard from "@/components/settings/cards/BillExtractionAiCard";
 import {
   SettingsCard,
   StatusPill,
@@ -7,9 +8,11 @@ import {
 import { SURFACE_ROW_CLASS } from "@/components/settings/settings-core";
 import { cn } from "@/lib/utils";
 
-export default function SystemSettingsSection({ settings }) {
+export default function SystemSettingsSection({ settings, setSettings, patch }) {
   return (
     <>
+      <BillExtractionAiCard settings={settings} setSettings={setSettings} patch={patch} />
+
       <SettingsCard
         title="Search & Historical Context"
         icon={<Database size={14} />}

@@ -144,7 +144,7 @@ export default function useBillBadgeForm({
       } else if (result.type) {
         setEditType(result.type);
       }
-      setExtractModel("claude-haiku-4-5");
+      setExtractModel(result.model || "claude-haiku-4-5");
       setExtractState("done");
     } catch (err) {
       console.error("Bill extract failed:", err);

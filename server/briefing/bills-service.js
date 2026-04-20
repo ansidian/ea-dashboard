@@ -9,6 +9,38 @@ import {
   createQuickTxn as actualCreateQuickTxn,
 } from "./actual.js";
 import { trimBillBody } from "./bill-extract.js";
+import db from "../db/connection.js";
+import { ANTHROPIC_PROVIDER } from "./bill-extractors/anthropic.js";
+import { OPENAI_PROVIDER } from "./bill-extractors/openai.js";
+import {
+  DEFAULT_BILL_EXTRACT_PROVIDER,
+  DEFAULT_BILL_EXTRACT_MODEL,
+  isAllowedBillExtractModel,
+} from "./bill-extractors/catalog.js";
+
+const PROVIDERS = {
+  [ANTHROPIC_PROVIDER.id]: ANTHROPIC_PROVIDER,
+  [OPENAI_PROVIDER.id]: OPENAI_PROVIDER,
+};
+
+async function loadBillExtractChoice(userId) {
+  try {
+    const result = await db.execute({
+      sql: "SELECT bill_extract_provider, bill_extract_model FROM ea_settings WHERE user_id = ?",
+      args: [userId],
+    });
+    const row = result.rows?.[0] || {};
+    let provider = row.bill_extract_provider || DEFAULT_BILL_EXTRACT_PROVIDER;
+    let model = row.bill_extract_model || DEFAULT_BILL_EXTRACT_MODEL;
+    if (!isAllowedBillExtractModel(provider, model)) {
+      provider = DEFAULT_BILL_EXTRACT_PROVIDER;
+      model = DEFAULT_BILL_EXTRACT_MODEL;
+    }
+    return { provider, model };
+  } catch {
+    return { provider: DEFAULT_BILL_EXTRACT_PROVIDER, model: DEFAULT_BILL_EXTRACT_MODEL };
+  }
+}
 
 export async function sendBill(userId, billData) {
   return actualSendBill(billData, userId);
@@ -79,73 +111,38 @@ export async function extractBill(userId, { subject, from, body }) {
 - category_name: the category's display name (copied from the list)
 - to_account_code: ONLY for type=transfer, code (a1, a2, ...) of the credit card being paid. Match on Visa/MC/Amex or last-4 digits. Null if unsure.${catList.length ? `\n\nCategories: ${catList.join(", ")}` : ""}${acctList.length ? `\n\nAccounts: ${acctList.join(", ")}` : ""}`;
 
-  const tool = {
-    name: "submit_bill",
-    description: "Submit extracted bill fields.",
-    input_schema: {
-      type: "object",
-      properties: {
-        payee: { type: "string" },
-        amount: { type: "number" },
-        due_date: { type: "string" },
-        type: { type: "string", enum: ["transfer", "bill", "expense", "income"] },
-        category_code: { type: ["string", "null"] },
-        category_name: { type: ["string", "null"] },
-        to_account_code: { type: ["string", "null"] },
-      },
-      required: ["payee", "amount", "due_date", "type"],
-    },
-  };
+  const { provider: providerId, model } = await loadBillExtractChoice(userId);
+  const provider = PROVIDERS[providerId];
+  if (!provider) {
+    const err = new Error(`Unknown bill-extract provider: ${providerId}`);
+    err.status = 400;
+    throw err;
+  }
+  if (!process.env[provider.envVar]) {
+    const err = new Error(`Bill extract unavailable: ${provider.envVar} not set`);
+    err.status = 503;
+    throw err;
+  }
 
-  const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5",
-      max_tokens: 300,
-      system: systemPrompt,
-      tools: [tool],
-      tool_choice: { type: "tool", name: "submit_bill" },
-      messages: [{ role: "user", content: trimmed }],
-    }),
+  const { fields, usage } = await provider.extract({
+    model,
+    systemPrompt,
+    content: trimmed,
   });
 
-  if (!apiRes.ok) {
-    const text = await apiRes.text();
-    console.error(`[EA] Bill extract Haiku error (${apiRes.status}):`, text);
-    const err = new Error(`Haiku API error (${apiRes.status})`);
-    err.status = 502;
-    throw err;
-  }
-
-  const data = await apiRes.json();
-  const toolBlock = (data.content || []).find(
-    (c) => c.type === "tool_use" && c.name === "submit_bill",
-  );
-  if (!toolBlock?.input) {
-    console.error("[EA] Bill extract: no tool_use in Haiku response", data);
-    const err = new Error("Extraction failed");
-    err.status = 502;
-    throw err;
-  }
-
-  const usage = data.usage || {};
   console.log(
-    `[EA] Bill extract: in=${usage.input_tokens} out=${usage.output_tokens} trimmed_chars=${trimmed.length}`,
+    `[EA] Bill extract: provider=${providerId} model=${model} in=${usage.input_tokens ?? usage.prompt_tokens ?? "?"} out=${usage.output_tokens ?? usage.completion_tokens ?? "?"} trimmed_chars=${trimmed.length}`,
   );
 
-  const input = toolBlock.input;
   return {
-    payee: input.payee,
-    amount: input.amount,
-    due_date: input.due_date,
-    type: input.type,
-    category_id: input.category_code ? catCodeToId.get(input.category_code) || null : null,
-    category_name: input.category_name || null,
-    to_account_id: input.to_account_code ? acctCodeToId.get(input.to_account_code) || null : null,
+    payee: fields.payee,
+    amount: fields.amount,
+    due_date: fields.due_date,
+    type: fields.type,
+    category_id: fields.category_code ? catCodeToId.get(fields.category_code) || null : null,
+    category_name: fields.category_name || null,
+    to_account_id: fields.to_account_code ? acctCodeToId.get(fields.to_account_code) || null : null,
+    provider: providerId,
+    model,
   };
 }
