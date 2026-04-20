@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import useBrowserBackDismiss from "@/hooks/useBrowserBackDismiss";
 import { DollarSign } from "lucide-react";
 import EmailReader from "../../email/EmailReader";
 
@@ -14,6 +15,12 @@ export default function BriefingSearchDesktopPanel({
   onMarkedUnread,
   children,
 }) {
+  const dismissOpenEmail = useBrowserBackDismiss({
+    enabled: !!openEmail,
+    historyKey: "eaBriefingSearchEmail",
+    onDismiss: () => setOpenEmail(null),
+  });
+
   if (!pos) return null;
 
   const RESULTS_COLLAPSED_WIDTH = 380;
@@ -81,7 +88,7 @@ export default function BriefingSearchDesktopPanel({
             email={openEmail}
             onMarkedRead={onMarkedRead}
             onMarkedUnread={onMarkedUnread}
-            onClose={() => setOpenEmail(null)}
+            onClose={dismissOpenEmail}
             showManualBillForm={showBillForm}
             headerActions={
               <button

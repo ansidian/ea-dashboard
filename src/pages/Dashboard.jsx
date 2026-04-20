@@ -25,6 +25,7 @@ import useNotifications from "../hooks/useNotifications";
 import useCustomize from "../hooks/useCustomize";
 import useCalendarRange from "../hooks/useCalendarRange";
 import useIsMobile from "../hooks/useIsMobile";
+import useBrowserBackDismiss from "../hooks/useBrowserBackDismiss";
 import { focusPressureDate } from "../lib/focus-windows";
 import { mergeReadState } from "../components/inbox/helpers";
 
@@ -211,6 +212,23 @@ export function RedesignShell({
   useEffect(() => {
     try { localStorage.setItem("ea:tab", tab); } catch { /* ignore */ }
   }, [tab]);
+  const dismissMobileInboxTab = useBrowserBackDismiss({
+    enabled: isMobile && tab === "inbox",
+    historyKey: "eaDashboardMobileTab",
+    onDismiss: () => setTab("dashboard"),
+  });
+  const setShellTab = useCallback((nextTab) => {
+    if (nextTab !== "dashboard" && nextTab !== "inbox") return;
+    if (!isMobile || nextTab === tab) {
+      setTab(nextTab);
+      return;
+    }
+    if (tab === "inbox" && nextTab === "dashboard") {
+      dismissMobileInboxTab();
+      return;
+    }
+    setTab(nextTab);
+  }, [dismissMobileInboxTab, isMobile, tab]);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -226,6 +244,11 @@ export function RedesignShell({
   });
   const showBills = !!liveData.actualConfigured;
   const [calendarFocus, setCalendarFocus] = useState(null);
+  const dismissCalendar = useBrowserBackDismiss({
+    enabled: !isMobile && calendarOpen,
+    historyKey: "eaDashboardCalendarModal",
+    onDismiss: () => setCalendarOpen(false),
+  });
   const openCalendar = (viewKey, focusDate = null) => {
     if (isMobile) return;
     const resolved = viewKey === "bills" && !showBills ? "deadlines" : viewKey || calendarView;
@@ -268,25 +291,25 @@ export function RedesignShell({
 
   // Scroll/jump to data-sect targets within the dashboard tab
   const jumpToSection = useCallback((slug) => {
-    setTab("dashboard");
+    setShellTab("dashboard");
     setTimeout(() => {
       const el = document.querySelector(`[data-sect="${slug}"]`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 50);
-  }, []);
+  }, [setShellTab]);
 
   // Email click anywhere → switch to inbox and let its state handle selection.
   const [inboxSeedId, setInboxSeedId] = useState(null);
   const openEmailInInbox = useCallback((id) => {
     setInboxSeedId(id);
-    setTab("inbox");
-  }, []);
+    setShellTab("inbox");
+  }, [setShellTab]);
 
   // Deadline detail popover (anchored to the clicked row)
   const [deadlinePopover, setDeadlinePopover] = useState(null);
 
   const handlePaletteAction = useCallback((item) => {
-    if (item.kind === "tab") setTab(item.payload);
+    if (item.kind === "tab") setShellTab(item.payload);
     else if (item.kind === "scroll") jumpToSection(item.payload);
     else if (item.kind === "calendar") openCalendar();
     else if (item.kind === "history") setHistoryOpen(true);
@@ -295,7 +318,7 @@ export function RedesignShell({
     else if (item.kind === "regenerate") handleFullGeneration();
     else if (item.kind === "settings") window.location.href = "/settings";
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jumpToSection, onQuickRefresh, handleFullGeneration]);
+  }, [jumpToSection, onQuickRefresh, handleFullGeneration, setShellTab]);
 
   const eventsData = useMemo(() => ({
     ensureRange: calendarRange.ensureRange,
@@ -387,7 +410,7 @@ export function RedesignShell({
         accent={accent}
         isMobile={isMobile}
         tab={tab}
-        onTab={setTab}
+        onTab={setShellTab}
         onOpenPalette={() => setPaletteOpen(true)}
         onOpenCustomize={() => setCustomizeOpen((v) => !v)}
         onOpenHistory={() => setHistoryOpen((v) => !v)}
@@ -442,7 +465,7 @@ export function RedesignShell({
             pinnedSnapshots={liveData.pinnedSnapshots}
             snoozedEntries={liveData.snoozedEntries}
             resurfacedEntries={liveData.resurfacedEntries}
-            onOpenDashboard={() => setTab("dashboard")}
+            onOpenDashboard={() => setShellTab("dashboard")}
             onRefresh={onQuickRefresh}
             seedSelectedId={inboxSeedId}
             isMobile={isMobile}
@@ -487,7 +510,7 @@ export function RedesignShell({
       {!isMobile && (
         <CalendarModal
           open={calendarOpen}
-          onClose={() => setCalendarOpen(false)}
+          onClose={dismissCalendar}
           view={calendarView}
           onViewChange={changeCalendarView}
           focusDate={calendarFocus}

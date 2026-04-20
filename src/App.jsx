@@ -88,17 +88,17 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={
-            authenticated ? <Navigate to="/" /> : <Login onLogin={() => setAuthenticated(true)} />
+            authenticated ? <Navigate to="/" replace /> : <Login onLogin={() => setAuthenticated(true)} />
           } />
           <Route path="/" element={
-            authenticated ? <Dashboard /> : <Navigate to="/login" />
+            authenticated ? <Dashboard /> : <Navigate to="/login" replace />
           } />
           <Route path="/settings" element={
             authenticated ? (
               <Suspense fallback={<SettingsChrome />}>
                 <Settings />
               </Suspense>
-            ) : <Navigate to="/login" />
+            ) : <Navigate to="/login" replace />
           } />
         </Routes>
       </BrowserRouter>

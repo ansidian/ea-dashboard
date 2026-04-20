@@ -15,18 +15,18 @@ export const TABS = [
   { id: "system", label: "System" },
 ];
 
+export function normalizeSettingsTab(tab) {
+  return TABS.some((entry) => entry.id === tab) ? tab : "accounts";
+}
+
 export function readTabFromURL() {
   try {
-    const tab = new URLSearchParams(window.location.search).get("tab");
-    return TABS.some((entry) => entry.id === tab) ? tab : "accounts";
+    return normalizeSettingsTab(new URLSearchParams(window.location.search).get("tab"));
   } catch {
     return "accounts";
   }
 }
 
-export function writeTabToURL(tab) {
-  const url = new URL(window.location.href);
-  if (tab === "accounts") url.searchParams.delete("tab");
-  else url.searchParams.set("tab", tab);
-  window.history.replaceState({}, "", url.toString());
+export function readTabFromSearchParams(searchParams) {
+  return normalizeSettingsTab(searchParams?.get("tab"));
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import useIsMobile from "../../hooks/useIsMobile";
+import useBrowserBackDismiss from "../../hooks/useBrowserBackDismiss";
 import BottomSheet from "../ui/BottomSheet";
 import EmailReader from "./EmailReader";
 
@@ -40,6 +41,11 @@ export default function EmailReaderOverlay({
   const isMobile = useIsMobile();
   const panelRef = useRef(null);
   const scrollBodyRef = useRef(null);
+  const dismissOverlay = useBrowserBackDismiss({
+    enabled: open,
+    historyKey: "eaEmailReaderOverlay",
+    onDismiss: onClose,
+  });
 
   // Esc closes; ↑/↓ cycle through the flat list via navigation.onPrev/onNext.
   useEffect(() => {
@@ -47,7 +53,7 @@ export default function EmailReaderOverlay({
     function handleKey(e) {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose?.();
+        dismissOverlay();
         return;
       }
       if (e.key === "ArrowDown" && navigation?.onNext) {
@@ -66,7 +72,7 @@ export default function EmailReaderOverlay({
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, onClose, navigation, accountNav]);
+  }, [accountNav, dismissOverlay, navigation, open]);
 
   // Lock body scroll on desktop so the dashboard behind doesn't chase the
   // overlay. BottomSheet handles its own scroll locking on mobile.
@@ -116,7 +122,7 @@ export default function EmailReaderOverlay({
       // just enough room for the drag handle + status bar. `height` (not
       // `maxHeight`) is load-bearing: EmailReader fills its parent via
       // flex-1 / h-full, which only resolves against a definite height.
-      <BottomSheet open onClose={onClose} height="92vh">
+      <BottomSheet open onClose={dismissOverlay} height="92vh">
         <EmailReader
           email={email}
           triage={triage}
@@ -137,7 +143,7 @@ export default function EmailReaderOverlay({
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-150"
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
+        if (e.target === e.currentTarget) dismissOverlay();
       }}
       style={{
         background: "rgba(0,0,0,0.55)",
@@ -180,7 +186,7 @@ export default function EmailReaderOverlay({
           onMarkedUnread={onMarkedUnread}
           onLoaded={onLoaded}
           showManualBillForm={showManualBillForm}
-          onClose={onClose}
+          onClose={dismissOverlay}
           onScrollElReady={attachScrollTrap}
         />
       </div>

@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardProvider } from "../context/DashboardContext.jsx";
-import { MemoryRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
 
 let mockIsMobile = false;
 let mockCustomize = null;
@@ -148,11 +148,11 @@ function makeProps() {
 function renderShell() {
   const props = makeProps();
   return render(
-    <MemoryRouter>
+    <BrowserRouter>
       <DashboardProvider briefing={props.bd.briefing} setBriefing={() => {}} setCalendarDeadlines={() => {}}>
         <RedesignShell {...props} />
       </DashboardProvider>
-    </MemoryRouter>,
+    </BrowserRouter>,
   );
 }
 
@@ -173,6 +173,24 @@ describe("RedesignShell mobile behavior", () => {
     expect(screen.queryByTestId("calendar-modal")).toBeNull();
   });
 
+  it("uses browser back to return from inbox to dashboard on mobile", async () => {
+    mockIsMobile = true;
+    renderShell();
+
+    fireEvent.click(screen.getByRole("button", { name: /inbox/i }));
+    expect(screen.getByTestId("inbox-view")).toBeTruthy();
+
+    await act(async () => {
+      window.history.back();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("inbox-view")).toBeNull();
+      expect(screen.getByTestId("dashboard-body-mobile")).toBeTruthy();
+    });
+  });
+
   it("keeps calendar available on desktop and opens it from the hotkey", () => {
     mockIsMobile = false;
     renderShell();
@@ -182,5 +200,22 @@ describe("RedesignShell mobile behavior", () => {
 
     fireEvent.keyDown(window, { key: "c" });
     expect(screen.getByTestId("calendar-modal").textContent).toBe("open");
+  });
+
+  it("uses browser back to close the desktop calendar modal", async () => {
+    mockIsMobile = false;
+    renderShell();
+
+    fireEvent.keyDown(window, { key: "c" });
+    expect(screen.getByTestId("calendar-modal").textContent).toBe("open");
+
+    await act(async () => {
+      window.history.back();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("calendar-modal").textContent).toBe("closed");
+    });
   });
 });

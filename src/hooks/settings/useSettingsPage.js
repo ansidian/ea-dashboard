@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getAccounts, getSettings, updateSettings } from "@/api";
-import { readTabFromURL, writeTabToURL } from "@/components/settings/settings-core";
+import {
+  normalizeSettingsTab,
+  readTabFromSearchParams,
+} from "@/components/settings/settings-core";
 
 function useSettingsAutoSave() {
   const [status, setStatus] = useState("idle");
@@ -42,15 +46,22 @@ function useSettingsAutoSave() {
 }
 
 export default function useSettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [accounts, setAccounts] = useState([]);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState(readTabFromURL);
   const { patch, status: saveStatus } = useSettingsAutoSave();
+  const tab = readTabFromSearchParams(searchParams);
 
-  useEffect(() => {
-    writeTabToURL(tab);
-  }, [tab]);
+  const setTab = useCallback((nextTab) => {
+    const resolvedTab = normalizeSettingsTab(nextTab);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (resolvedTab === "accounts") next.delete("tab");
+      else next.set("tab", resolvedTab);
+      return next;
+    });
+  }, [setSearchParams]);
 
   useEffect(() => {
     Promise.all([getAccounts(), getSettings()])

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import useBrowserBackDismiss from "@/hooks/useBrowserBackDismiss";
 
 export default function useBriefingSearchPanel({
   isMobile,
@@ -12,6 +13,20 @@ export default function useBriefingSearchPanel({
   const inputWrapRef = useRef(null);
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
+  const dismissPanel = useBrowserBackDismiss({
+    enabled: isMobile && open,
+    historyKey: "eaBriefingSearchSheet",
+    onDismiss: () => {
+      setOpenEmail(null);
+      setOpen(false);
+      inputRef.current?.blur();
+    },
+  });
+  const dismissOpenEmail = useBrowserBackDismiss({
+    enabled: !!openEmail,
+    historyKey: "eaBriefingSearchEmail",
+    onDismiss: () => setOpenEmail(null),
+  });
 
   const updatePos = useCallback(() => {
     if (!inputWrapRef.current) return;
@@ -84,5 +99,7 @@ export default function useBriefingSearchPanel({
     inputWrapRef,
     panelRef,
     scrollRef,
+    dismissPanel,
+    dismissOpenEmail,
   };
 }

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import useBrowserBackDismiss from "@/hooks/useBrowserBackDismiss";
 import { DollarSign } from "lucide-react";
 import BottomSheet from "../../ui/BottomSheet";
 import EmailReader from "../../email/EmailReader";
@@ -156,24 +157,32 @@ export function BriefingSearchMobileSheet({
   onMarkedUnread,
   children,
 }) {
+  const dismissSheet = useBrowserBackDismiss({
+    enabled: true,
+    historyKey: "eaBriefingSearchSheet",
+    onDismiss: () => {
+      setOpenEmail(null);
+      setOpen(false);
+      inputRef.current?.blur();
+    },
+  });
+  const dismissOpenEmail = useBrowserBackDismiss({
+    enabled: !!openEmail,
+    historyKey: "eaBriefingSearchEmail",
+    onDismiss: () => setOpenEmail(null),
+  });
+
   return (
     <BottomSheet
       open
-      onClose={() => {
-        if (openEmail) {
-          setOpenEmail(null);
-          return;
-        }
-        setOpen(false);
-        inputRef.current?.blur();
-      }}
+      onClose={openEmail ? dismissOpenEmail : dismissSheet}
       title={openEmail ? undefined : "Search Results"}
       {...(openEmail ? { height: "92vh" } : {})}
     >
       {openEmail ? (
         <div className="flex flex-col h-full min-h-0">
           <button
-            onClick={() => setOpenEmail(null)}
+            onClick={dismissOpenEmail}
             className="flex items-center gap-2 px-4 py-3 text-[12px] text-foreground/70 hover:text-foreground shrink-0 min-h-[44px]"
             style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
           >
@@ -185,6 +194,7 @@ export function BriefingSearchMobileSheet({
             onMarkedRead={onMarkedRead}
             onMarkedUnread={onMarkedUnread}
             showManualBillForm={showBillForm}
+            onClose={dismissOpenEmail}
             headerActions={
               <button
                 type="button"

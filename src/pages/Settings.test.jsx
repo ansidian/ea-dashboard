@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
 
 const mockApi = vi.hoisted(() => ({
   getAccounts: vi.fn(),
@@ -35,9 +35,9 @@ const { default: Settings } = await import("./Settings.jsx");
 
 function renderSettings() {
   return render(
-    <MemoryRouter>
+    <BrowserRouter>
       <Settings />
-    </MemoryRouter>,
+    </BrowserRouter>,
   );
 }
 
@@ -84,5 +84,39 @@ describe("Settings page", () => {
       expect(screen.getByTestId("settings-system-section")).toBeTruthy();
     });
     expect(screen.queryByTestId("settings-accounts-section")).toBeNull();
+  });
+
+  it("uses browser back and forward to move between settings tabs", async () => {
+    renderSettings();
+
+    expect(await screen.findByTestId("settings-accounts-section")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Briefing" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-briefing-section")).toBeTruthy();
+    });
+    expect(window.location.search).toBe("?tab=briefing");
+
+    fireEvent.click(screen.getByRole("button", { name: "System" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-system-section")).toBeTruthy();
+    });
+    expect(window.location.search).toBe("?tab=system");
+
+    await act(async () => {
+      window.history.back();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-briefing-section")).toBeTruthy();
+    });
+
+    await act(async () => {
+      window.history.forward();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-system-section")).toBeTruthy();
+    });
   });
 });

@@ -1,0 +1,70 @@
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockApi = vi.hoisted(() => ({
+  checkAuth: vi.fn(),
+}));
+
+vi.mock("./api", () => ({
+  checkAuth: mockApi.checkAuth,
+}));
+
+vi.mock("./pages/Login", () => ({
+  default: function LoginMock() {
+    return <div data-testid="login-page">login</div>;
+  },
+}));
+
+vi.mock("./pages/Dashboard", () => ({
+  default: function DashboardMock() {
+    return <div data-testid="dashboard-page">dashboard</div>;
+  },
+}));
+
+vi.mock("./pages/Settings", () => ({
+  default: function SettingsMock() {
+    return <div data-testid="settings-page">settings</div>;
+  },
+}));
+
+const { default: App } = await import("./App.jsx");
+
+describe("App auth redirects", () => {
+  beforeEach(() => {
+    mockApi.checkAuth.mockResolvedValue({ authenticated: true });
+    window.history.replaceState({}, "", "/");
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("replaces /login in history when redirecting an authenticated user", async () => {
+    window.history.pushState({}, "", "/from-here");
+    window.history.pushState({}, "", "/login");
+
+    render(<App />);
+
+    expect(await screen.findByTestId("dashboard-page")).toBeTruthy();
+    expect(window.location.pathname).toBe("/");
+
+    await act(async () => {
+      window.history.back();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/from-here");
+    });
+  });
+});
