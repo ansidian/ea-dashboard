@@ -351,15 +351,20 @@ export default function CalendarModal({
     };
   });
   const navigateMonth = (dir) => navigateMonthRef.current?.(dir);
+  const [pendingFocusDate, setPendingFocusDate] = useState(null);
 
   // Reset state when modal opens. If a focusDate is supplied, jump to that
   // month and auto-select the day cell (e.g. clicking a bill drills straight
   // into its due-day's detail rail).
   const [prevOpen, setPrevOpen] = useState(open);
+  const openingWithFocus = prevOpen !== open && open
+    ? parseFocusDate(focusDate)
+    : null;
   if (prevOpen !== open) {
     setPrevOpen(open);
     if (open) {
       const focus = parseFocusDate(focusDate);
+      setPendingFocusDate(focusDate || null);
       if (focus) {
         setViewDate({ month: focus.getMonth(), year: focus.getFullYear() });
         setSelectedDay(focus.getDate());
@@ -374,7 +379,14 @@ export default function CalendarModal({
   const [prevView, setPrevView] = useState(view);
   if (prevView !== view) {
     setPrevView(view);
-    setSelectedDay(null);
+    const pendingFocus = openingWithFocus || parseFocusDate(pendingFocusDate);
+    if (pendingFocus) {
+      setViewDate({ month: pendingFocus.getMonth(), year: pendingFocus.getFullYear() });
+      setSelectedDay(pendingFocus.getDate());
+      setPendingFocusDate(null);
+    } else {
+      setSelectedDay(null);
+    }
   }
 
   // Allow views to opt out of outside-click close (e.g., when a popover is open)

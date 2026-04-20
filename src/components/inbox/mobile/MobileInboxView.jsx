@@ -109,6 +109,7 @@ export default function MobileInboxView({
   selectedEmail,
   selectedAccount,
   setSelectedId,
+  closeSelectedEmail,
   mobileFiltersOpen,
   setMobileFiltersOpen,
   pinnedSet,
@@ -150,7 +151,7 @@ export default function MobileInboxView({
           accent={accent}
           pinned={!!selectedEmail && (pinnedSet.has(selectedEmail.uid) || pinnedSet.has(selectedEmail.id))}
           onAction={onAction}
-          onClose={() => setSelectedId(null)}
+          onClose={closeSelectedEmail}
           showTriage={showTriage}
           showDraft={showDraft}
           billOpen={billOpen}

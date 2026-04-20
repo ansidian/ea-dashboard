@@ -92,4 +92,48 @@ describe("CalendarModal responsive layout", () => {
     expect(screen.getByTestId("calendar-events-grid-skeleton")).toBeTruthy();
     expect(screen.getByTestId("calendar-events-rail-skeleton")).toBeTruthy();
   });
+
+  it("preserves a focused deadline day when the modal opens straight into a different view", () => {
+    window.innerWidth = 1900;
+
+    const { rerender } = render(
+      <CalendarModal
+        open={false}
+        onClose={() => {}}
+        view="events"
+        onViewChange={() => {}}
+        eventsData={{ getEvents: () => [] }}
+        billsData={{}}
+        deadlinesData={{
+          ctm: {
+            upcoming: [
+              { id: "deadline-1", title: "Project due", due_date: "2026-04-20", status: "open" },
+            ],
+          },
+        }}
+      />,
+    );
+
+    rerender(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="deadlines"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        eventsData={{ getEvents: () => [] }}
+        billsData={{}}
+        deadlinesData={{
+          ctm: {
+            upcoming: [
+              { id: "deadline-1", title: "Project due", due_date: "2026-04-20", status: "open" },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Monday, April 20")).toBeTruthy();
+    expect(screen.getAllByText("Project due").length).toBeGreaterThan(0);
+  });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useKeyHold from "../../hooks/useKeyHold";
+import useInboxSelectionHistory from "../../hooks/email/useInboxSelectionHistory";
 import { useDashboard } from "../../context/DashboardContext";
 import {
   markEmailAsRead,
@@ -57,6 +58,7 @@ export default function useInboxController({
   const [liveTrashedUids, setLiveTrashedUids] = useState(() => new Set());
   const [billOpen, setBillOpen] = useState(false);
   const { markEmailRead, markEmailUnread, handleDismiss } = useDashboard();
+  const closeSelectedEmail = useInboxSelectionHistory({ selectedId, setSelectedId });
 
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000);
@@ -359,7 +361,7 @@ export default function useInboxController({
         markEmailRead(id);
         markEmailAsRead(uid).catch(() => {});
       }
-      if (markingUnread) setSelectedId(null);
+      if (markingUnread) closeSelectedEmail();
       return;
     }
 
@@ -421,6 +423,7 @@ export default function useInboxController({
     markEmailRead,
     markEmailUnread,
     onLiveReadOverrideChange,
+    closeSelectedEmail,
   ]);
 
   const trashHold = useKeyHold({
@@ -522,6 +525,7 @@ export default function useInboxController({
     mobileFilterPanelRef,
     selectedId,
     setSelectedId,
+    closeSelectedEmail,
     selectedEmail,
     selectedAccount,
     mobileFiltersOpen,

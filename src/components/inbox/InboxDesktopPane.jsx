@@ -20,6 +20,7 @@ export default function InboxDesktopPane({
   selectedEmail,
   selectedAccount,
   setSelectedId,
+  closeSelectedEmail,
   pinnedSet,
   billOpen,
   setBillOpen,
@@ -132,7 +133,7 @@ export default function InboxDesktopPane({
               accent={accent}
               pinned={!!selectedEmail && (pinnedSet.has(selectedEmail.uid) || pinnedSet.has(selectedEmail.id))}
               onAction={onAction}
-              onClose={() => setSelectedId(null)}
+              onClose={closeSelectedEmail}
               showTriage={showTriage}
               showDraft={showDraft}
               billOpen={billOpen}

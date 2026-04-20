@@ -35,17 +35,18 @@ export default function EmailBodyPane({ state, fallback, isMobile = false }) {
     // Iframe handles its own scroll; outer wrapper just clips and tints.
     return (
       <div
+        data-testid={isMobile ? "inbox-mobile-reader-body" : undefined}
         style={{
-          flex: isMobile ? "unset" : 1,
+          flex: 1,
           minHeight: 0,
           display: "flex",
-          padding: isMobile ? "0 16px 8px" : "12px 16px 16px",
+          padding: isMobile ? "0 16px 12px" : "12px 16px 16px",
         }}
       >
         <div
           style={{
             flex: 1,
-            minHeight: isMobile ? 320 : 0,
+            minHeight: 0,
             borderRadius: 8,
             overflow: "hidden",
             background: "#fff",
@@ -59,11 +60,12 @@ export default function EmailBodyPane({ state, fallback, isMobile = false }) {
   }
   return (
     <div
+      data-testid={isMobile ? "inbox-mobile-reader-body" : undefined}
       style={{
-        flex: isMobile ? "unset" : 1,
+        flex: 1,
         minHeight: 0,
         overflowY: "auto",
-        padding: isMobile ? "16px 16px 8px" : "22px 24px 28px",
+        padding: isMobile ? "16px 16px 12px" : "22px 24px 28px",
       }}
     >
       <div

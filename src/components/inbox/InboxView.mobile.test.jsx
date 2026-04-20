@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DashboardProvider } from "../../context/DashboardContext.jsx";
 import InboxView from "./InboxView.jsx";
@@ -233,21 +233,26 @@ describe("InboxView mobile", () => {
     expect(screen.queryByTestId("inbox-mobile-filter-sheet")).toBeNull();
   });
 
-  it("renders bill pay and draft reply as inline mobile sections", () => {
+  it("uses an inline actions menu and opens bill or draft workspaces from it", () => {
     renderInbox({
       isMobile: true,
       seedSelectedId: "email-action",
       customize: { aiVerbosity: "standard" },
     });
 
-    expect(screen.getByTestId("inbox-mobile-bill-section")).toBeTruthy();
-    expect(screen.getByTestId("inbox-mobile-draft-section")).toBeTruthy();
-    expect(screen.queryByLabelText("Close bill pay")).toBeNull();
+    expect(screen.getByTestId("inbox-mobile-reader-body")).toBeTruthy();
+    expect(screen.queryByTestId("inbox-mobile-bill-panel")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Pay bill/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Actions/i }));
+    expect(screen.getByTestId("inbox-mobile-actions-menu")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open bill pay/i }));
+    expect(screen.getByTestId("inbox-mobile-bill-panel")).toBeTruthy();
     expect(screen.getByTestId("bill-badge")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Claude draft reply/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Actions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Show draft reply/i }));
+    expect(screen.getByTestId("inbox-mobile-draft-panel")).toBeTruthy();
     expect(screen.getByTestId("draft-reply")).toBeTruthy();
   });
 
@@ -273,10 +278,27 @@ describe("InboxView mobile", () => {
     });
 
     expect(screen.getByTestId("inbox-mobile-reader")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Unread$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Actions/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Mark unread/i }));
     expect(screen.queryByTestId("inbox-mobile-reader")).toBeNull();
     expect(screen.getByTestId("inbox-mobile-list")).toBeTruthy();
     expect(screen.getByText("Fresh live ping")).toBeTruthy();
+  });
+
+  it("returns to the mobile list on browser back while reading an email", () => {
+    renderInbox({ isMobile: true });
+
+    fireEvent.click(screen.getByText("Project budget sign-off"));
+    expect(screen.getByTestId("inbox-mobile-reader")).toBeTruthy();
+
+    const sessionId = window.history.state.eaInboxNav.sessionId;
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", {
+        state: { eaInboxNav: { sessionId, selectedId: null } },
+      }));
+    });
+
+    expect(screen.getByTestId("inbox-mobile-list")).toBeTruthy();
   });
 
   it("keeps the desktop inbox path intact", () => {
@@ -284,5 +306,21 @@ describe("InboxView mobile", () => {
 
     expect(screen.getByTestId("inbox-desktop-view")).toBeTruthy();
     expect(screen.queryByTestId("inbox-mobile-list")).toBeNull();
+  });
+
+  it("deselects the active desktop email on browser back", () => {
+    renderInbox({ isMobile: false });
+
+    fireEvent.click(screen.getByText("Project budget sign-off"));
+    expect(screen.getByText("Please approve the revised budget.")).toBeTruthy();
+
+    const sessionId = window.history.state.eaInboxNav.sessionId;
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate", {
+        state: { eaInboxNav: { sessionId, selectedId: null } },
+      }));
+    });
+
+    expect(screen.getByText("Select an email")).toBeTruthy();
   });
 });
