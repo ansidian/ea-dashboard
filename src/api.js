@@ -114,6 +114,10 @@ export const getCalendarDeadlines = () => apiFetch("/api/calendar/deadlines");
 export const getCalendarRange = (start, end) =>
   apiFetch(`/api/calendar/range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
 export const getCalendarSources = () => apiFetch("/api/calendar/calendars");
+export const getCalendarPlaceSuggestions = (query, sessionToken) =>
+  apiFetch(`/api/calendar/places/suggest?q=${encodeURIComponent(query)}${sessionToken ? `&sessionToken=${encodeURIComponent(sessionToken)}` : ""}`);
+export const getCalendarPlaceDetails = (placeId, sessionToken) =>
+  apiFetch(`/api/calendar/places/${encodeURIComponent(placeId)}${sessionToken ? `?sessionToken=${encodeURIComponent(sessionToken)}` : ""}`);
 export const createCalendarEvent = (data) =>
   apiFetch("/api/calendar/events", { method: "POST", body: JSON.stringify(data) });
 export const updateCalendarEvent = (eventId, data) =>

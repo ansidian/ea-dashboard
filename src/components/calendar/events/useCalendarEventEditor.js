@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   createCalendarEvent,
   deleteCalendarEvent,
+  getCalendarPlaceDetails,
+  getCalendarPlaceSuggestions,
   getCalendarSources,
   getGmailAuthUrl,
   updateCalendarEvent,
 } from "@/api";
+import { parseCalendarTitle } from "./parseCalendarTitle";
 
 function pacificYMD(ms) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -138,6 +141,25 @@ function inferNoWritableReason(sourceGroups) {
   return "calendar_no_writable_sources";
 }
 
+function createManualOverrides() {
+  return {
+    startDate: false,
+    endDate: false,
+    startTime: false,
+    endTime: false,
+    location: false,
+    allDay: false,
+  };
+}
+
+function clearLocationState(setters) {
+  setters.setLocationSuggestions([]);
+  setters.setLocationSuggestionsLoading(false);
+  setters.setLocationSuggestionsError(null);
+  setters.setActiveLocationSuggestion(0);
+  setters.setPlacesSessionToken("");
+}
+
 export default function useCalendarEventEditor({
   open,
   view,
@@ -153,6 +175,10 @@ export default function useCalendarEventEditor({
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [draft, setDraft] = useState(() => defaultDraft(null));
+  const [createSeedDraft, setCreateSeedDraft] = useState(() => defaultDraft(null));
+  const [titleInput, setTitleInput] = useState("");
+  const [titleParseNow, setTitleParseNow] = useState(() => Date.now());
+  const [manualOverrides, setManualOverrides] = useState(() => createManualOverrides());
   const [editingEvent, setEditingEvent] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -161,15 +187,48 @@ export default function useCalendarEventEditor({
   const [errorCode, setErrorCode] = useState(null);
   const [touchedFields, setTouchedFields] = useState({});
   const [saveAttempted, setSaveAttempted] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [locationSuggestionsLoading, setLocationSuggestionsLoading] = useState(false);
+  const [locationSuggestionsError, setLocationSuggestionsError] = useState(null);
+  const [activeLocationSuggestion, setActiveLocationSuggestion] = useState(0);
+  const [placesSessionToken, setPlacesSessionToken] = useState("");
+  const locationSuggestionsRef = useRef([]);
+  const activeLocationSuggestionRef = useRef(0);
+  const editorHistoryTokenRef = useRef(null);
 
   const selectedDate = ymdFromView({ viewYear, viewMonth, selectedDay });
   const writableCalendars = useMemo(
     () => flattenWritableCalendars(sourceGroups),
     [sourceGroups],
   );
+  const isEditing = !!editingEvent;
+  const titleAssist = useMemo(() => (
+    isEditing
+      ? {
+          rawTitle: titleInput,
+          cleanTitle: titleInput,
+          titleAfterSourceCommit: titleInput,
+          titleAfterLocationCommit: titleInput,
+          matchedText: "",
+          locationQuery: "",
+          sourceQuery: "",
+          parsedDateTime: null,
+          preview: "",
+        }
+      : parseCalendarTitle(titleInput, {
+          now: titleParseNow,
+          baseDate: createSeedDraft.startDate,
+          defaultStartTime: createSeedDraft.startTime,
+          defaultEndTime: createSeedDraft.endTime,
+        })
+  ), [createSeedDraft.endTime, createSeedDraft.startDate, createSeedDraft.startTime, isEditing, titleInput, titleParseNow]);
+  const effectiveTitle = useMemo(
+    () => String(isEditing ? draft.title : titleAssist.cleanTitle).trim(),
+    [draft.title, isEditing, titleAssist.cleanTitle],
+  );
+
   const validationMessage = useMemo(() => {
-    const title = String(draft.title || "").trim();
-    if (!title) return "Title is required.";
+    if (!effectiveTitle) return "Title is required.";
     if (!draft.accountId || !draft.calendarId) return "Choose a writable calendar.";
     if (!draft.startDate || !draft.endDate) return "Start and end dates are required.";
     if (draft.endDate < draft.startDate) return "End date must be on or after the start date.";
@@ -177,9 +236,9 @@ export default function useCalendarEventEditor({
     if (!draft.startTime || !draft.endTime) return "Start and end times are required.";
     const startIso = `${draft.startDate}T${draft.startTime}:00`;
     const endIso = `${draft.endDate}T${draft.endTime}:00`;
-    if (endIso <= startIso) return "End time must be after start time.";
+    if (endIso < startIso) return "End time must be on or after start time.";
     return null;
-  }, [draft]);
+  }, [draft, effectiveTitle]);
   const visibleValidationMessage = useMemo(() => {
     if (!validationMessage) return null;
     if (validationMessage === "Title is required." && !touchedFields.title && !saveAttempted) {
@@ -211,6 +270,14 @@ export default function useCalendarEventEditor({
     }
   }, [editable, sourceGroups, sourcesLoaded]);
 
+  useLayoutEffect(() => {
+    locationSuggestionsRef.current = locationSuggestions;
+  }, [locationSuggestions]);
+
+  useLayoutEffect(() => {
+    activeLocationSuggestionRef.current = activeLocationSuggestion;
+  }, [activeLocationSuggestion]);
+
   useEffect(() => {
     if (!open || view !== "events") {
       setMode("detail");
@@ -220,8 +287,104 @@ export default function useCalendarEventEditor({
       setErrorCode(null);
       setTouchedFields({});
       setSaveAttempted(false);
+      setManualOverrides(createManualOverrides());
+      setTitleInput("");
+      clearLocationState({
+        setLocationSuggestions,
+        setLocationSuggestionsLoading,
+        setLocationSuggestionsError,
+        setActiveLocationSuggestion,
+        setPlacesSessionToken,
+      });
     }
   }, [open, view]);
+
+  useEffect(() => {
+    if (mode !== "editor" || isEditing) return;
+    setDraft((current) => {
+      const next = {
+        ...current,
+        title: titleAssist.cleanTitle,
+      };
+
+      const parsed = titleAssist.parsedDateTime;
+      if (!manualOverrides.startDate) next.startDate = parsed?.startDate || createSeedDraft.startDate;
+      if (!manualOverrides.endDate) next.endDate = parsed?.endDate || createSeedDraft.endDate;
+      if (!manualOverrides.startTime) next.startTime = parsed?.startTime || createSeedDraft.startTime;
+      if (!manualOverrides.endTime) next.endTime = parsed?.endTime || createSeedDraft.endTime;
+      if (titleAssist.locationQuery) next.location = titleAssist.locationQuery;
+      else if (!manualOverrides.location) next.location = createSeedDraft.location;
+
+      if (
+        next.title === current.title
+        && next.startDate === current.startDate
+        && next.endDate === current.endDate
+        && next.startTime === current.startTime
+        && next.endTime === current.endTime
+        && next.location === current.location
+      ) {
+        return current;
+      }
+
+      return next;
+    });
+  }, [createSeedDraft, isEditing, manualOverrides.endDate, manualOverrides.endTime, manualOverrides.location, manualOverrides.startDate, manualOverrides.startTime, mode, titleAssist]);
+
+  const clearEditorState = useCallback(() => {
+    setMode("detail");
+    setEditingEvent(null);
+    setConfirmDelete(false);
+    setError(null);
+    setErrorCode(null);
+    setTouchedFields({});
+    setSaveAttempted(false);
+    setManualOverrides(createManualOverrides());
+    clearLocationState({
+      setLocationSuggestions,
+      setLocationSuggestionsLoading,
+      setLocationSuggestionsError,
+      setActiveLocationSuggestion,
+      setPlacesSessionToken,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "editor" || !editable) return undefined;
+    const query = String(draft.location || "").trim();
+    if (query.length < 2) {
+      setLocationSuggestions([]);
+      setLocationSuggestionsLoading(false);
+      setLocationSuggestionsError(null);
+      setActiveLocationSuggestion(0);
+      return undefined;
+    }
+
+    const sessionToken = placesSessionToken || crypto.randomUUID();
+    if (!placesSessionToken) setPlacesSessionToken(sessionToken);
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setLocationSuggestionsLoading(true);
+      setLocationSuggestionsError(null);
+      try {
+        const data = await getCalendarPlaceSuggestions(query, sessionToken);
+        if (cancelled) return;
+        setLocationSuggestions(data?.places || []);
+        setActiveLocationSuggestion(0);
+      } catch (err) {
+        if (cancelled) return;
+        setLocationSuggestions([]);
+        setLocationSuggestionsError(err.message || "Failed to search locations.");
+      } finally {
+        if (!cancelled) setLocationSuggestionsLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [draft.location, editable, mode, placesSessionToken]);
 
   const seedDefaultCalendar = useCallback((nextDraft, groups) => {
     if (nextDraft.accountId && nextDraft.calendarId) return nextDraft;
@@ -240,10 +403,21 @@ export default function useCalendarEventEditor({
     const groups = await ensureSources();
     const nextDraft = seedDefaultCalendar(defaultDraft(selectedDate), groups);
     setDraft(nextDraft);
+    setCreateSeedDraft(nextDraft);
+    setTitleInput("");
+    setTitleParseNow(Date.now());
+    setManualOverrides(createManualOverrides());
     setEditingEvent(null);
     setConfirmDelete(false);
     setTouchedFields({});
     setSaveAttempted(false);
+    clearLocationState({
+      setLocationSuggestions,
+      setLocationSuggestionsLoading,
+      setLocationSuggestionsError,
+      setActiveLocationSuggestion,
+      setPlacesSessionToken,
+    });
     setMode("editor");
     if (!flattenWritableCalendars(groups).length) {
       const reason = inferNoWritableReason(groups);
@@ -262,30 +436,102 @@ export default function useCalendarEventEditor({
     const groups = await ensureSources();
     const nextDraft = seedDefaultCalendar(draftFromEvent(event), groups);
     setDraft(nextDraft);
+    setCreateSeedDraft(nextDraft);
+    setTitleInput(nextDraft.title);
+    setTitleParseNow(Date.now());
+    setManualOverrides(createManualOverrides());
     setEditingEvent(event);
     setConfirmDelete(false);
     setTouchedFields({});
     setSaveAttempted(false);
+    clearLocationState({
+      setLocationSuggestions,
+      setLocationSuggestionsLoading,
+      setLocationSuggestionsError,
+      setActiveLocationSuggestion,
+      setPlacesSessionToken,
+    });
     setMode("editor");
     setError(null);
     setErrorCode(null);
   }, [editable, ensureSources, seedDefaultCalendar]);
 
   const closeEditor = useCallback(() => {
-    setMode("detail");
-    setEditingEvent(null);
-    setConfirmDelete(false);
+    clearEditorState();
+  }, [clearEditorState]);
+
+  const updateField = useCallback((field, value, options = {}) => {
+    const { markTouched = true, markOverride = true } = options;
+    setDraft((current) => ({ ...current, [field]: value }));
+    if (markTouched) {
+      setTouchedFields((current) => (current[field] ? current : { ...current, [field]: true }));
+    }
+    if (markOverride && Object.prototype.hasOwnProperty.call(createManualOverrides(), field)) {
+      setManualOverrides((current) => (current[field] ? current : { ...current, [field]: true }));
+    }
+    if (field === "location") {
+      setLocationSuggestionsError(null);
+    }
     setError(null);
     setErrorCode(null);
-    setTouchedFields({});
-    setSaveAttempted(false);
   }, []);
 
-  const updateField = useCallback((field, value) => {
-    setDraft((current) => ({ ...current, [field]: value }));
-    setTouchedFields((current) => (current[field] ? current : { ...current, [field]: true }));
+  const handleTitleInputChange = useCallback((value) => {
+    setTitleInput(value);
+    if (isEditing) {
+      setDraft((current) => ({ ...current, title: value }));
+    }
+    setTouchedFields((current) => (current.title ? current : { ...current, title: true }));
     setError(null);
     setErrorCode(null);
+  }, [isEditing]);
+
+  const selectLocationSuggestion = useCallback(async (suggestion) => {
+    if (!suggestion?.placeId) return;
+    const sessionToken = placesSessionToken || crypto.randomUUID();
+    if (!placesSessionToken) setPlacesSessionToken(sessionToken);
+    setLocationSuggestionsLoading(true);
+    setLocationSuggestionsError(null);
+    try {
+      const data = await getCalendarPlaceDetails(suggestion.placeId, sessionToken);
+      const place = data?.place || null;
+      updateField("location", place?.location || suggestion.fullText || suggestion.primaryText, {
+        markTouched: true,
+        markOverride: true,
+      });
+      setLocationSuggestions([]);
+      setActiveLocationSuggestion(0);
+      setPlacesSessionToken("");
+    } catch (err) {
+      setLocationSuggestionsError(err.message || "Failed to load place details.");
+    } finally {
+      setLocationSuggestionsLoading(false);
+    }
+  }, [placesSessionToken, updateField]);
+
+  const moveActiveLocationSuggestion = useCallback((delta) => {
+    const total = locationSuggestionsRef.current.length;
+    if (!total) {
+      activeLocationSuggestionRef.current = 0;
+      setActiveLocationSuggestion(0);
+      return;
+    }
+    const next = (activeLocationSuggestionRef.current + delta + total) % total;
+    activeLocationSuggestionRef.current = next;
+    setActiveLocationSuggestion(next);
+  }, []);
+
+  const acceptActiveLocationSuggestion = useCallback(async () => {
+    const suggestion = locationSuggestionsRef.current[activeLocationSuggestionRef.current];
+    if (!suggestion) return false;
+    await selectLocationSuggestion(suggestion);
+    return true;
+  }, [selectLocationSuggestion]);
+
+  const clearLocationSuggestions = useCallback(() => {
+    setLocationSuggestions([]);
+    setLocationSuggestionsError(null);
+    setActiveLocationSuggestion(0);
   }, []);
 
   const save = useCallback(async () => {
@@ -299,7 +545,7 @@ export default function useCalendarEventEditor({
     const payload = {
       accountId: draft.accountId,
       calendarId: draft.calendarId,
-      title: draft.title,
+      title: effectiveTitle,
       allDay: draft.allDay,
       startDate: draft.startDate,
       endDate: draft.endDate,
@@ -334,7 +580,7 @@ export default function useCalendarEventEditor({
     } finally {
       setSaving(false);
     }
-  }, [draft, editable, editingEvent, onFocusDate, refreshRange, validationMessage]);
+  }, [draft, editable, editingEvent, effectiveTitle, onFocusDate, refreshRange, validationMessage]);
 
   const reconnect = useCallback(async () => {
     try {
@@ -378,13 +624,51 @@ export default function useCalendarEventEditor({
     }
   }, [closeEditor, editingEvent, refreshRange]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    function handlePopState() {
+      if (!editorHistoryTokenRef.current) return;
+      editorHistoryTokenRef.current = null;
+      clearEditorState();
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [clearEditorState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (mode === "editor" && open && view === "events") {
+      if (editorHistoryTokenRef.current) return;
+      const token = `ea-calendar-editor-${Date.now()}`;
+      const currentState = window.history.state && typeof window.history.state === "object"
+        ? window.history.state
+        : {};
+      window.history.pushState({ ...currentState, eaCalendarEditorToken: token }, "");
+      editorHistoryTokenRef.current = token;
+      return;
+    }
+
+    const token = editorHistoryTokenRef.current;
+    if (!token) return;
+    editorHistoryTokenRef.current = null;
+    if (window.history.state?.eaCalendarEditorToken === token) {
+      window.history.back();
+    }
+  }, [mode, open, view]);
+
   return {
     editable,
     mode,
     isEditorOpen: mode === "editor",
-    isEditing: !!editingEvent,
+    isEditing,
     editingEvent,
     draft,
+    titleInput,
+    titleAssist,
+    effectiveTitle,
     writableCalendars,
     sourceGroups,
     sourcesLoading,
@@ -395,10 +679,19 @@ export default function useCalendarEventEditor({
     saving,
     deleting,
     confirmDelete,
+    locationSuggestions,
+    locationSuggestionsLoading,
+    locationSuggestionsError,
+    activeLocationSuggestion,
     openCreate,
     openEdit,
     closeEditor,
     updateField,
+    handleTitleInputChange,
+    selectLocationSuggestion,
+    moveActiveLocationSuggestion,
+    acceptActiveLocationSuggestion,
+    clearLocationSuggestions,
     save,
     reconnect,
     confirmDeleteIntent,

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Calendar as CalendarIcon, Check, ChevronDown, Clock3 } from "lucide-react";
 import AnchoredFloatingPanel from "@/components/shared/pickers/AnchoredFloatingPanel";
 import CalendarDateTimeView from "@/components/shared/pickers/CalendarDateTimeView";
 import TimePickerView from "@/components/shared/pickers/TimePickerView";
+import CalendarLocationSuggestionsPanel from "./CalendarLocationSuggestionsPanel";
 
 const DATE_PICKER_WIDTH = 300;
 const DATE_PICKER_HEIGHT = 386;
@@ -10,6 +11,8 @@ const TIME_PICKER_WIDTH = 280;
 const TIME_PICKER_HEIGHT = 238;
 const SOURCE_PICKER_WIDTH = 320;
 const SOURCE_PICKER_HEIGHT = 280;
+const LOCATION_PICKER_WIDTH = 360;
+const LOCATION_PICKER_HEIGHT = 240;
 const ACCENT = "var(--ea-accent)";
 
 function FieldLabel({ children }) {
@@ -55,6 +58,18 @@ function formatTimeLabel(value) {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+function addMinutesToDraftDateTime(dateValue, timeValue, minutesToAdd) {
+  const baseDate = dateValue || "2026-01-01";
+  const baseTime = timeValue || "09:00";
+  const [hour, minute] = baseTime.split(":").map(Number);
+  const base = new Date(`${baseDate}T00:00:00`);
+  base.setHours(Number.isFinite(hour) ? hour : 9, Number.isFinite(minute) ? minute : 0, 0, 0);
+  base.setMinutes(base.getMinutes() + minutesToAdd);
+  const nextDate = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
+  const nextTime = `${String(base.getHours()).padStart(2, "0")}:${String(base.getMinutes()).padStart(2, "0")}`;
+  return { date: nextDate, time: nextTime };
 }
 
 function sourceDotStyle(color) {
@@ -146,6 +161,10 @@ function ActionButton({
   );
 }
 
+function stopKeyPropagation(event) {
+  event.stopPropagation();
+}
+
 function PickerFieldButton(props) {
   const {
     anchorRef,
@@ -184,7 +203,15 @@ function PickerFieldButton(props) {
         transition: "transform 140ms, background 140ms, border-color 140ms",
       }}
     >
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          minWidth: 0,
+          flex: "1 1 auto",
+        }}
+      >
         {leading || (
           <span
             aria-hidden
@@ -217,7 +244,9 @@ function PickerFieldButton(props) {
       </span>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
         {trailingLabel ? (
-          <span style={{ fontSize: 10, color: "rgba(205,214,244,0.38)" }}>{trailingLabel}</span>
+          <span style={{ fontSize: 10, color: "rgba(205,214,244,0.38)", whiteSpace: "nowrap" }}>
+            {trailingLabel}
+          </span>
         ) : null}
         <ChevronDown size={12} color="rgba(205,214,244,0.45)" />
       </span>
@@ -225,9 +254,42 @@ function PickerFieldButton(props) {
   );
 }
 
-function SourcePickerPanel({ sourceGroups, writableCalendars, selectedValue, onSelect }) {
+function SourcePickerPanel({
+  sourceGroups,
+  writableCalendars,
+  selectedValue,
+  activeValue = null,
+  filterQuery = "",
+  onSelect,
+}) {
   const selectedSet = new Set([selectedValue]);
+  const itemRefs = useRef([]);
+  const normalizedQuery = String(filterQuery || "").trim().toLowerCase();
+  const filteredCalendars = useMemo(() => {
+    if (!normalizedQuery) return writableCalendars;
+    return writableCalendars.filter((entry) => {
+      const haystack = [
+        entry.summary,
+        entry.label,
+        entry.accountLabel,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [normalizedQuery, writableCalendars]);
   const showGroupLabels = sourceGroups.length > 1;
+
+  useLayoutEffect(() => {
+    if (!activeValue) return;
+    const activeIndex = filteredCalendars.findIndex((item) => item.value === activeValue);
+    if (activeIndex < 0) return;
+    itemRefs.current[activeIndex]?.scrollIntoView?.({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [activeValue, filteredCalendars]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -263,8 +325,23 @@ function SourcePickerPanel({ sourceGroups, writableCalendars, selectedValue, onS
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "0 8px 8px", overflowY: "auto" }}>
+        {!filteredCalendars.length ? (
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.05)",
+              background: "rgba(255,255,255,0.03)",
+              color: "rgba(205,214,244,0.56)",
+              fontSize: 11.5,
+              lineHeight: 1.5,
+            }}
+          >
+            No matching calendar sources yet.
+          </div>
+        ) : null}
         {sourceGroups.map((group) => {
-          const items = writableCalendars.filter((entry) => entry.accountId === group.accountId);
+          const items = filteredCalendars.filter((entry) => entry.accountId === group.accountId);
           if (!items.length) return null;
 
           return (
@@ -286,10 +363,25 @@ function SourcePickerPanel({ sourceGroups, writableCalendars, selectedValue, onS
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {items.map((item) => {
                   const selected = selectedSet.has(item.value);
+                  const active = activeValue === item.value;
+                  const borderColor = selected
+                    ? "rgba(203,166,218,0.34)"
+                    : active
+                      ? "rgba(137,220,235,0.28)"
+                      : "rgba(255,255,255,0.06)";
+                  const background = selected
+                    ? "rgba(203,166,218,0.12)"
+                    : active
+                      ? "rgba(137,220,235,0.08)"
+                      : "rgba(255,255,255,0.03)";
 
                   return (
                     <button
                       key={item.value}
+                      ref={(element) => {
+                        const index = filteredCalendars.findIndex((entry) => entry.value === item.value);
+                        if (index >= 0) itemRefs.current[index] = element;
+                      }}
                       type="button"
                       onClick={() => onSelect(item)}
                       style={{
@@ -299,12 +391,8 @@ function SourcePickerPanel({ sourceGroups, writableCalendars, selectedValue, onS
                         gap: 10,
                         padding: "10px 12px",
                         borderRadius: 10,
-                        border: selected
-                          ? "1px solid rgba(203,166,218,0.34)"
-                          : "1px solid rgba(255,255,255,0.06)",
-                        background: selected
-                          ? "rgba(203,166,218,0.12)"
-                          : "rgba(255,255,255,0.03)",
+                        border: `1px solid ${borderColor}`,
+                        background,
                         color: "#cdd6f4",
                         fontFamily: "inherit",
                         cursor: "pointer",
@@ -313,19 +401,15 @@ function SourcePickerPanel({ sourceGroups, writableCalendars, selectedValue, onS
                       }}
                       onMouseEnter={(event) => {
                         event.currentTarget.style.transform = "translateY(-1px)";
-                        if (!selected) {
+                        if (!active && !selected) {
                           event.currentTarget.style.background = "rgba(255,255,255,0.05)";
                           event.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
                         }
                       }}
                       onMouseLeave={(event) => {
                         event.currentTarget.style.transform = "translateY(0)";
-                        event.currentTarget.style.background = selected
-                          ? "rgba(203,166,218,0.12)"
-                          : "rgba(255,255,255,0.03)";
-                        event.currentTarget.style.borderColor = selected
-                          ? "rgba(203,166,218,0.34)"
-                          : "rgba(255,255,255,0.06)";
+                        event.currentTarget.style.background = background;
+                        event.currentTarget.style.borderColor = borderColor;
                       }}
                     >
                       <span style={sourceDotStyle(item.color)} />
@@ -370,6 +454,8 @@ function SourcePickerPanel({ sourceGroups, writableCalendars, selectedValue, onS
 export default function CalendarEventEditorRail({ editor }) {
   const {
     draft,
+    titleInput,
+    titleAssist,
     writableCalendars,
     sourceGroups,
     sourcesLoading,
@@ -381,7 +467,16 @@ export default function CalendarEventEditorRail({ editor }) {
     deleting,
     confirmDelete,
     isEditing,
+    locationSuggestions,
+    locationSuggestionsLoading,
+    locationSuggestionsError,
+    activeLocationSuggestion,
     updateField,
+    handleTitleInputChange,
+    selectLocationSuggestion,
+    moveActiveLocationSuggestion,
+    acceptActiveLocationSuggestion,
+    clearLocationSuggestions,
     save,
     closeEditor,
     confirmDeleteIntent,
@@ -393,13 +488,19 @@ export default function CalendarEventEditorRail({ editor }) {
   const disabled = saving || deleting;
   const saveDisabled = disabled || !canSave;
   const [openPicker, setOpenPicker] = useState(null);
+  const [activeSourceSuggestion, setActiveSourceSuggestion] = useState(0);
+  const [dismissedAutoLocationQuery, setDismissedAutoLocationQuery] = useState("");
+  const [dismissedAutoSourceQuery, setDismissedAutoSourceQuery] = useState("");
   const pickerPanelRef = useRef(null);
   const [nowTick] = useState(() => Date.now());
+  const titleRef = useRef(null);
   const sourceRef = useRef(null);
+  const locationRef = useRef(null);
   const startDateRef = useRef(null);
   const endDateRef = useRef(null);
   const startTimeRef = useRef(null);
   const endTimeRef = useRef(null);
+  const activeSourceSuggestionRef = useRef(0);
 
   useEffect(() => {
     if (!openPicker) return undefined;
@@ -414,6 +515,28 @@ export default function CalendarEventEditorRail({ editor }) {
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [openPicker]);
+
+  useEffect(() => {
+    if (isEditing) return;
+    titleRef.current?.focus();
+    titleRef.current?.select();
+  }, [isEditing]);
+
+  useEffect(() => {
+    activeSourceSuggestionRef.current = activeSourceSuggestion;
+  }, [activeSourceSuggestion]);
+
+  useEffect(() => {
+    function handleSaveHotkey(event) {
+      if ((!event.metaKey && !event.ctrlKey) || event.key !== "Enter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      save();
+    }
+
+    document.addEventListener("keydown", handleSaveHotkey, true);
+    return () => document.removeEventListener("keydown", handleSaveHotkey, true);
+  }, [save]);
 
   const sharedDatePickerProps = {
     panelRef: pickerPanelRef,
@@ -440,6 +563,20 @@ export default function CalendarEventEditorRail({ editor }) {
     role: "dialog",
     style: { overflow: "hidden", padding: 8, zIndex: 10001 },
   };
+  const sharedLocationPickerProps = {
+    panelRef: pickerPanelRef,
+    onClose: () => {
+      setOpenPicker(null);
+      clearLocationSuggestions();
+    },
+    width: LOCATION_PICKER_WIDTH,
+    height: LOCATION_PICKER_HEIGHT,
+    matchAnchorWidth: true,
+    minWidth: 280,
+    maxWidth: LOCATION_PICKER_WIDTH,
+    role: "dialog",
+    style: { overflow: "hidden", padding: 8, zIndex: 10001 },
+  };
 
   const missingCalendar = !draft.accountId || !draft.calendarId;
   const selectedSource = useMemo(() => (
@@ -451,7 +588,165 @@ export default function CalendarEventEditorRail({ editor }) {
     && !!draft.endDate
     && !!draft.startTime
     && !!draft.endTime
-    && `${draft.endDate}T${draft.endTime}:00` <= `${draft.startDate}T${draft.startTime}:00`;
+    && `${draft.endDate}T${draft.endTime}:00` < `${draft.startDate}T${draft.startTime}:00`;
+  const showTitleAssist = !isEditing && (!!titleAssist.preview || !!titleAssist.locationQuery || !!titleAssist.sourceQuery);
+  const parsedSourceQuery = String(titleAssist.sourceQuery || "").trim();
+  const parsedLocationQuery = String(titleAssist.locationQuery || "").trim();
+  const filteredSourceSuggestions = useMemo(() => {
+    const normalizedQuery = parsedSourceQuery.toLowerCase();
+    if (!normalizedQuery) return writableCalendars;
+    return writableCalendars.filter((entry) => {
+      const haystack = [
+        entry.summary,
+        entry.label,
+        entry.accountLabel,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [parsedSourceQuery, writableCalendars]);
+  const showAutoSourceSuggestions = !openPicker
+    && !!parsedSourceQuery
+    && dismissedAutoSourceQuery !== parsedSourceQuery;
+  const showSourceSuggestions = openPicker === "source" || showAutoSourceSuggestions;
+  const showAutoLocationSuggestions = !showSourceSuggestions
+    && !openPicker
+    && !!parsedLocationQuery
+    && draft.location === parsedLocationQuery
+    && dismissedAutoLocationQuery !== parsedLocationQuery;
+  const showLocationSuggestions = (openPicker === "location" || showAutoLocationSuggestions)
+    && (
+      locationSuggestionsLoading
+      || !!locationSuggestionsError
+      || locationSuggestions.length > 0
+      || String(draft.location || "").trim().length >= 2
+    );
+  const shouldConsumeParsedSourceFromTitle = !isEditing
+    && !!parsedSourceQuery
+    && titleInput !== titleAssist.titleAfterSourceCommit;
+  const shouldConsumeParsedLocationFromTitle = !isEditing
+    && !!parsedLocationQuery
+    && draft.location === parsedLocationQuery
+    && titleInput !== titleAssist.titleAfterLocationCommit;
+  const closeSourceSuggestions = useCallback(() => {
+    if (showAutoSourceSuggestions) {
+      setDismissedAutoSourceQuery(parsedSourceQuery);
+    } else {
+      setOpenPicker(null);
+    }
+    setActiveSourceSuggestion(0);
+  }, [parsedSourceQuery, showAutoSourceSuggestions]);
+  const closeLocationSuggestions = useCallback(() => {
+    if (showAutoLocationSuggestions) {
+      setDismissedAutoLocationQuery(parsedLocationQuery);
+    } else {
+      setOpenPicker(null);
+    }
+    clearLocationSuggestions();
+  }, [clearLocationSuggestions, parsedLocationQuery, showAutoLocationSuggestions]);
+
+  const consumeParsedLocationFromTitle = useCallback(() => {
+    if (!shouldConsumeParsedLocationFromTitle) return;
+    handleTitleInputChange(titleAssist.titleAfterLocationCommit);
+    setDismissedAutoLocationQuery("");
+  }, [handleTitleInputChange, shouldConsumeParsedLocationFromTitle, titleAssist.titleAfterLocationCommit]);
+  const consumeParsedSourceFromTitle = useCallback(() => {
+    if (!shouldConsumeParsedSourceFromTitle) return;
+    handleTitleInputChange(titleAssist.titleAfterSourceCommit);
+    setDismissedAutoSourceQuery("");
+  }, [handleTitleInputChange, shouldConsumeParsedSourceFromTitle, titleAssist.titleAfterSourceCommit]);
+
+  const selectSourceSuggestion = useCallback((item) => {
+    if (!item) return;
+    updateField("accountId", item.accountId, { markTouched: false, markOverride: false });
+    updateField("calendarId", item.calendarId, { markTouched: false, markOverride: false });
+    consumeParsedSourceFromTitle();
+    setOpenPicker(null);
+    setActiveSourceSuggestion(0);
+  }, [consumeParsedSourceFromTitle, updateField]);
+
+  const handleSourceSuggestionKey = useCallback(async (event) => {
+    if (!showSourceSuggestions) return false;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (filteredSourceSuggestions.length) {
+        const next = (activeSourceSuggestionRef.current + 1) % filteredSourceSuggestions.length;
+        activeSourceSuggestionRef.current = next;
+        setActiveSourceSuggestion(next);
+      }
+      setOpenPicker("source");
+      return true;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (filteredSourceSuggestions.length) {
+        const next = (activeSourceSuggestionRef.current - 1 + filteredSourceSuggestions.length) % filteredSourceSuggestions.length;
+        activeSourceSuggestionRef.current = next;
+        setActiveSourceSuggestion(next);
+      }
+      setOpenPicker("source");
+      return true;
+    }
+    if (event.key === "Enter" && filteredSourceSuggestions.length > 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      selectSourceSuggestion(filteredSourceSuggestions[activeSourceSuggestionRef.current] || filteredSourceSuggestions[0]);
+      return true;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSourceSuggestions();
+      return true;
+    }
+    return false;
+  }, [closeSourceSuggestions, filteredSourceSuggestions, selectSourceSuggestion, showSourceSuggestions]);
+
+  const handleLocationSuggestionKey = useCallback(async (event) => {
+    if (!showLocationSuggestions) return false;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveActiveLocationSuggestion(1);
+      setOpenPicker("location");
+      return true;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      moveActiveLocationSuggestion(-1);
+      setOpenPicker("location");
+      return true;
+    }
+    if (event.key === "Enter" && locationSuggestions.length > 0) {
+      const accepted = await acceptActiveLocationSuggestion();
+      if (accepted) {
+        consumeParsedLocationFromTitle();
+        event.preventDefault();
+        event.stopPropagation();
+        setOpenPicker(null);
+      }
+      return accepted;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeLocationSuggestions();
+      return true;
+    }
+    return false;
+  }, [
+    acceptActiveLocationSuggestion,
+    consumeParsedLocationFromTitle,
+    closeLocationSuggestions,
+    locationSuggestions.length,
+    moveActiveLocationSuggestion,
+    showLocationSuggestions,
+  ]);
 
   return (
     <div
@@ -516,14 +811,65 @@ export default function CalendarEventEditorRail({ editor }) {
         <div>
           <FieldLabel>Title</FieldLabel>
           <input
+            ref={titleRef}
             data-testid="calendar-event-title"
             type="text"
-            value={draft.title}
-            onChange={(event) => updateField("title", event.target.value)}
+            value={titleInput}
+            onKeyDown={async (event) => {
+              if (await handleSourceSuggestionKey(event)) return;
+              if (await handleLocationSuggestionKey(event)) return;
+              event.stopPropagation();
+            }}
+            onChange={(event) => {
+              activeSourceSuggestionRef.current = 0;
+              setActiveSourceSuggestion(0);
+              setDismissedAutoSourceQuery("");
+              setDismissedAutoLocationQuery("");
+              handleTitleInputChange(event.target.value);
+            }}
             disabled={disabled}
-            placeholder="Event title"
+            placeholder={isEditing ? "Event title" : "Dinner on Tue at 5pm"}
             style={textFieldStyle({ invalid: validationMessage === "Title is required." })}
           />
+          {showTitleAssist ? (
+            <div
+              style={{
+                marginTop: 8,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.05)",
+                background: "rgba(255,255,255,0.03)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              {titleAssist.preview ? (
+                <div
+                  data-testid="calendar-event-title-preview"
+                  style={{ fontSize: 11.5, color: "rgba(205,214,244,0.78)", lineHeight: 1.45 }}
+                >
+                  Parsed schedule: <span style={{ color: "#cba6da" }}>{titleAssist.preview}</span>
+                </div>
+              ) : null}
+              {titleAssist.locationQuery ? (
+                <div
+                  data-testid="calendar-event-title-location-preview"
+                  style={{ fontSize: 11.5, color: "rgba(205,214,244,0.62)", lineHeight: 1.45 }}
+                >
+                  Parsed location query: <span style={{ color: "#f5c2e7" }}>{titleAssist.locationQuery}</span>
+                </div>
+              ) : null}
+              {titleAssist.sourceQuery ? (
+                <div
+                  data-testid="calendar-event-title-source-preview"
+                  style={{ fontSize: 11.5, color: "rgba(205,214,244,0.62)", lineHeight: 1.45 }}
+                >
+                  Parsed calendar source: <span style={{ color: "#89dceb" }}>{titleAssist.sourceQuery}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div>
@@ -540,7 +886,7 @@ export default function CalendarEventEditorRail({ editor }) {
             value={selectedSource?.label || (sourcesLoading ? "Loading calendars..." : "")}
             placeholder={writableCalendars.length ? "Choose a calendar" : "No writable calendars"}
             dataTestId="calendar-event-source-trigger"
-            onClick={() => !disabled && writableCalendars.length > 0 && setOpenPicker("source")}
+            onClick={() => !disabled && setOpenPicker("source")}
             disabled={disabled || sourcesLoading || writableCalendars.length === 0}
             invalid={missingCalendar}
             trailingLabel=""
@@ -602,6 +948,7 @@ export default function CalendarEventEditorRail({ editor }) {
               onClick={() => !disabled && setOpenPicker("startDate")}
               disabled={disabled}
               invalid={invalidDateRange}
+              trailingLabel=""
             />
           </div>
           <div>
@@ -615,6 +962,7 @@ export default function CalendarEventEditorRail({ editor }) {
               onClick={() => !disabled && setOpenPicker("endDate")}
               disabled={disabled}
               invalid={invalidDateRange}
+              trailingLabel=""
             />
           </div>
         </div>
@@ -632,6 +980,7 @@ export default function CalendarEventEditorRail({ editor }) {
                 onClick={() => !disabled && setOpenPicker("startTime")}
                 disabled={disabled}
                 invalid={invalidTimeRange}
+                trailingLabel=""
               />
             </div>
             <div>
@@ -645,6 +994,7 @@ export default function CalendarEventEditorRail({ editor }) {
                 onClick={() => !disabled && setOpenPicker("endTime")}
                 disabled={disabled}
                 invalid={invalidTimeRange}
+                trailingLabel=""
               />
             </div>
           </div>
@@ -653,14 +1003,37 @@ export default function CalendarEventEditorRail({ editor }) {
         <div>
           <FieldLabel>Location</FieldLabel>
           <input
+            ref={locationRef}
             data-testid="calendar-event-location"
             type="text"
             value={draft.location}
-            onChange={(event) => updateField("location", event.target.value)}
+            onFocus={() => {
+              if (!disabled) setOpenPicker("location");
+            }}
+            onChange={(event) => {
+              updateField("location", event.target.value);
+              if (!disabled) setOpenPicker("location");
+            }}
+            onKeyDown={async (event) => {
+              if (await handleLocationSuggestionKey(event)) return;
+              event.stopPropagation();
+            }}
             disabled={disabled}
-            placeholder="Optional"
+            placeholder="Search for a place or type your own"
             style={textFieldStyle()}
           />
+          {!locationSuggestionsError ? (
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 10.5,
+                color: "rgba(205,214,244,0.45)",
+                lineHeight: 1.45,
+              }}
+            >
+              Nearby suggestions are biased to your saved weather location.
+            </div>
+          ) : null}
         </div>
 
         <div>
@@ -668,6 +1041,7 @@ export default function CalendarEventEditorRail({ editor }) {
           <textarea
             data-testid="calendar-event-description"
             value={draft.description}
+            onKeyDown={stopKeyPropagation}
             onChange={(event) => updateField("description", event.target.value)}
             disabled={disabled}
             rows={5}
@@ -736,7 +1110,7 @@ export default function CalendarEventEditorRail({ editor }) {
             initialEpoch={new Date(`${draft.startDate || draft.endDate || "2026-01-01"}T12:00:00Z`).getTime()}
             onSelect={(epoch) => {
               updateField("startDate", toPacificYmd(epoch));
-              setOpenPicker(null);
+              setOpenPicker("endDate");
             }}
             onBack={() => setOpenPicker(null)}
             accent={ACCENT}
@@ -771,19 +1145,41 @@ export default function CalendarEventEditorRail({ editor }) {
         </AnchoredFloatingPanel>
       ) : null}
 
-      {openPicker === "source" ? (
+      {showSourceSuggestions ? (
         <AnchoredFloatingPanel
           anchorRef={sourceRef}
           ariaLabel="Calendar source picker"
           {...sharedSourcePickerProps}
+          onClose={closeSourceSuggestions}
         >
           <SourcePickerPanel
             sourceGroups={sourceGroups}
             writableCalendars={writableCalendars}
             selectedValue={draft.accountId && draft.calendarId ? `${draft.accountId}::${draft.calendarId}` : ""}
-            onSelect={(item) => {
-              updateField("accountId", item.accountId);
-              updateField("calendarId", item.calendarId);
+            activeValue={filteredSourceSuggestions[activeSourceSuggestion]?.value || null}
+            filterQuery={showAutoSourceSuggestions ? parsedSourceQuery : ""}
+            onSelect={selectSourceSuggestion}
+          />
+        </AnchoredFloatingPanel>
+      ) : null}
+
+      {showLocationSuggestions ? (
+        <AnchoredFloatingPanel
+          anchorRef={locationRef}
+          ariaLabel="Location suggestions"
+          {...sharedLocationPickerProps}
+          onClose={() => {
+            closeLocationSuggestions();
+          }}
+        >
+          <CalendarLocationSuggestionsPanel
+            suggestions={locationSuggestions}
+            loading={locationSuggestionsLoading}
+            error={locationSuggestionsError}
+            activeIndex={activeLocationSuggestion}
+            onSelect={async (item) => {
+              await selectLocationSuggestion(item);
+              consumeParsedLocationFromTitle();
               setOpenPicker(null);
             }}
           />
@@ -800,7 +1196,15 @@ export default function CalendarEventEditorRail({ editor }) {
             initialTime={draft.startTime}
             onSelect={(value) => {
               updateField("startTime", value);
-              setOpenPicker(null);
+              const seededEnd = addMinutesToDraftDateTime(draft.startDate, value, 30);
+              const shouldSyncEndDate = !draft.endDate
+                || draft.endDate === draft.startDate
+                || draft.endDate < seededEnd.date;
+              if (shouldSyncEndDate) {
+                updateField("endDate", seededEnd.date);
+              }
+              updateField("endTime", seededEnd.time);
+              setOpenPicker("endTime");
             }}
             onBack={() => setOpenPicker(null)}
             accent={ACCENT}

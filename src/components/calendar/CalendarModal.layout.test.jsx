@@ -6,6 +6,8 @@ const mockGetCalendarSources = vi.fn();
 
 vi.mock("@/api", () => ({
   getCalendarSources: (...args) => mockGetCalendarSources(...args),
+  getCalendarPlaceSuggestions: vi.fn(),
+  getCalendarPlaceDetails: vi.fn(),
   createCalendarEvent: vi.fn(),
   updateCalendarEvent: vi.fn(),
   deleteCalendarEvent: vi.fn(),
@@ -15,6 +17,7 @@ vi.mock("@/api", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 beforeEach(() => {
@@ -213,6 +216,70 @@ describe("CalendarModal responsive layout", () => {
 
     expect(screen.getByTestId("calendar-event-editor-rail")).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("focuses today's day when pressing t", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T19:00:00.000Z"));
+
+    try {
+      window.innerWidth = 1900;
+
+      render(
+        <CalendarModal
+          open
+          onClose={() => {}}
+          view="events"
+          onViewChange={() => {}}
+          focusDate="2026-04-10"
+          eventsData={{ getEvents: () => [] }}
+          billsData={{}}
+          deadlinesData={{}}
+        />,
+      );
+
+      fireEvent.keyDown(document, { key: "t" });
+
+      expect(screen.getByText("Monday, April 20")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens the create event form from c and preserves the selected day seed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T19:00:00.000Z"));
+
+    try {
+      window.innerWidth = 1900;
+
+      render(
+        <CalendarModal
+          open
+          onClose={() => {}}
+          view="events"
+          onViewChange={() => {}}
+          focusDate="2026-04-23"
+          eventsData={{
+            editable: true,
+            getEvents: () => [],
+          }}
+          billsData={{}}
+          deadlinesData={{}}
+        />,
+      );
+
+      fireEvent.click(screen.getByText("23"));
+      fireEvent.keyDown(document, { key: "c" });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByTestId("calendar-event-editor-rail")).toBeTruthy();
+      expect(screen.getByTestId("calendar-event-start-date").textContent).toMatch(/apr 23, 2026/i);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("refetches the visible events month when the open modal gets a refreshed eventsData object", async () => {

@@ -60,6 +60,15 @@ describe("normalizeGoogleCalendarLink", () => {
     expect(result).toContain("authuser=me%40example.com");
   });
 
+  it("normalizes generic Google event redirect links to calendar eventedit URLs", () => {
+    const result = normalizeGoogleCalendarLink(
+      "https://www.google.com/calendar/event?eid=abc123",
+      "me@example.com",
+    );
+    expect(result).toContain("https://calendar.google.com/calendar/u/0/r/eventedit/abc123");
+    expect(result).toContain("authuser=me%40example.com");
+  });
+
   it("leaves non-Google links untouched", () => {
     expect(normalizeGoogleCalendarLink("https://example.com/event/123", "me@example.com"))
       .toBe("https://example.com/event/123");

@@ -25,6 +25,7 @@ export default function TimePickerView({
   confirmLabel = "Set time",
 }) {
   const confirmButtonRef = useRef(null);
+  const hourInputRef = useRef(null);
   const advanceFocusToConfirmRef = useRef(false);
   const parsed = parseTime(initialTime);
   const [hour24, setHour24] = useState(parsed.hour);
@@ -48,35 +49,48 @@ export default function TimePickerView({
     setHour24(nextHour24);
   };
 
+  const submitCurrentTime = (event) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    onSelect(toTimeValue(hour24, minute));
+  };
+
+  const handleAmPmHotkey = (key, event) => {
+    const normalized = key.toLowerCase();
+    if (normalized !== "a" && normalized !== "p") return false;
+    event.preventDefault();
+    event.stopPropagation();
+    advanceFocusToConfirmRef.current = true;
+    setAmPm(normalized === "p");
+    return true;
+  };
+
   const handleAmPmKeyDown = (event) => {
     const key = event.key.toLowerCase();
-    if (key === "a") {
-      event.preventDefault();
-      advanceFocusToConfirmRef.current = true;
-      setAmPm(false);
-      return;
-    }
-    if (key === "p") {
-      event.preventDefault();
-      advanceFocusToConfirmRef.current = true;
-      setAmPm(true);
-      return;
-    }
+    if (handleAmPmHotkey(key, event)) return;
     if (key === "arrowleft" || key === "arrowdown") {
       event.preventDefault();
+      event.stopPropagation();
       setAmPm(false);
       return;
     }
     if (key === "arrowright" || key === "arrowup") {
       event.preventDefault();
+      event.stopPropagation();
       setAmPm(true);
       return;
     }
     if (key === " " || key === "enter") {
       event.preventDefault();
+      event.stopPropagation();
       setAmPm(!isPm);
     }
   };
+
+  useEffect(() => {
+    hourInputRef.current?.focus();
+    hourInputRef.current?.select?.();
+  }, []);
 
   useEffect(() => {
     if (!advanceFocusToConfirmRef.current) return;
@@ -85,7 +99,18 @@ export default function TimePickerView({
   }, [hour24]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div
+      data-suspend-calendar-hotkeys="true"
+      style={{ display: "flex", flexDirection: "column" }}
+      onKeyDownCapture={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          submitCurrentTime(event);
+          return;
+        }
+        handleAmPmHotkey(event.key, event);
+      }}
+    >
       <div
         style={{
           padding: "8px 12px 10px",
@@ -123,6 +148,8 @@ export default function TimePickerView({
           max={12}
           ariaLabel="hour"
           accent={accent}
+          autoFocus
+          inputRef={hourInputRef}
         />
         <div style={{ fontSize: 14, fontWeight: 600, color: "rgba(205,214,244,0.5)" }}>:</div>
         <NumberField
@@ -240,7 +267,7 @@ export default function TimePickerView({
         <button
           ref={confirmButtonRef}
           type="button"
-          onClick={() => onSelect(toTimeValue(hour24, minute))}
+          onClick={submitCurrentTime}
           style={{
             padding: "6px 14px",
             borderRadius: 8,

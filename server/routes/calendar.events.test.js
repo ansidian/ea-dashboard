@@ -24,6 +24,10 @@ vi.mock("../briefing/calendar.js", () => ({
     body: { code: err.code || "unknown", message: err.message || "unknown" },
   })),
 }));
+vi.mock("../briefing/google-places.js", () => ({
+  suggestGooglePlaces: vi.fn(),
+  getGooglePlaceDetails: vi.fn(),
+}));
 vi.mock("../briefing/ctm.js", () => ({ fetchCTMDeadlinesAll: vi.fn() }));
 vi.mock("../briefing/todoist.js", () => ({ fetchTodoistTasksAll: vi.fn() }));
 vi.mock("../briefing/tombstones.js", () => ({
@@ -39,6 +43,10 @@ const {
   updateCalendarEvent,
   deleteCalendarEvent,
 } = await import("../briefing/calendar.js");
+const {
+  suggestGooglePlaces,
+  getGooglePlaceDetails,
+} = await import("../briefing/google-places.js");
 const calendarRoutes = (await import("./calendar.js")).default;
 
 function makeApp() {
@@ -179,5 +187,64 @@ describe("calendar event routes", () => {
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("calendar_reauth_required");
+  });
+
+  it("returns place suggestions using the saved weather coordinates as bias", async () => {
+    loadUserConfig.mockResolvedValue({
+      accounts: [
+        {
+          id: "gmail-main",
+          type: "gmail",
+          email: "me@example.com",
+          label: "Google",
+          calendar_enabled: 1,
+        },
+      ],
+      settings: {
+        weather_lat: 34.0522,
+        weather_lng: -118.2437,
+      },
+    });
+    suggestGooglePlaces.mockResolvedValue([
+      {
+        placeId: "place-1",
+        primaryText: "McDonald's",
+        secondaryText: "Los Angeles, CA",
+        fullText: "McDonald's Los Angeles, CA",
+      },
+    ]);
+
+    const res = await request(makeApp())
+      .get("/api/calendar/places/suggest")
+      .query({ q: "McDonald's", sessionToken: "session-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.places).toHaveLength(1);
+    expect(suggestGooglePlaces).toHaveBeenCalledWith("McDonald's", {
+      sessionToken: "session-1",
+      lat: 34.0522,
+      lng: -118.2437,
+    });
+  });
+
+  it("returns normalized place details for a selected place", async () => {
+    getGooglePlaceDetails.mockResolvedValue({
+      placeId: "place-1",
+      displayName: "McDonald's",
+      formattedAddress: "123 Main St, Los Angeles, CA 90012, USA",
+      location: "McDonald's, 123 Main St, Los Angeles, CA 90012, USA",
+      lat: 34.05,
+      lng: -118.24,
+    });
+
+    const res = await request(makeApp())
+      .get("/api/calendar/places/place-1")
+      .query({ sessionToken: "session-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.place.location).toBe("McDonald's, 123 Main St, Los Angeles, CA 90012, USA");
+    expect(getGooglePlaceDetails).toHaveBeenCalledWith("place-1", {
+      sessionToken: "session-1",
+    });
   });
 });

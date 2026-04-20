@@ -19,6 +19,10 @@ import {
   deleteCalendarEvent,
   formatCalendarRouteError,
 } from "../briefing/calendar.js";
+import {
+  getGooglePlaceDetails,
+  suggestGooglePlaces,
+} from "../briefing/google-places.js";
 import { hydrateRecurringTombstones, addDaysIso } from "../briefing/tombstones.js";
 
 const router = Router();
@@ -166,6 +170,44 @@ router.get("/calendars", async (_req, res) => {
     res.json({ accounts: groups });
   } catch (err) {
     handleCalendarRouteError(res, err, "Failed to fetch calendar sources");
+  }
+});
+
+router.get("/places/suggest", async (req, res) => {
+  const query = String(req.query.q || "").trim();
+  const sessionToken = String(req.query.sessionToken || "").trim();
+  if (!query) {
+    return res.status(400).json({
+      code: "calendar_places_query_required",
+      message: "q parameter required",
+    });
+  }
+
+  try {
+    const userId = process.env.EA_USER_ID;
+    const { settings = {} } = await loadUserConfig(userId);
+    const places = await suggestGooglePlaces(query, {
+      sessionToken: sessionToken || null,
+      lat: settings.weather_lat,
+      lng: settings.weather_lng,
+    });
+    res.json({ places });
+  } catch (err) {
+    handleCalendarRouteError(res, err, "Failed to fetch place suggestions");
+  }
+});
+
+router.get("/places/:placeId", async (req, res) => {
+  const { placeId } = req.params;
+  const sessionToken = String(req.query.sessionToken || "").trim();
+
+  try {
+    const place = await getGooglePlaceDetails(placeId, {
+      sessionToken: sessionToken || null,
+    });
+    res.json({ place });
+  } catch (err) {
+    handleCalendarRouteError(res, err, "Failed to load place details");
   }
 });
 

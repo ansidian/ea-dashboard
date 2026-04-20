@@ -123,6 +123,8 @@ export function NumberField({
   pad = 0,
   ariaLabel,
   accent = "#f97316",
+  autoFocus = false,
+  inputRef = null,
 }) {
   const formatted = pad ? String(value).padStart(pad, "0") : String(value);
   const [buffer, setBuffer] = useState(null);
@@ -163,9 +165,11 @@ export function NumberField({
         <ArrowUp size={10} />
       </button>
       <input
+        ref={inputRef}
         type="text"
         inputMode="numeric"
         aria-label={ariaLabel}
+        autoFocus={autoFocus}
         value={display}
         onFocus={(e) => { setBuffer(formatted); e.target.select(); }}
         onBlur={() => commit(buffer ?? formatted)}

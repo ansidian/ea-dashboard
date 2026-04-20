@@ -8,6 +8,9 @@ export default function AnchoredFloatingPanel({
   onClose,
   width,
   height,
+  matchAnchorWidth = false,
+  minWidth,
+  maxWidth,
   role = "dialog",
   ariaLabel,
   style,
@@ -21,9 +24,12 @@ export default function AnchoredFloatingPanel({
     function updatePos() {
       const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) return;
+      let resolvedWidth = matchAnchorWidth ? rect.width : width;
+      if (typeof minWidth === "number") resolvedWidth = Math.max(resolvedWidth, minWidth);
+      if (typeof maxWidth === "number") resolvedWidth = Math.min(resolvedWidth, maxWidth);
       setPos({
-        ...computePlacement(rect, width, height),
-        width,
+        ...computePlacement(rect, resolvedWidth, height),
+        width: resolvedWidth,
         height,
       });
     }
@@ -35,7 +41,7 @@ export default function AnchoredFloatingPanel({
       window.removeEventListener("scroll", updatePos, true);
       window.removeEventListener("resize", updatePos);
     };
-  }, [anchorRef, width, height]);
+  }, [anchorRef, height, matchAnchorWidth, maxWidth, minWidth, width]);
 
   useEffect(() => {
     function handlePointerDown(event) {

@@ -274,7 +274,20 @@ export function normalizeGoogleCalendarLink(rawUrl, accountEmail) {
 
   try {
     const url = new URL(rawUrl);
-    if (!/calendar\.google\.com$/i.test(url.hostname)) return rawUrl;
+    const isCalendarGoogleHost = /calendar\.google\.com$/i.test(url.hostname);
+    const isGoogleEventRedirect = /(^|\.)google\.com$/i.test(url.hostname)
+      && url.pathname === "/calendar/event"
+      && !!url.searchParams.get("eid");
+
+    if (!isCalendarGoogleHost && !isGoogleEventRedirect) return rawUrl;
+
+    if (isGoogleEventRedirect) {
+      const eventId = url.searchParams.get("eid");
+      const normalized = new URL(`https://calendar.google.com/calendar/u/0/r/eventedit/${encodeURIComponent(eventId)}`);
+      normalized.searchParams.set("authuser", accountEmail);
+      return normalized.toString();
+    }
+
     url.searchParams.set("authuser", accountEmail);
     return url.toString();
   } catch {
@@ -490,8 +503,8 @@ function toCalendarMutationPayload(input) {
   const endTime = toTime(input.endTime, "End time");
   const startIso = `${startDate}T${startTime}:00`;
   const endIso = `${endDate}T${endTime}:00`;
-  if (endIso <= startIso) {
-    throwCalendarError(400, "calendar_validation_error", "End time must be after start time.");
+  if (endIso < startIso) {
+    throwCalendarError(400, "calendar_validation_error", "End time must be on or after start time.");
   }
 
   return {

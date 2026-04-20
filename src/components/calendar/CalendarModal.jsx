@@ -255,6 +255,11 @@ function isEditableTarget(target) {
   return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
 }
 
+function isSuspendedHotkeyTarget(target) {
+  return target instanceof HTMLElement
+    && !!target.closest("[data-suspend-calendar-hotkeys='true']");
+}
+
 function CalendarSelectedDayEmptyState({ view, selectedDay, viewYear, viewMonth }) {
   const description = view === "events"
     ? "No events on this day yet. Creating a new event will prefill this date."
@@ -551,12 +556,12 @@ export default function CalendarModal({
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
+      if (isSuspendedHotkeyTarget(e.target)) return;
+
       if (isEditableTarget(e.target)) {
         if (e.key === "Escape") {
           onClose();
           e.preventDefault();
-          e.stopPropagation();
-        } else {
           e.stopPropagation();
         }
         return;
@@ -585,7 +590,15 @@ export default function CalendarModal({
         case "T":
           closeEventEditor();
           setViewDate({ month: currentMonth, year: currentYear });
-          setSelectedDay(null);
+          setSelectedDay(todayDate);
+          e.preventDefault();
+          e.stopPropagation();
+          break;
+        case "c":
+        case "C":
+          if (view === "events" && eventEditor.editable) {
+            eventEditor.openCreate();
+          }
           e.preventDefault();
           e.stopPropagation();
           break;
@@ -615,7 +628,7 @@ export default function CalendarModal({
     }
     document.addEventListener("keydown", handleKey, true);
     return () => document.removeEventListener("keydown", handleKey, true);
-  }, [open, onClose, currentMonth, currentYear, canGoPrev, view, onViewChange, closeEventEditor]);
+  }, [open, onClose, currentMonth, currentYear, canGoPrev, view, onViewChange, closeEventEditor, eventEditor, todayDate]);
 
   useEffect(() => {
     if (!open || view !== "events" || !eventsData?.ensureRange) return;

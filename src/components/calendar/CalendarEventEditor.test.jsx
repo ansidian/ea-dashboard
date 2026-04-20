@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CalendarModal from "./CalendarModal.jsx";
 
@@ -7,6 +7,8 @@ const mockCreateCalendarEvent = vi.fn();
 const mockUpdateCalendarEvent = vi.fn();
 const mockDeleteCalendarEvent = vi.fn();
 const mockGetGmailAuthUrl = vi.fn();
+const mockGetCalendarPlaceSuggestions = vi.fn();
+const mockGetCalendarPlaceDetails = vi.fn();
 
 vi.mock("@/api", () => ({
   getCalendarSources: (...args) => mockGetCalendarSources(...args),
@@ -14,6 +16,8 @@ vi.mock("@/api", () => ({
   updateCalendarEvent: (...args) => mockUpdateCalendarEvent(...args),
   deleteCalendarEvent: (...args) => mockDeleteCalendarEvent(...args),
   getGmailAuthUrl: (...args) => mockGetGmailAuthUrl(...args),
+  getCalendarPlaceSuggestions: (...args) => mockGetCalendarPlaceSuggestions(...args),
+  getCalendarPlaceDetails: (...args) => mockGetCalendarPlaceDetails(...args),
 }));
 
 afterEach(() => {
@@ -40,6 +44,15 @@ beforeEach(() => {
         ],
       },
     ],
+  });
+  mockGetCalendarPlaceSuggestions.mockResolvedValue({ places: [] });
+  mockGetCalendarPlaceDetails.mockResolvedValue({
+    place: {
+      placeId: "place-1",
+      displayName: "McDonald's",
+      formattedAddress: "123 Main St, Los Angeles, CA 90012, USA",
+      location: "McDonald's, 123 Main St, Los Angeles, CA 90012, USA",
+    },
   });
 });
 
@@ -209,5 +222,384 @@ describe("Calendar event editor rail", () => {
     });
     expect(screen.getByTestId("calendar-event-save").disabled).toBe(true);
     expect(mockCreateCalendarEvent).not.toHaveBeenCalled();
+  });
+
+  it("parses natural language in the title into event fields while saving a cleaned title", async () => {
+    renderModal();
+    mockCreateCalendarEvent.mockResolvedValue({
+      event: {
+        id: "event-nlp",
+        title: "Dinner",
+        accountId: "gmail-main",
+        calendarId: "primary",
+        startMs: new Date("2026-04-21T00:00:00.000Z").getTime(),
+        endMs: new Date("2026-04-21T00:30:00.000Z").getTime(),
+        writable: true,
+        allDay: false,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    fireEvent.input(screen.getByTestId("calendar-event-title"), {
+      target: { value: "Dinner on Tue at 5pm" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("calendar-event-title").value).toBe("Dinner on Tue at 5pm");
+      expect(screen.getByTestId("calendar-event-title-preview").textContent).toMatch(/apr 21, 2026/i);
+      expect(screen.getByTestId("calendar-event-save").disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId("calendar-event-save"));
+
+    await waitFor(() => {
+      expect(mockCreateCalendarEvent).toHaveBeenCalledWith(expect.objectContaining({
+        title: "Dinner",
+        startDate: "2026-04-21",
+        endDate: "2026-04-21",
+        startTime: "17:00",
+        endTime: "17:30",
+      }));
+    });
+  });
+
+  it("auto-fills start/end time from a bare time token while stripping it from the title", async () => {
+    renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    fireEvent.input(screen.getByTestId("calendar-event-title"), {
+      target: { value: "dinner 2pm @mcdonalds" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("calendar-event-start-time").textContent).toMatch(/2:00 pm/i);
+      expect(screen.getByTestId("calendar-event-end-time").textContent).toMatch(/2:30 pm/i);
+    });
+  });
+
+  it("does not flash the title validation error on the first typed character", async () => {
+    renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    fireEvent.input(screen.getByTestId("calendar-event-title"), {
+      target: { value: "D" },
+    });
+
+    expect(screen.queryByTestId("calendar-event-validation")).toBeNull();
+  });
+
+  it("shows location suggestions and resolves a selected place into the location field", async () => {
+    renderModal();
+    mockGetCalendarPlaceSuggestions.mockResolvedValue({
+      places: [
+        {
+          placeId: "place-1",
+          primaryText: "McDonald's",
+          secondaryText: "123 Main St, Los Angeles, CA",
+          fullText: "McDonald's 123 Main St, Los Angeles, CA",
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    fireEvent.focus(screen.getByTestId("calendar-event-location"));
+    fireEvent.input(screen.getByTestId("calendar-event-location"), {
+      target: { value: "McDonald's" },
+    });
+
+    expect(await screen.findByText("McDonald's")).toBeTruthy();
+    fireEvent.click(screen.getByText("McDonald's"));
+
+    await waitFor(() => {
+      expect(mockGetCalendarPlaceDetails).toHaveBeenCalledWith("place-1", expect.any(String));
+      expect(screen.getByTestId("calendar-event-location").value).toBe("McDonald's, 123 Main St, Los Angeles, CA 90012, USA");
+    });
+  });
+
+  it("lets the user arrow through location suggestions and press enter to commit one", async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderModal();
+    mockGetCalendarPlaceSuggestions.mockResolvedValue({
+      places: [
+        {
+          placeId: "place-1",
+          primaryText: "McDonald's South El Monte",
+          secondaryText: "123 Garvey Ave, South El Monte, CA 91733, USA",
+          fullText: "McDonald's South El Monte, 123 Garvey Ave, South El Monte, CA 91733, USA",
+        },
+        {
+          placeId: "place-2",
+          primaryText: "McDonald's El Monte",
+          secondaryText: "456 Valley Blvd, El Monte, CA 91731, USA",
+          fullText: "McDonald's El Monte, 456 Valley Blvd, El Monte, CA 91731, USA",
+        },
+      ],
+    });
+    mockGetCalendarPlaceDetails.mockResolvedValue({
+      place: {
+        placeId: "place-2",
+        displayName: "McDonald's El Monte",
+        formattedAddress: "456 Valley Blvd, El Monte, CA 91731, USA",
+        location: "McDonald's El Monte, 456 Valley Blvd, El Monte, CA 91731, USA",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    const locationInput = screen.getByTestId("calendar-event-location");
+    fireEvent.focus(locationInput);
+    fireEvent.input(locationInput, {
+      target: { value: "McDonald's" },
+    });
+
+    expect(await screen.findByText("McDonald's South El Monte")).toBeTruthy();
+    scrollIntoView.mockClear();
+    fireEvent.keyDown(locationInput, { key: "ArrowDown" });
+    fireEvent.keyDown(locationInput, { key: "Enter" });
+
+    try {
+      await waitFor(() => {
+        expect(scrollIntoView).toHaveBeenCalled();
+        expect(mockGetCalendarPlaceDetails).toHaveBeenCalledWith("place-2", expect.any(String));
+        expect(screen.getByTestId("calendar-event-location").value).toBe("McDonald's El Monte, 456 Valley Blvd, El Monte, CA 91731, USA");
+      });
+    } finally {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+    }
+  });
+
+  it("auto-advances from start date to end date and from start time to end time", async () => {
+    renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("calendar-event-start-date"));
+    fireEvent.click(within(await screen.findByLabelText("Start date picker")).getByRole("button", { name: "22" }));
+    expect(await screen.findByLabelText("End date picker")).toBeTruthy();
+
+    fireEvent.click(within(screen.getByLabelText("End date picker")).getByRole("button", { name: "23" }));
+    await waitFor(() => {
+      expect(screen.queryByLabelText("End date picker")).toBeNull();
+      expect(screen.getByTestId("calendar-event-start-date").textContent).toMatch(/apr 22, 2026/i);
+      expect(screen.getByTestId("calendar-event-end-date").textContent).toMatch(/apr 23, 2026/i);
+    });
+
+    fireEvent.click(screen.getByTestId("calendar-event-start-time"));
+    expect(await screen.findByLabelText("hour")).toBe(document.activeElement);
+    fireEvent.click(await screen.findByRole("button", { name: /set start time/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("End time picker")).toBeTruthy();
+      expect(screen.getByTestId("calendar-event-end-time").textContent).toMatch(/9:30 am/i);
+      expect(screen.getByLabelText("hour")).toBe(document.activeElement);
+    });
+  });
+
+  it("routes parsed title locations through the place suggestions flow", async () => {
+    renderModal();
+    mockGetCalendarPlaceSuggestions.mockResolvedValue({
+      places: [
+        {
+          placeId: "place-1",
+          primaryText: "McDonald's South El Monte",
+          secondaryText: "123 Garvey Ave, South El Monte, CA 91733, USA",
+          fullText: "McDonald's South El Monte, 123 Garvey Ave, South El Monte, CA 91733, USA",
+        },
+        {
+          placeId: "place-2",
+          primaryText: "McDonald's El Monte",
+          secondaryText: "456 Valley Blvd, El Monte, CA 91731, USA",
+          fullText: "McDonald's El Monte, 456 Valley Blvd, El Monte, CA 91731, USA",
+        },
+      ],
+    });
+    mockGetCalendarPlaceDetails.mockResolvedValue({
+      place: {
+        placeId: "place-2",
+        displayName: "McDonald's El Monte",
+        formattedAddress: "456 Valley Blvd, El Monte, CA 91731, USA",
+        location: "McDonald's El Monte, 456 Valley Blvd, El Monte, CA 91731, USA",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    const titleInput = screen.getByTestId("calendar-event-title");
+    fireEvent.input(screen.getByTestId("calendar-event-title"), {
+      target: { value: "Dinner 5pm @McDonald's" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("calendar-event-location").value).toBe("McDonald's");
+      expect(mockGetCalendarPlaceSuggestions).toHaveBeenCalledWith("McDonald's", expect.any(String));
+      expect(screen.getByText("McDonald's South El Monte")).toBeTruthy();
+    });
+
+    fireEvent.keyDown(titleInput, { key: "ArrowDown" });
+    fireEvent.keyDown(titleInput, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(mockGetCalendarPlaceDetails).toHaveBeenCalledWith("place-2", expect.any(String));
+      expect(screen.getByTestId("calendar-event-location").value).toBe("McDonald's El Monte, 456 Valley Blvd, El Monte, CA 91731, USA");
+      expect(screen.getByTestId("calendar-event-title").value).toBe("Dinner 5pm ");
+      expect(screen.getByTestId("calendar-event-start-time").textContent).toMatch(/5:00 pm/i);
+      expect(screen.getByTestId("calendar-event-end-time").textContent).toMatch(/5:30 pm/i);
+    });
+  });
+
+  it("routes parsed title source tokens through the source picker flow", async () => {
+    mockGetCalendarSources.mockResolvedValue({
+      accounts: [
+        {
+          accountId: "gmail-main",
+          accountLabel: "Google",
+          accountEmail: "me@example.com",
+          calendars: [
+            {
+              id: "primary",
+              summary: "Personal",
+              accessRole: "owner",
+              primary: true,
+              writable: true,
+            },
+            {
+              id: "school",
+              summary: "School",
+              accessRole: "owner",
+              writable: true,
+            },
+            {
+              id: "work",
+              summary: "Work",
+              accessRole: "owner",
+              writable: true,
+            },
+          ],
+        },
+      ],
+    });
+    renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    const titleInput = screen.getByTestId("calendar-event-title");
+    fireEvent.input(titleInput, {
+      target: { value: "Dinner 2pm cal school" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("calendar-event-title-source-preview").textContent).toMatch(/school/i);
+      expect(screen.getByLabelText("Calendar source picker")).toBeTruthy();
+      expect(screen.getByText("School")).toBeTruthy();
+    });
+
+    fireEvent.keyDown(titleInput, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("calendar-event-source-trigger").textContent).toMatch(/school/i);
+      expect(screen.getByTestId("calendar-event-title").value).toBe("Dinner 2pm ");
+      expect(screen.getByTestId("calendar-event-start-time").textContent).toMatch(/2:00 pm/i);
+    });
+  });
+
+  it("saves with mod+enter", async () => {
+    renderModal();
+    mockCreateCalendarEvent.mockResolvedValue({
+      event: {
+        id: "event-hotkey",
+        title: "Planning block",
+        accountId: "gmail-main",
+        calendarId: "primary",
+        startMs: new Date("2026-04-20T16:00:00.000Z").getTime(),
+        endMs: new Date("2026-04-20T16:30:00.000Z").getTime(),
+        writable: true,
+        allDay: false,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    fireEvent.input(screen.getByTestId("calendar-event-title"), {
+      target: { value: "Planning block" },
+    });
+
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+
+    await waitFor(() => {
+      expect(mockCreateCalendarEvent).toHaveBeenCalledWith(expect.objectContaining({
+        title: "Planning block",
+      }));
+    });
+  });
+
+  it("cancels the editor on browser back", async () => {
+    renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("calendar-event-editor-rail")).toBeNull();
+    });
+  });
+
+  it("allows saving an event when the end time matches the start time", async () => {
+    renderModal();
+    mockCreateCalendarEvent.mockResolvedValue({
+      event: {
+        id: "event-equal-time",
+        title: "Hold",
+        accountId: "gmail-main",
+        calendarId: "primary",
+        startMs: new Date("2026-04-20T16:00:00.000Z").getTime(),
+        endMs: new Date("2026-04-20T16:00:00.000Z").getTime(),
+        writable: true,
+        allDay: false,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    expect(await screen.findByTestId("calendar-event-editor-rail")).toBeTruthy();
+
+    fireEvent.input(screen.getByTestId("calendar-event-title"), {
+      target: { value: "Hold" },
+    });
+
+    fireEvent.click(screen.getByTestId("calendar-event-end-time"));
+    fireEvent.change(screen.getByLabelText("minute"), { target: { value: "00" } });
+    fireEvent.blur(screen.getByLabelText("minute"));
+    fireEvent.click(await screen.findByRole("button", { name: /set end time/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("calendar-event-validation")).toBeNull();
+      expect(screen.getByTestId("calendar-event-save").disabled).toBe(false);
+    });
+
+    fireEvent.click(screen.getByTestId("calendar-event-save"));
+
+    await waitFor(() => {
+      expect(mockCreateCalendarEvent).toHaveBeenCalledWith(expect.objectContaining({
+        title: "Hold",
+        startTime: "09:00",
+        endTime: "09:00",
+      }));
+    });
   });
 });
