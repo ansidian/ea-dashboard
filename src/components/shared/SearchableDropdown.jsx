@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -16,23 +16,12 @@ export default function SearchableDropdown({ options, value, onChange, placehold
 
   const selected = options.find(o => o.id === value);
   const displayName = selected?.name || (allowCreate && value && !selected ? value : null);
-
-  const filtered = search
-    ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()))
-    : options;
-  const exactMatch = search && filtered.some(o => o.name.toLowerCase() === search.toLowerCase());
-  const showCreateOption = allowCreate && search.trim() && !exactMatch;
-
-  // Auto-select first match on type (skip if allowCreate — user may be typing a new name)
-  useEffect(() => {
-    if (!allowCreate && search && options.length > 0) {
-      const filtered = options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()));
-      if (filtered.length > 0) onChange(filtered[0].id);
-    }
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  const trimmedSearch = search.trim();
+  const exactMatch = trimmedSearch && options.some(o => o.name.toLowerCase() === trimmedSearch.toLowerCase());
+  const showCreateOption = allowCreate && trimmedSearch && !exactMatch;
 
   const handleCreate = () => {
-    const name = search.trim();
+    const name = trimmedSearch;
     if (onCreateNew) onCreateNew(name);
     else onChange(name);
     setOpen(false);
@@ -69,31 +58,17 @@ export default function SearchableDropdown({ options, value, onChange, placehold
           className="w-[var(--anchor-width)] rounded bg-elevated border border-white/10 p-0 shadow-modal"
         >
           <Command
-            shouldFilter={!allowCreate}
             className="bg-transparent"
           >
             <CommandInput
               value={search}
               onValueChange={setSearch}
               placeholder={allowCreate ? "Search or type new..." : "Search..."}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (filtered.length > 0) {
-                    onChange(filtered[0].id);
-                    setOpen(false);
-                    setSearch("");
-                  } else if (showCreateOption) {
-                    handleCreate();
-                  }
-                }
-              }}
             />
             <CommandList className="max-h-[180px]">
               <CommandEmpty className="py-2 text-xs text-muted-foreground/50">No matches</CommandEmpty>
               <CommandGroup>
-                {filtered.map(o => (
+                {options.map(o => (
                   <CommandItem
                     key={o.id}
                     value={o.name}
@@ -108,10 +83,11 @@ export default function SearchableDropdown({ options, value, onChange, placehold
               {showCreateOption && (
                 <CommandGroup>
                   <CommandItem
+                    value={trimmedSearch}
                     onSelect={handleCreate}
                     className="text-primary"
                   >
-                    <span className="text-sm">+</span> Create &ldquo;{search.trim()}&rdquo;
+                    <span className="text-sm">+</span> Create &ldquo;{trimmedSearch}&rdquo;
                   </CommandItem>
                 </CommandGroup>
               )}
