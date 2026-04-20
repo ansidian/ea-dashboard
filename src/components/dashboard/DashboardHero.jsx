@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Sun, Cloud, CloudSun, CloudRain, Snowflake, CloudFog, Moon, Calendar, Video, Plane, AlertCircle, CreditCard } from "lucide-react";
+import { Sparkles, Sun, Cloud, CloudSun, CloudRain, Snowflake, CloudFog, Moon, Calendar, Video, Plane, AlertCircle, CreditCard, Mail } from "lucide-react";
 import { greetingFor, pacificClock, pacificDate, urgencyForDays, daysLabel } from "../../lib/redesign-helpers";
 import { daysUntil } from "../../lib/bill-utils";
 import { resolveInsight } from "../../lib/insight-resolver";
 import { deriveFocusWindows } from "../../lib/focus-windows";
+import { deriveOpenDaySummary } from "../../lib/open-day-summary";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const WEATHER_ICONS = {
@@ -114,6 +115,10 @@ export default function DashboardHero({
   const focusWindows = useMemo(
     () => deriveFocusWindows({ events, deadlines, now }),
     [events, deadlines, now],
+  );
+  const openDaySummary = useMemo(
+    () => deriveOpenDaySummary({ deadlines, bills, emails: briefing?.emails, now }),
+    [deadlines, bills, briefing?.emails, now],
   );
 
   const compact = density === "compact";
@@ -318,6 +323,7 @@ export default function DashboardHero({
 
           <FocusCard
             focusWindows={focusWindows}
+            openDaySummary={openDaySummary}
             accent={accent}
             isMobile={isMobile}
             onOpenPressure={onOpenPressure}
@@ -352,7 +358,7 @@ export default function DashboardHero({
   );
 }
 
-function FocusCard({ focusWindows, accent, isMobile = false, onOpenPressure, showSkeletons = false }) {
+function FocusCard({ focusWindows, openDaySummary, accent, isMobile = false, onOpenPressure, showSkeletons = false }) {
   const pressureLabel = focusWindows.pressure.level === "high"
     ? `${focusWindows.pressure.overdue + focusWindows.pressure.today} urgent deadline${focusWindows.pressure.overdue + focusWindows.pressure.today === 1 ? "" : "s"}`
     : focusWindows.pressure.level === "medium"
@@ -428,6 +434,12 @@ function FocusCard({ focusWindows, accent, isMobile = false, onOpenPressure, sho
           <Skeleton className="h-[12px] w-[90%] bg-white/8" />
           <Skeleton className="h-[12px] w-[72%] bg-white/8" />
         </div>
+      ) : primary && isOpenDay ? (
+        <OpenDayBlock
+          summary={openDaySummary}
+          accent={accent}
+          isMobile={isMobile}
+        />
       ) : primary ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div
@@ -459,15 +471,10 @@ function FocusCard({ focusWindows, accent, isMobile = false, onOpenPressure, sho
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-              {!isOpenDay && (
-                <div style={{ fontSize: isMobile ? 14 : 15, fontWeight: 600, color: "#cdd6f4", letterSpacing: -0.2 }}>
-                  {primary.timeRangeLabel}
-                </div>
-              )}
-              <div
-                data-testid={isOpenDay ? "focus-window-open-day-duration" : undefined}
-                style={{ fontSize: isOpenDay ? (isMobile ? 14 : 15) : 10.5, color: isOpenDay ? "#cdd6f4" : "rgba(205,214,244,0.52)", fontWeight: isOpenDay ? 600 : 400 }}
-              >
+              <div style={{ fontSize: isMobile ? 14 : 15, fontWeight: 600, color: "#cdd6f4", letterSpacing: -0.2 }}>
+                {primary.timeRangeLabel}
+              </div>
+              <div style={{ fontSize: 10.5, color: "rgba(205,214,244,0.52)" }}>
                 {primary.durationLabel}
               </div>
             </div>
@@ -514,6 +521,140 @@ function FocusCard({ focusWindows, accent, isMobile = false, onOpenPressure, sho
             ? "Rest of day looks open. Pick the block that matters most."
             : "No protected block left today."}
         </div>
+      )}
+    </div>
+  );
+}
+
+const OPEN_DAY_ICONS = {
+  deadline: AlertCircle,
+  bill: CreditCard,
+  email: Mail,
+};
+
+const OPEN_DAY_URGENCY_COLOR = {
+  high: "#f38ba8",
+  medium: "#f9e2af",
+  low: null,
+};
+
+function OpenDayBlock({ summary, accent, isMobile = false }) {
+  const isLight = summary.tone === "light";
+  const primary = summary.primary;
+  const Icon = primary ? OPEN_DAY_ICONS[primary.kind] : null;
+  const urgencyColor = primary ? (OPEN_DAY_URGENCY_COLOR[primary.urgency] || accent) : accent;
+
+  return (
+    <div
+      data-testid="focus-window-open-day"
+      style={{
+        padding: "10px 12px",
+        borderRadius: 10,
+        background: `${accent}0d`,
+        border: `1px solid ${accent}22`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 10, color: "rgba(205,214,244,0.45)", textTransform: "uppercase", letterSpacing: 0.7 }}>
+          Open day
+        </div>
+        <span
+          style={{
+            fontSize: 9.5,
+            fontWeight: 600,
+            letterSpacing: 0.4,
+            textTransform: "uppercase",
+            color: accent,
+            background: `${accent}18`,
+            border: `1px solid ${accent}30`,
+            borderRadius: 9999,
+            padding: "2px 7px",
+          }}
+        >
+          No more events
+        </span>
+      </div>
+
+      {isLight ? (
+        <div
+          data-testid="focus-window-open-day-light"
+          style={{ marginTop: 8, fontSize: isMobile ? 11.5 : 12, color: "rgba(205,214,244,0.7)", lineHeight: 1.45 }}
+        >
+          {summary.hint}
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+            {Icon ? (
+              <div
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 6,
+                  background: "rgba(255,255,255,0.04)",
+                  display: "grid",
+                  placeItems: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Icon size={11} color={urgencyColor} />
+              </div>
+            ) : null}
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 9.5,
+                  fontWeight: 600,
+                  letterSpacing: 0.4,
+                  textTransform: "uppercase",
+                  color: urgencyColor,
+                }}
+              >
+                {primary.label}
+              </div>
+              <div
+                style={{
+                  fontSize: isMobile ? 13 : 13.5,
+                  fontWeight: 500,
+                  color: "#cdd6f4",
+                  marginTop: 2,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {primary.title}
+              </div>
+              {primary.sub ? (
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    color: "rgba(205,214,244,0.55)",
+                    marginTop: 2,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {primary.sub}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          {summary.secondaries.length > 0 && (
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", gap: 4 }}>
+              {summary.secondaries.map((item) => (
+                <div
+                  key={item.kind}
+                  style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10.5, color: "rgba(205,214,244,0.55)" }}
+                >
+                  <span>{item.title}</span>
+                  <span style={{ color: "rgba(205,214,244,0.4)" }}>{item.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

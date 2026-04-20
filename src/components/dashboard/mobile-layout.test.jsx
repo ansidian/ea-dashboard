@@ -139,7 +139,7 @@ describe("DashboardHero mobile layout", () => {
     expect(screen.queryByText("You have a heavier deadline cluster than usual.")).toBeNull();
   });
 
-  it("hides the explicit time range for rest-of-day-open focus states", () => {
+  it("shows an open-day priority summary instead of a midnight countdown when calendar is empty", () => {
     const now = new Date("2026-04-19T16:00:00.000Z").getTime();
     vi.useFakeTimers();
     vi.setSystemTime(now);
@@ -164,10 +164,43 @@ describe("DashboardHero mobile layout", () => {
       />,
     );
 
-    expect(screen.getByText("Rest of day open")).toBeTruthy();
-    expect(screen.getByTestId("focus-window-open-day-duration")).toBeTruthy();
-    expect(screen.queryByText(/\d{1,2}:\d{2}\s?[AP]M-\d{1,2}:\d{2}\s?[AP]M/i)).toBeNull();
-    expect(screen.getByText(/No more events today/i)).toBeTruthy();
+    const openDay = screen.getByTestId("focus-window-open-day");
+    expect(openDay).toBeTruthy();
+    expect(openDay.textContent).toMatch(/Open day/);
+    expect(openDay.textContent).toMatch(/Finalize deck/);
+    expect(screen.queryByTestId("focus-window-open-day-duration")).toBeNull();
+    expect(openDay.textContent).not.toMatch(/\d+h \d+m/);
+    expect(screen.queryByText(/No more events today/i)).toBeNull();
+  });
+
+  it("falls back to a light hint when the open day has no pressure signals", () => {
+    const now = new Date("2026-04-19T16:00:00.000Z").getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    render(
+      <DashboardHero
+        accent="#cba6da"
+        density="comfortable"
+        briefing={{
+          model: "Claude",
+          aiInsights: [],
+          weather: { temp: 71, condition: "Sunny", city: "Los Angeles" },
+          calendar: [],
+          ctm: { upcoming: [] },
+          todoist: { upcoming: [] },
+          emails: { summary: "", accounts: [] },
+        }}
+        liveBills={[]}
+        liveCalendar={[]}
+        liveWeather={{ temp: 71, condition: "Sunny", city: "Los Angeles" }}
+        onJump={() => {}}
+      />,
+    );
+
+    expect(screen.getByTestId("focus-window-open-day-light")).toBeTruthy();
+    expect(screen.getByText(/Calendar is open/i)).toBeTruthy();
+    expect(screen.queryByText(/\d+h \d+m/)).toBeNull();
   });
 });
 
