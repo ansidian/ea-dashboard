@@ -95,14 +95,17 @@ export default function Dashboard() {
       let changed = false;
       const accounts = prev.emails.accounts.map((acct) => {
         const important = acct.important.map((e) => {
-          if (!e.read && (status[e.uid] || status[e.id])) {
+          const key = e.uid || e.id;
+          if (!key || !Object.prototype.hasOwnProperty.call(status, key)) return e;
+          const nextRead = !!status[key];
+          if (e.read !== nextRead) {
             changed = true;
-            return { ...e, read: true };
+            return { ...e, read: nextRead };
           }
           return e;
         });
         if (important === acct.important) return acct;
-        return { ...acct, important, unread: important.length };
+        return { ...acct, important, unread: important.filter((email) => !email.read).length };
       });
       return changed ? { ...prev, emails: { ...prev.emails, accounts } } : prev;
     });

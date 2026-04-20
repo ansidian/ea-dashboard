@@ -23,6 +23,17 @@ import { loadUserConfig } from "./index.js";
 
 async function findAccountByUid(userId, uid) {
   if (uid.startsWith("icloud-")) {
+    const indexed = await db.execute({
+      sql: `SELECT a.*
+            FROM ea_email_index idx
+            JOIN ea_accounts a ON a.id = idx.account_id
+            WHERE idx.user_id = ? AND idx.uid = ? AND a.user_id = ?
+            LIMIT 1`,
+      args: [userId, uid, userId],
+    });
+    if (indexed.rows.length) {
+      return { type: "icloud", account: indexed.rows[0] };
+    }
     const result = await db.execute({
       sql: "SELECT * FROM ea_accounts WHERE user_id = ? AND type = 'icloud'",
       args: [userId],
@@ -269,10 +280,28 @@ export async function markAllRead(userId, uids) {
     ops.push(gmailBatchMarkAsRead(account, accUids));
   }
   if (icloudUids.length) {
-    const icloudAccount = accounts.rows.find((a) => a.type === "icloud");
-    if (icloudAccount) {
-      const password = decrypt(icloudAccount.credentials_encrypted);
-      ops.push(icloudBatchMarkAsRead(icloudAccount.email, password, icloudUids));
+    const placeholders = icloudUids.map(() => "?").join(",");
+    const indexed = await db.execute({
+      sql: `SELECT uid, account_id
+            FROM ea_email_index
+            WHERE user_id = ? AND uid IN (${placeholders})`,
+      args: [userId, ...icloudUids],
+    });
+    const accountIdByUid = new Map(indexed.rows.map((row) => [row.uid, row.account_id]));
+    const groupedIcloud = new Map();
+    const fallbackIcloud = accounts.rows.find((a) => a.type === "icloud");
+
+    for (const uid of icloudUids) {
+      const accountId = accountIdByUid.get(uid) || fallbackIcloud?.id;
+      const account = accounts.rows.find((a) => a.type === "icloud" && a.id === accountId);
+      if (!account) continue;
+      if (!groupedIcloud.has(account.id)) groupedIcloud.set(account.id, { account, uids: [] });
+      groupedIcloud.get(account.id).uids.push(uid);
+    }
+
+    for (const { account, uids: accUids } of groupedIcloud.values()) {
+      const password = decrypt(account.credentials_encrypted);
+      ops.push(icloudBatchMarkAsRead(account.email, password, accUids));
     }
   }
 

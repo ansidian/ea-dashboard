@@ -18,9 +18,9 @@ const prevBriefing = {
     accounts: [{
       name: "Gmail",
       important: [
-        { id: "old1", from: "A", subject: "Old email 1", seenCount: 1 },
-        { id: "old2", from: "B", subject: "Old email 2", seenCount: 2 },
-        { id: "old3", from: "C", subject: "Old email 3 (expired)", seenCount: 3 },
+        { id: "old1", from: "A", subject: "Old email 1", seenCount: 1, read: false },
+        { id: "old2", from: "B", subject: "Old email 2", seenCount: 2, read: false },
+        { id: "old3", from: "C", subject: "Old email 3 (expired)", seenCount: 3, read: true },
       ],
       noise_count: 5,
     }],
@@ -32,7 +32,7 @@ const newBriefing = {
     accounts: [{
       name: "Gmail",
       important: [
-        { id: "new1", from: "D", subject: "New email" },
+        { id: "new1", from: "D", subject: "New email", read: true },
       ],
       noise_count: 2,
     }],
@@ -91,10 +91,10 @@ describe("mergeDeltaBriefing", () => {
     expect(gmail.noise_count).toBe(7); // 5 (prev) + 2 (new)
   });
 
-  it("unread count equals important.length after merge", () => {
+  it("unread count tracks only unread important emails after merge", () => {
     const mergedAccounts = mergeDeltaBriefing(prevBriefing, newBriefing, dismissedIds, allEmailIds);
     for (const acct of mergedAccounts) {
-      expect(acct.unread).toBe(acct.important.length);
+      expect(acct.unread).toBe(acct.important.filter((email) => !email.read).length);
     }
   });
 

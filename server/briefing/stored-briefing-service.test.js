@@ -41,13 +41,15 @@ beforeEach(() => {
 describe("markEmailsRead", () => {
   it("flips email.read=true for matching uids and persists", async () => {
     seedLatest({
-      emails: { accounts: [{ important: [{ id: "gmail-x-1", read: false }] }] },
+      emails: { accounts: [{ important: [{ id: "gmail-x-1", read: false }], unread: 1 }] },
     });
     captureUpdate();
 
     await markEmailsRead("u1", "gmail-x-1");
 
-    expect(getUpdatedBriefing().emails.accounts[0].important[0].read).toBe(true);
+    const acct = getUpdatedBriefing().emails.accounts[0];
+    expect(acct.important[0].read).toBe(true);
+    expect(acct.unread).toBe(0);
   });
 
   it("is a no-op (no UPDATE) when no emails match", async () => {
@@ -78,13 +80,15 @@ describe("markEmailsRead", () => {
 describe("markEmailsUnread", () => {
   it("flips email.read=false and persists", async () => {
     seedLatest({
-      emails: { accounts: [{ important: [{ id: "gmail-x-1", read: true }] }] },
+      emails: { accounts: [{ important: [{ id: "gmail-x-1", read: true }], unread: 0 }] },
     });
     captureUpdate();
 
     await markEmailsUnread("u1", ["gmail-x-1"]);
 
-    expect(getUpdatedBriefing().emails.accounts[0].important[0].read).toBe(false);
+    const acct = getUpdatedBriefing().emails.accounts[0];
+    expect(acct.important[0].read).toBe(false);
+    expect(acct.unread).toBe(1);
   });
 });
 

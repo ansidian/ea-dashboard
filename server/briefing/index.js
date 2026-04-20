@@ -230,6 +230,10 @@ export function computeDeadlineStats(deadlines) {
   return { incomplete, dueToday, dueThisWeek, totalPoints };
 }
 
+function countUnreadEmails(emails = []) {
+  return emails.filter((email) => !email.read).length;
+}
+
 // Fix email accounts: re-group triaged emails by their original account_label,
 // correct unread counts, and ensure no emails land in the wrong account.
 // dbAccounts (optional): all configured ea_accounts rows — seeds tabs for accounts with 0 emails.
@@ -330,7 +334,7 @@ export function fixEmailAccounts(briefingJson, inputEmails, dbAccounts) {
   // Replace accounts with corrected grouping, fix unread counts
   briefingJson.emails.accounts = [...grouped.values()].map((acct) => ({
     ...acct,
-    unread: acct.important.length,
+    unread: countUnreadEmails(acct.important),
   }));
 
   // Invariant check: email count in should equal email count out (per D-01, D-02)
@@ -477,7 +481,7 @@ export function mergeDeltaBriefing(prevBriefing, newBriefing, dismissedIds, allE
         .filter(e => !existingIds.has(e.id) && allEmailIds.has(e.id) && !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
         .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
       newAcct.important = [...keptOld, ...newAcct.important];
-      newAcct.unread = newAcct.important.length;
+      newAcct.unread = countUnreadEmails(newAcct.important);
       newAcct.noise_count = (prevAcct.noise_count || 0) + (newAcct.noise_count || 0);
     } else {
       // Account had no new emails — carry forward previous triage
@@ -488,15 +492,15 @@ export function mergeDeltaBriefing(prevBriefing, newBriefing, dismissedIds, allE
         mergedAccounts.push({
           ...prevAcct,
           important: stillRelevant,
-          unread: stillRelevant.length,
+          unread: countUnreadEmails(stillRelevant),
         });
       }
     }
   }
 
-  // Ensure unread equals important.length on every account
+  // Ensure unread reflects only unread important emails on every account
   for (const acct of mergedAccounts) {
-    acct.unread = acct.important.length;
+    acct.unread = countUnreadEmails(acct.important);
   }
 
   // Invariant check: total emails out should not exceed total emails in
@@ -601,7 +605,7 @@ export async function generateBriefing(userId, { scheduleLabel } = {}) {
         acct.important = acct.important
           .filter(e => !dismissedIds.has(e.id) && (e.seenCount || 1) < 3)
           .map(e => ({ ...e, seenCount: (e.seenCount || 1) + 1 }));
-        acct.unread = acct.important.length;
+        acct.unread = countUnreadEmails(acct.important);
       }
       // Guard against fixEmailAccounts' empty-inputs branch, which resets
       // accounts to zero-email seeded entries. That's correct for full-gen

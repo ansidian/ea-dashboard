@@ -36,7 +36,7 @@ export default function urgentFlags(briefing) {
     extractedBill: null,
     urgentFlag: { label: `Deadline ${formatLabel(20)}`, date: relativeDate(20) },
   });
-  accounts[0].unread = accounts[0].important.length;
+  accounts[0].unread = accounts[0].important.filter((email) => !email.read).length;
 }
 
 urgentFlags.description = "Adds urgentFlag badges to emails with time-sensitive deadlines";

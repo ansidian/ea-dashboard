@@ -3,7 +3,7 @@ import db from "../db/connection.js";
 import { requireAuth } from "../middleware/auth.js";
 import { loadUserConfig } from "../briefing/index.js";
 import { fetchEmails as fetchGmailEmails, isMessageRead as isGmailMessageRead } from "../briefing/gmail.js";
-import { fetchEmails as fetchIcloudEmails } from "../briefing/icloud.js";
+import { fetchEmails as fetchIcloudEmails, isMessageRead as isIcloudMessageRead } from "../briefing/icloud.js";
 import { fetchCalendar, getNextWeekRange, getTomorrowRange } from "../briefing/calendar.js";
 import { fetchWeather } from "../briefing/weather.js";
 import { getUpcomingBills, getRecentTransactions, getMetadata as getActualMetadata, isSchedulePaid } from "../briefing/actual.js";
@@ -27,6 +27,28 @@ function getBriefingEmailUids(briefing) {
     }
   }
   return uids;
+}
+
+function getBriefingEmailRefs(briefing) {
+  const refs = [];
+  const seen = new Set();
+  if (!briefing?.emails?.accounts) return refs;
+
+  for (const account of briefing.emails.accounts) {
+    for (const email of [...(account.important || []), ...(account.noise || [])]) {
+      const uid = email.uid || email.id;
+      if (!uid || seen.has(uid)) continue;
+      seen.add(uid);
+      refs.push({
+        uid,
+        account_id: email.account_id,
+        account_email: email.account_email,
+        account_label: account.name,
+      });
+    }
+  }
+
+  return refs;
 }
 
 // Extract high-urgency senders from recent briefings
@@ -86,13 +108,16 @@ router.get("/all", async (_req, res) => {
     });
 
     let briefingGeneratedAt = null;
+    let briefingEmailRefs = [];
     let knownUids = new Set();
 
     if (latestResult.rows.length) {
       const row = latestResult.rows[0];
       briefingGeneratedAt = row.generated_at;
       try {
-        knownUids = getBriefingEmailUids(JSON.parse(row.briefing_json));
+        const latestBriefing = JSON.parse(row.briefing_json);
+        briefingEmailRefs = getBriefingEmailRefs(latestBriefing);
+        knownUids = getBriefingEmailUids(latestBriefing);
       } catch {
         // malformed briefing, treat as no known emails
       }
@@ -175,19 +200,35 @@ router.get("/all", async (_req, res) => {
     const gmailAccounts = accounts.filter(a => a.type === "gmail");
     const icloudAccounts = accounts.filter(a => a.type === "icloud");
     const calendarAccounts = gmailAccounts.filter(a => a.calendar_enabled);
+    const icloudPasswords = new Map(
+      icloudAccounts.map((account) => [account.id, decrypt(account.credentials_encrypted)]),
+    );
+    const findProviderAccount = (providerAccounts, ref) =>
+      providerAccounts.find(
+        (account) =>
+          account.id === ref?.account_id
+          || account.email === ref?.account_email
+          || account.label === ref?.account_label,
+      ) || null;
 
-    // Re-query Gmail for each resurfaced row's UNREAD label so rows reflect
-    // the user's current Gmail state even if they triaged the email outside
-    // the dashboard. Runs in parallel with emailPromises below — `isMessageRead`
-    // returns null on any error, which we treat as "leave snapshot `read` alone".
+    // Re-query provider read state for resurfaced rows so they reflect the
+    // user's current mailbox state even if they changed the email outside the
+    // dashboard. Runs in parallel with email fetches; `null` means "probe
+    // failed, fall back to the snapshot's own read bit".
     const resurfacedReadStatePromise = Promise.all(
       resurfacedEntries.map(async (entry) => {
         const snap = entry.snapshot;
-        const acct = gmailAccounts.find(
-          a => a.id === snap?.account_id || a.email === snap?.account_email,
-        );
-        if (!acct) return null;
-        return isGmailMessageRead(acct, entry.uid);
+        if (entry.uid?.startsWith("gmail-")) {
+          const acct = findProviderAccount(gmailAccounts, snap);
+          if (!acct) return null;
+          return isGmailMessageRead(acct, entry.uid);
+        }
+        if (entry.uid?.startsWith("icloud-")) {
+          const acct = findProviderAccount(icloudAccounts, snap);
+          if (!acct) return null;
+          return isIcloudMessageRead(acct.email, icloudPasswords.get(acct.id), entry.uid);
+        }
+        return null;
       }),
     );
 
@@ -263,12 +304,38 @@ router.get("/all", async (_req, res) => {
       resurfacedEntries[i].read = probed === null ? snapshotRead : probed;
     }
 
-    // Capture read status for briefing emails before filtering them out
+    // Reconcile current read state for the latest briefing's emails. Prefer
+    // the fresh live fetch when the email is still inside the polling window,
+    // and probe the provider directly for older briefing rows outside that
+    // window. The client treats explicit `false` as authoritative too, so this
+    // keeps read/unread changes in sync in both directions.
     const briefingReadStatus = {};
-    for (const e of emailArrays) {
-      if (knownUids.has(e.uid) && e.read) {
-        briefingReadStatus[e.uid] = true;
+    const liveReadByUid = new Map();
+    for (const email of emailArrays) {
+      if (knownUids.has(email.uid)) {
+        liveReadByUid.set(email.uid, !!email.read);
       }
+    }
+    const briefingProbeResults = await Promise.all(
+      briefingEmailRefs.map(async (ref) => {
+        if (liveReadByUid.has(ref.uid)) {
+          return [ref.uid, liveReadByUid.get(ref.uid)];
+        }
+        if (ref.uid?.startsWith("gmail-")) {
+          const acct = findProviderAccount(gmailAccounts, ref);
+          if (!acct) return [ref.uid, null];
+          return [ref.uid, await isGmailMessageRead(acct, ref.uid)];
+        }
+        if (ref.uid?.startsWith("icloud-")) {
+          const acct = findProviderAccount(icloudAccounts, ref);
+          if (!acct) return [ref.uid, null];
+          return [ref.uid, await isIcloudMessageRead(acct.email, icloudPasswords.get(acct.id), ref.uid)];
+        }
+        return [ref.uid, null];
+      }),
+    );
+    for (const [uid, read] of briefingProbeResults) {
+      if (read !== null) briefingReadStatus[uid] = !!read;
     }
 
     // Filter to emails not in the briefing (read state preserved on the email object;

@@ -197,20 +197,20 @@ describe("fixEmailAccounts", () => {
     expect(gmail.noise_count).toBe(42);
   });
 
-  it("sets unread count equal to important.length after regrouping", () => {
+  it("sets unread count to the number of unread important emails after regrouping", () => {
     const inputEmails = [
-      { uid: "e1", account_label: "Gmail", account_icon: "G", account_color: "#red" },
-      { uid: "e2", account_label: "Gmail", account_icon: "G", account_color: "#red" },
-      { uid: "e3", account_label: "Gmail", account_icon: "G", account_color: "#red" },
+      { uid: "e1", account_label: "Gmail", account_icon: "G", account_color: "#red", read: false },
+      { uid: "e2", account_label: "Gmail", account_icon: "G", account_color: "#red", read: true },
+      { uid: "e3", account_label: "Gmail", account_icon: "G", account_color: "#red", read: false },
     ];
     const briefingJson = {
       emails: {
         accounts: [{
           name: "Gmail",
           important: [
-            { id: "e1", subject: "A" },
-            { id: "e2", subject: "B" },
-            { id: "e3", subject: "C" },
+            { id: "e1", subject: "A", read: false },
+            { id: "e2", subject: "B", read: true },
+            { id: "e3", subject: "C", read: false },
           ],
           noise_count: 0,
           unread: 99, // should be overwritten
@@ -221,7 +221,7 @@ describe("fixEmailAccounts", () => {
     fixEmailAccounts(briefingJson, inputEmails);
 
     const gmail = briefingJson.emails.accounts.find((a) => a.name === "Gmail");
-    expect(gmail.unread).toBe(3);
+    expect(gmail.unread).toBe(2);
   });
 
   it("logs console.warn with [Briefing] tag and still completes when email count in does not equal email count out", () => {

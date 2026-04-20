@@ -99,7 +99,7 @@ const SYSTEM_PROMPT = `You are a personal executive assistant. You receive email
 
 RULES (for email triage):
 - Group emails by their account_label. Use account_label as "name", account_icon as "icon", account_color as "color".
-- "unread" MUST equal the length of "important" array. Do NOT fabricate emails.
+- "unread" MUST equal the number of emails in "important" whose "read" field is false. Do NOT fabricate emails.
 - "read" MUST be passed through from the input email's "read" field as-is.
 - Keep output concise — previews under 2 sentences, insights under 3 sentences each.
 - When urgentFlag is set, the action field must NOT repeat the deadline — use a verb-only action instead (e.g., "Claim credit", "RSVP", "Register"). The urgentFlag already displays the date.

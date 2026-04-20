@@ -49,6 +49,10 @@ function recomputeTaskStats(section) {
   section.stats = { incomplete, dueToday, dueThisWeek, totalPoints };
 }
 
+function countUnreadEmails(emails = []) {
+  return emails.filter((email) => !email.read).length;
+}
+
 // --- Email mutations ---
 
 export async function markEmailsRead(userId, uids) {
@@ -62,6 +66,7 @@ export async function markEmailsRead(userId, uids) {
           changed = true;
         }
       }
+      acct.unread = countUnreadEmails(acct.important);
     }
     return changed;
   });
@@ -78,6 +83,7 @@ export async function markEmailsUnread(userId, uids) {
           changed = true;
         }
       }
+      acct.unread = countUnreadEmails(acct.important);
     }
     return changed;
   });
@@ -90,7 +96,7 @@ export async function removeDismissedEmailFromBriefing(userId, emailId) {
       const before = acct.important?.length ?? 0;
       acct.important = (acct.important ?? []).filter((e) => e.id !== emailId);
       if (acct.important.length !== before) {
-        acct.unread = acct.important.length;
+        acct.unread = countUnreadEmails(acct.important);
         changed = true;
       }
     }

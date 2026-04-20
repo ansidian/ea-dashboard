@@ -34,9 +34,22 @@ beforeEach(() => {
 
 describe("findAccountByUid", () => {
   it("returns icloud account for icloud- prefix", async () => {
-    mockDb.execute.mockResolvedValueOnce({ rows: [{ id: "icloud-1", email: "x@icloud.com" }] });
+    mockDb.execute
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: "icloud-1", email: "x@icloud.com" }] });
     const out = await __testing__.findAccountByUid("u1", "icloud-abc");
     expect(out).toEqual({ type: "icloud", account: { id: "icloud-1", email: "x@icloud.com" } });
+  });
+
+  it("prefers the indexed iCloud account when the uid is ambiguous", async () => {
+    mockDb.execute.mockResolvedValueOnce({
+      rows: [{ id: "icloud-work", email: "work@icloud.com", type: "icloud" }],
+    });
+    const out = await __testing__.findAccountByUid("u1", "icloud-abc");
+    expect(out).toEqual({
+      type: "icloud",
+      account: { id: "icloud-work", email: "work@icloud.com", type: "icloud" },
+    });
   });
 
   it("returns gmail account matching accountId prefix for gmail- uids", async () => {

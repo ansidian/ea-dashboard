@@ -10,6 +10,7 @@ import { timeAgo } from "../../lib/dashboard-helpers";
 import { CheckCheck } from "lucide-react";
 import { Icon } from "@/lib/icons.jsx";
 import ContextMenu from "../ui/ContextMenu";
+import { markEmailAsRead, markEmailAsUnread } from "../../api";
 
 function buildLiveEmailMenu(email, isRead, isPinned, {
   onOpen, onMarkRead, onMarkUnread, onTogglePin, onAddBill, onDismiss,
@@ -418,8 +419,14 @@ export default function LiveEmailSection({ briefingGeneratedAt, loaded, delay, c
             isPinned(emailMenu.email),
             {
               onOpen: () => openEmailInReader(emailMenu.email),
-              onMarkRead: () => markRead(emailMenu.email.uid),
-              onMarkUnread: () => markUnread(emailMenu.email.uid),
+              onMarkRead: async () => {
+                markRead(emailMenu.email.uid);
+                try { await markEmailAsRead(emailMenu.email.uid); } catch { /* ignore */ }
+              },
+              onMarkUnread: async () => {
+                markUnread(emailMenu.email.uid);
+                try { await markEmailAsUnread(emailMenu.email.uid); } catch { /* ignore */ }
+              },
               onTogglePin: () =>
                 isPinned(emailMenu.email)
                   ? unpin(emailMenu.email.uid)

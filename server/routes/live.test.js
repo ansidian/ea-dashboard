@@ -3,17 +3,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockDb = { execute: vi.fn() };
 const gmailFetchEmails = vi.fn();
 const icloudFetchEmails = vi.fn();
-const isMessageRead = vi.fn();
+const isGmailMessageRead = vi.fn();
+const isIcloudMessageRead = vi.fn();
 
 vi.mock("../db/connection.js", () => ({ default: mockDb }));
 vi.mock("../middleware/auth.js", () => ({ requireAuth: (_req, _res, next) => next() }));
 vi.mock("../briefing/encryption.js", () => ({ decrypt: (v) => v }));
 vi.mock("../briefing/gmail.js", () => ({
   fetchEmails: (...a) => gmailFetchEmails(...a),
-  isMessageRead: (...a) => isMessageRead(...a),
+  isMessageRead: (...a) => isGmailMessageRead(...a),
 }));
 vi.mock("../briefing/icloud.js", () => ({
   fetchEmails: (...a) => icloudFetchEmails(...a),
+  isMessageRead: (...a) => isIcloudMessageRead(...a),
 }));
 vi.mock("../briefing/calendar.js", () => ({
   fetchCalendar: async () => [],
@@ -69,7 +71,8 @@ describe("GET /api/live/all — dynamic hoursBack", () => {
     mockDb.execute.mockReset();
     gmailFetchEmails.mockReset().mockResolvedValue([]);
     icloudFetchEmails.mockReset().mockResolvedValue([]);
-    isMessageRead.mockReset().mockResolvedValue(null);
+    isGmailMessageRead.mockReset().mockResolvedValue(null);
+    isIcloudMessageRead.mockReset().mockResolvedValue(null);
   });
 
   it("uses 12h default when the briefing has zero known email UIDs (empty-briefing guard)", async () => {
@@ -103,5 +106,69 @@ describe("GET /api/live/all — dynamic hoursBack", () => {
 
     const passedHoursBack = gmailFetchEmails.mock.calls[0][1];
     expect(passedHoursBack).toBe(3);
+  });
+
+  it("reconciles briefing Gmail read state even when the email is outside the live fetch window", async () => {
+    const generatedAt = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 19).replace("T", " ");
+    const briefing = JSON.stringify({
+      emails: {
+        accounts: [{
+          name: "Work",
+          important: [{
+            id: "gmail-gmail-a-msg-1",
+            uid: "gmail-gmail-a-msg-1",
+            account_id: "gmail-a",
+            account_email: "w@e.com",
+            read: false,
+          }],
+          noise: [],
+        }],
+      },
+    });
+    stubDbDefault({ briefingJson: briefing, generatedAt });
+    isGmailMessageRead.mockResolvedValueOnce(true);
+
+    const handler = findHandler("get", "/all");
+    const res = makeRes();
+    await handler({}, res);
+
+    expect(res.body.briefingReadStatus).toEqual({ "gmail-gmail-a-msg-1": true });
+  });
+
+  it("preserves explicit false when provider says a briefing email is still unread", async () => {
+    mockDb.execute.mockImplementation(async ({ sql }) => {
+      if (sql.includes("FROM ea_briefings") && sql.includes("ORDER BY generated_at DESC LIMIT 1")) {
+        return {
+          rows: [{
+            id: 1,
+            generated_at: new Date(Date.now() - 2 * 3600_000).toISOString().slice(0, 19).replace("T", " "),
+            briefing_json: JSON.stringify({
+              emails: {
+                accounts: [{
+                  name: "Work",
+                  important: [{
+                    id: "gmail-gmail-a-msg-2",
+                    uid: "gmail-gmail-a-msg-2",
+                    account_id: "gmail-a",
+                    account_email: "w@e.com",
+                    read: true,
+                  }],
+                  noise: [],
+                }],
+              },
+            }),
+          }],
+        };
+      }
+      return { rows: [] };
+    });
+    isGmailMessageRead.mockResolvedValueOnce(false);
+
+    const handler = findHandler("get", "/all");
+    const res = makeRes();
+    await handler({}, res);
+
+    expect(Object.prototype.hasOwnProperty.call(res.body.briefingReadStatus, "gmail-gmail-a-msg-2")).toBe(true);
+    expect(res.body.briefingReadStatus["gmail-gmail-a-msg-2"]).toBe(false);
   });
 });
