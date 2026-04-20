@@ -167,7 +167,10 @@ describe("DashboardHero mobile layout", () => {
     const openDay = screen.getByTestId("focus-window-open-day");
     expect(openDay).toBeTruthy();
     expect(openDay.textContent).toMatch(/Open day/);
+    expect(openDay.textContent).toMatch(/Next deadline/);
     expect(openDay.textContent).toMatch(/Finalize deck/);
+    expect(openDay.textContent).toMatch(/Due tomorrow/);
+    expect(openDay.textContent).not.toMatch(/Due soon/);
     expect(screen.queryByTestId("focus-window-open-day-duration")).toBeNull();
     expect(openDay.textContent).not.toMatch(/\d+h \d+m/);
     expect(screen.queryByText(/No more events today/i)).toBeNull();

@@ -543,6 +543,7 @@ function OpenDayBlock({ summary, accent, isMobile = false }) {
   const primary = summary.primary;
   const Icon = primary ? OPEN_DAY_ICONS[primary.kind] : null;
   const urgencyColor = primary ? (OPEN_DAY_URGENCY_COLOR[primary.urgency] || accent) : accent;
+  const hasPrimaryMeta = Boolean(primary?.sub || primary?.timingLabel);
 
   return (
     <div
@@ -610,7 +611,7 @@ function OpenDayBlock({ summary, accent, isMobile = false }) {
                   color: urgencyColor,
                 }}
               >
-                {primary.label}
+                {primary.contextLabel}
               </div>
               <div
                 style={{
@@ -625,22 +626,42 @@ function OpenDayBlock({ summary, accent, isMobile = false }) {
               >
                 {primary.title}
               </div>
+            </div>
+          </div>
+          {hasPrimaryMeta ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                marginTop: 10,
+                paddingTop: 8,
+                borderTop: "1px solid rgba(255,255,255,0.05)",
+                fontSize: 10.5,
+                color: "rgba(205,214,244,0.55)",
+              }}
+            >
               {primary.sub ? (
                 <div
                   style={{
-                    fontSize: 10.5,
-                    color: "rgba(205,214,244,0.55)",
-                    marginTop: 2,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
+                    minWidth: 0,
+                    flex: 1,
                   }}
                 >
                   {primary.sub}
                 </div>
               ) : null}
+              {primary.timingLabel ? (
+                <div style={{ color: "rgba(205,214,244,0.4)", whiteSpace: "nowrap" }}>
+                  {primary.timingLabel}
+                </div>
+              ) : null}
             </div>
-          </div>
+          ) : null}
           {summary.secondaries.length > 0 && (
             <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", flexDirection: "column", gap: 4 }}>
               {summary.secondaries.map((item) => (

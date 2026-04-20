@@ -39,15 +39,71 @@ function actionableEmailCount(emails) {
   return count;
 }
 
-function deadlineLabel(entry) {
+function deadlineContextLabel(entry, now) {
   if (entry.bucket === "overdue-or-today") {
-    return entry.dueAtMs < Date.now() ? "Overdue" : "Due today";
+    return entry.dueAtMs < now ? "Overdue" : "Due today";
   }
-  return "Due soon";
+  return "Next deadline";
+}
+
+function deadlineTimingLabel(entry) {
+  if (entry.bucket === "overdue-or-today") return null;
+  if (entry.bucket === "soon") {
+    const days = entry.daysUntil;
+    if (days <= 1) return "Due tomorrow";
+    return `Due in ${days}d`;
+  }
+  return null;
+}
+
+function deadlineSummary(entry, now) {
+  const contextLabel = deadlineContextLabel(entry, now);
+  const timingLabel = deadlineTimingLabel(entry);
+  return {
+    kind: "deadline",
+    urgency: entry.bucket === "overdue-or-today" ? "high" : "medium",
+    contextLabel,
+    timingLabel,
+    label: timingLabel || contextLabel,
+    title: entry.deadline.title || "Deadline",
+    sub: entry.deadline.class_name || entry.deadline.source || null,
+    count: entry.count,
+  };
+}
+
+function billSummary(entry) {
+  const timingLabel = entry.days <= 0 ? "Due today" : entry.days === 1 ? "Due tomorrow" : `Due in ${entry.days}d`;
+  return {
+    kind: "bill",
+    urgency: entry.days <= 1 ? "high" : "medium",
+    contextLabel: "Next bill",
+    timingLabel,
+    label: timingLabel,
+    title: entry.bill.name || entry.bill.payee || "Bill",
+    sub: entry.bill.amount != null ? `$${Number(entry.bill.amount).toFixed(2)}` : null,
+    count: entry.count,
+  };
+}
+
+function emailSummary(actionable) {
+  const timingLabel = actionable === 1 ? "1 actionable" : `${actionable} actionable`;
+  return {
+    kind: "email",
+    urgency: actionable >= 5 ? "medium" : "low",
+    contextLabel: "Inbox",
+    timingLabel,
+    label: timingLabel,
+    title: actionable === 1 ? "Reply to 1 message" : `Reply to ${actionable} messages`,
+    sub: null,
+    count: actionable,
+  };
 }
 
 export function deriveOpenDaySummary({ deadlines = [], bills = [], emails = null, now = Date.now() }) {
-  const dl = urgentDeadlines(deadlines, now);
+  const dl = urgentDeadlines(deadlines, now).map((entry) => ({
+    ...entry,
+    daysUntil: dayBucket(entry.dueAtMs, now),
+  }));
   const bl = unpaidBills(bills);
   const actionable = actionableEmailCount(emails);
 
@@ -55,37 +111,16 @@ export function deriveOpenDaySummary({ deadlines = [], bills = [], emails = null
 
   if (dl.length) {
     const top = dl[0];
-    items.push({
-      kind: "deadline",
-      urgency: top.bucket === "overdue-or-today" ? "high" : "medium",
-      label: deadlineLabel(top),
-      title: top.deadline.title || "Deadline",
-      sub: top.deadline.class_name || top.deadline.source || null,
-      count: dl.length,
-    });
+    items.push(deadlineSummary({ ...top, count: dl.length }, now));
   }
 
   if (bl.length) {
     const top = bl[0];
-    items.push({
-      kind: "bill",
-      urgency: top.days <= 1 ? "high" : "medium",
-      label: top.days <= 0 ? "Due today" : top.days === 1 ? "Due tomorrow" : `Due in ${top.days}d`,
-      title: top.bill.name || top.bill.payee || "Bill",
-      sub: top.bill.amount != null ? `$${Number(top.bill.amount).toFixed(2)}` : null,
-      count: bl.length,
-    });
+    items.push(billSummary({ ...top, count: bl.length }));
   }
 
   if (actionable > 0) {
-    items.push({
-      kind: "email",
-      urgency: actionable >= 5 ? "medium" : "low",
-      label: actionable === 1 ? "1 actionable email" : `${actionable} actionable emails`,
-      title: actionable === 1 ? "Reply to 1 message" : `Reply to ${actionable} messages`,
-      sub: null,
-      count: actionable,
-    });
+    items.push(emailSummary(actionable));
   }
 
   if (items.length === 0) {

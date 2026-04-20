@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FieldHint, SettingsCard, StatusPill } from "@/components/settings/settings-ui";
+import { FieldHint, SectionLabel, SettingsCard, StatusPill } from "@/components/settings/settings-ui";
 
 const FALLBACK_PROVIDERS = [
   {
@@ -61,51 +61,57 @@ export default function BillExtractionAiCard({ settings, setSettings, patch }) {
       description="Model used to extract payee, amount, due date, and category from bill emails. Independent of the briefing model."
     >
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[160px_1fr]">
-          <Select
-            value={selectedProvider}
-            onValueChange={(value) => applyChange(value, providerEntry?.defaultModel || "")}
-          >
-            <SelectTrigger className="bg-input/30 hover:bg-input/50" aria-label="Bill extraction provider">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              align="start"
-              className="bg-[#16161e] shadow-[0_20px_60px_rgba(0,0,0,0.7)] ring-1 ring-white/[0.08]"
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <SectionLabel className="mb-0">Provider</SectionLabel>
+            <Select
+              value={selectedProvider}
+              onValueChange={(value) => applyChange(value, providerEntry?.defaultModel || "")}
             >
-              {providers.map((p) => (
-                <SelectItem
-                  key={p.provider}
-                  value={p.provider}
-                  disabled={!p.available}
-                  className="text-[13px]"
-                >
-                  {p.label}
-                  {!p.available ? " (unavailable)" : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger className="w-full bg-input/30 hover:bg-input/50" aria-label="Bill extraction provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                align="start"
+                className="bg-[#16161e] shadow-[0_20px_60px_rgba(0,0,0,0.7)] ring-1 ring-white/[0.08]"
+              >
+                {providers.map((p) => (
+                  <SelectItem
+                    key={p.provider}
+                    value={p.provider}
+                    disabled={!p.available}
+                    className="text-[13px]"
+                  >
+                    {p.label}
+                    {!p.available ? " (unavailable)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Select
-            value={selectedModel}
-            onValueChange={(value) => applyChange(selectedProvider, value)}
-            disabled={!providerEntry?.available}
-          >
-            <SelectTrigger className="bg-input/30 hover:bg-input/50" aria-label="Bill extraction model">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              align="start"
-              className="bg-[#16161e] shadow-[0_20px_60px_rgba(0,0,0,0.7)] ring-1 ring-white/[0.08]"
+          <div className="space-y-1.5">
+            <SectionLabel className="mb-0">Model</SectionLabel>
+            <Select
+              value={selectedModel}
+              onValueChange={(value) => applyChange(selectedProvider, value)}
+              disabled={!providerEntry?.available}
             >
-              {(providerEntry?.models || []).map((m) => (
-                <SelectItem key={m.id} value={m.id} className="text-[13px]">
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger className="w-full bg-input/30 hover:bg-input/50" aria-label="Bill extraction model">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                align="start"
+                className="bg-[#16161e] shadow-[0_20px_60px_rgba(0,0,0,0.7)] ring-1 ring-white/[0.08]"
+              >
+                {(providerEntry?.models || []).map((m) => (
+                  <SelectItem key={m.id} value={m.id} className="text-[13px]">
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

@@ -15,13 +15,27 @@ describe("deriveOpenDaySummary", () => {
     const result = deriveOpenDaySummary({
       now: NOW,
       deadlines: [
-        { id: "d1", title: "Submit report", due_date: "2026-04-19", due_time: "9:00 AM", status: "open", class_name: "Ops" },
+        { id: "d1", title: "Submit report", due_date: "2026-04-19", due_time: "8:00 AM", status: "open", class_name: "Ops" },
       ],
     });
     expect(result.tone).toBe("pressure");
     expect(result.primary.kind).toBe("deadline");
     expect(result.primary.urgency).toBe("high");
+    expect(result.primary.contextLabel).toBe("Overdue");
+    expect(result.primary.timingLabel).toBeNull();
     expect(result.primary.title).toBe("Submit report");
+  });
+
+  it("uses overview-free copy for a soon deadline", () => {
+    const result = deriveOpenDaySummary({
+      now: NOW,
+      deadlines: [
+        { id: "d1", title: "Finalize deck", due_date: "2026-04-20", status: "open", class_name: "Ops" },
+      ],
+    });
+    expect(result.primary.contextLabel).toBe("Next deadline");
+    expect(result.primary.timingLabel).toBe("Due tomorrow");
+    expect(result.primary.label).toBe("Due tomorrow");
   });
 
   it("ranks deadlines above same-urgency bills and lists bills as a secondary", () => {
@@ -72,6 +86,8 @@ describe("deriveOpenDaySummary", () => {
     });
     expect(result.tone).toBe("pressure");
     expect(result.primary.kind).toBe("email");
-    expect(result.primary.label).toBe("3 actionable emails");
+    expect(result.primary.contextLabel).toBe("Inbox");
+    expect(result.primary.timingLabel).toBe("3 actionable");
+    expect(result.primary.label).toBe("3 actionable");
   });
 });
