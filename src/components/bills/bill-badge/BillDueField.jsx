@@ -25,7 +25,7 @@ export default function BillDueField({
   const triggerRef = useRef(null);
   const pickerRef = useRef(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const nowTick = Date.now();
+  const [nowTick] = useState(() => Date.now());
   const dueDisplay = editDue ? formatDate(editDue) : "";
   const initialEpoch = useMemo(() => epochFromDateString(editDue), [editDue]);
 
