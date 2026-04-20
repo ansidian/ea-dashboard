@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import SearchableDropdown from "../../shared/SearchableDropdown";
 import BillBadgeHeader from "./BillBadgeHeader";
+import BillDueField from "./BillDueField";
 
 function FieldShell({ label, children }) {
   return (
@@ -89,11 +90,10 @@ function BillFields({
             </div>
           </FieldShell>
           <FieldShell label="Due">
-            <Input
-              type="date"
-              value={editDue}
-              onChange={(event) => setEditDue(event.target.value)}
-              className={cn("bg-input-bg border-white/[0.08] text-foreground font-medium [color-scheme:dark]", isMobile ? "text-[14px] h-10" : "text-[13px] h-8")}
+            <BillDueField
+              editDue={editDue}
+              setEditDue={setEditDue}
+              isMobile={isMobile}
             />
           </FieldShell>
         </div>
@@ -187,11 +187,9 @@ function BillFields({
           </div>
         </FieldShell>
         <FieldShell label="Due">
-          <Input
-            type="date"
-            value={editDue}
-            onChange={(event) => setEditDue(event.target.value)}
-            className="bg-input-bg border-white/[0.08] text-foreground text-[13px] font-medium [color-scheme:dark] h-8"
+          <BillDueField
+            editDue={editDue}
+            setEditDue={setEditDue}
           />
         </FieldShell>
       </div>

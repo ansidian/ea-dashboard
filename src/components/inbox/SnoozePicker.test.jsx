@@ -38,4 +38,28 @@ describe("CustomDateTimeView", () => {
 
     expect(onSelect).toHaveBeenCalledWith(epochFromLa(2026, 3, 19, 21, 15));
   });
+
+  it("scrolls the calendar area through months with the wheel", () => {
+    const onSelect = vi.fn();
+    const initialEpoch = epochFromLa(2026, 3, 19, 9, 15);
+    const nowTick = epochFromLa(2026, 3, 19, 9, 14);
+
+    render(
+      <CustomDateTimeView
+        nowTick={nowTick}
+        initialEpoch={initialEpoch}
+        onSelect={onSelect}
+        onBack={() => {}}
+      />,
+    );
+
+    const calendarView = screen.getByRole("group", { name: "Calendar month view" });
+    expect(screen.getByText("April 2026")).toBeTruthy();
+
+    fireEvent.wheel(calendarView, { deltaY: 100 });
+    expect(screen.getByText("May 2026")).toBeTruthy();
+
+    fireEvent.wheel(calendarView, { deltaY: -100 });
+    expect(screen.getByText("April 2026")).toBeTruthy();
+  });
 });

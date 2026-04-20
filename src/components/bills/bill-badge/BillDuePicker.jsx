@@ -1,12 +1,12 @@
-import { CalendarClock } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import AnchoredFloatingPanel from "@/components/shared/pickers/AnchoredFloatingPanel";
 import CalendarDateTimeView from "@/components/shared/pickers/CalendarDateTimeView";
 
 const PICKER_WIDTH = 300;
-const PICKER_HEIGHT = 432;
+const PICKER_HEIGHT = 386;
 const ACCENT = "var(--ea-accent)";
 
-export default function TodoistDuePicker({
+export default function BillDuePicker({
   anchorRef,
   panelRef,
   nowTick,
@@ -22,7 +22,7 @@ export default function TodoistDuePicker({
       width={PICKER_WIDTH}
       height={PICKER_HEIGHT}
       role="dialog"
-      ariaLabel="Todoist due date picker"
+      ariaLabel="Bill due date picker"
       style={{
         overflow: "hidden",
         padding: 8,
@@ -55,7 +55,7 @@ export default function TodoistDuePicker({
             border: `1px solid color-mix(in srgb, ${ACCENT} 24%, transparent)`,
           }}
         >
-          <CalendarClock size={12} />
+          <CalendarDays size={12} />
         </span>
         Due date
       </div>
@@ -66,6 +66,8 @@ export default function TodoistDuePicker({
         onBack={onClose}
         accent={ACCENT}
         confirmLabel="Set due date"
+        mode="date-only"
+        allowPastDates
       />
     </AnchoredFloatingPanel>
   );
