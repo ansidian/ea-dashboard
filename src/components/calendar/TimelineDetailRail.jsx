@@ -145,7 +145,7 @@ function TimelineRow({ item }) {
         )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", alignSelf: "center", gap: 6 }}>
         {item.trailing}
       </div>
     </div>

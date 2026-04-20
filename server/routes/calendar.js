@@ -10,11 +10,43 @@ import {
   loadCompletedTaskIds,
   carryForwardCompletedTodoist,
 } from "../briefing/index.js";
-import { fetchCalendar, pacificDayBoundaries } from "../briefing/calendar.js";
+import {
+  fetchCalendar,
+  pacificDayBoundaries,
+  getCalendarSourceGroups,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+  formatCalendarRouteError,
+} from "../briefing/calendar.js";
 import { hydrateRecurringTombstones, addDaysIso } from "../briefing/tombstones.js";
 
 const router = Router();
 router.use(requireAuth);
+
+function handleCalendarRouteError(res, err, fallbackMessage) {
+  if (err?.status && err?.code) {
+    const formatted = formatCalendarRouteError(err);
+    return res.status(formatted.status).json(formatted.body);
+  }
+  console.error(fallbackMessage, err);
+  return res.status(500).json({ code: "calendar_route_error", message: fallbackMessage });
+}
+
+async function loadCalendarAccount(accountId) {
+  const userId = process.env.EA_USER_ID;
+  const { accounts } = await loadUserConfig(userId);
+  const account = accounts.find(
+    (entry) => entry.id === accountId && entry.type === "gmail" && entry.calendar_enabled,
+  );
+  if (!account) {
+    const err = new Error("Calendar account not found");
+    err.status = 404;
+    err.code = "calendar_account_not_found";
+    throw err;
+  }
+  return account;
+}
 
 router.get("/deadlines", async (_req, res) => {
   try {
@@ -29,36 +61,30 @@ router.get("/deadlines", async (_req, res) => {
         console.error("[Calendar] Todoist fetch failed:", err.message);
         return [];
       }),
-      // Pull the stored briefing's completed Todoist rows so the calendar
-      // can carry them forward with its own (yesterday) date gate.
       db.execute({
         sql: `SELECT briefing_json FROM ea_briefings
               WHERE user_id = ? AND status = 'ready'
               ORDER BY generated_at DESC LIMIT 1`,
         args: [userId],
-      }).then((r) => r.rows[0] || null).catch(() => null),
+      }).then((result) => result.rows[0] || null).catch(() => null),
     ]);
 
     const completedIds = await loadCompletedTaskIds(userId, todoistTasks);
     const separated = separateDeadlines(ctmDeadlines, todoistTasks, completedIds);
-    // Derive id set from the already-fetched full-horizon list — no extra API call.
-    const liveTodoistIds = new Set(todoistTasks.map((t) => String(t.id)));
-    // Calendar's render gate is lenient by one day — a task completed
-    // yesterday should still read as "done yesterday" in the calendar view,
-    // whereas the deadlines section drops it at midnight.
+    const liveTodoistIds = new Set(todoistTasks.map((task) => String(task.id)));
     const tombstones = await hydrateRecurringTombstones(userId, liveTodoistIds, {
       viewBoundary: "yesterday",
     });
 
-    // Carry forward completed non-recurring Todoist rows from the stored
-    // briefing, gated by yesterday so tasks completed yesterday still show.
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
     const yesterday = addDaysIso(today, -1);
     let prevTodoist = null;
     if (latestBriefingRow) {
       try {
         prevTodoist = JSON.parse(latestBriefingRow.briefing_json)?.todoist?.upcoming;
-      } catch { /* ignore malformed prev briefing */ }
+      } catch {
+        prevTodoist = null;
+      }
     }
     const todoistWithCarried = carryForwardCompletedTodoist(
       [...separated.todoist, ...tombstones],
@@ -111,7 +137,7 @@ router.get("/range", async (req, res) => {
     const userId = process.env.EA_USER_ID;
     const { accounts } = await loadUserConfig(userId);
     const calendarAccounts = accounts.filter(
-      (a) => a.type === "gmail" && a.calendar_enabled,
+      (account) => account.type === "gmail" && account.calendar_enabled,
     );
 
     const { dayStart } = pacificDayBoundaries(startDate);
@@ -126,6 +152,77 @@ router.get("/range", async (req, res) => {
   } catch (err) {
     console.error("[Calendar] range fetch failed:", err.message);
     res.status(500).json({ message: "Failed to fetch calendar range" });
+  }
+});
+
+router.get("/calendars", async (_req, res) => {
+  try {
+    const userId = process.env.EA_USER_ID;
+    const { accounts } = await loadUserConfig(userId);
+    const calendarAccounts = accounts.filter(
+      (account) => account.type === "gmail" && account.calendar_enabled,
+    );
+    const groups = await getCalendarSourceGroups(calendarAccounts);
+    res.json({ accounts: groups });
+  } catch (err) {
+    handleCalendarRouteError(res, err, "Failed to fetch calendar sources");
+  }
+});
+
+router.post("/events", async (req, res) => {
+  const { accountId, calendarId, title, allDay, startDate, endDate, startTime, endTime, location, description } = req.body || {};
+  try {
+    const account = await loadCalendarAccount(accountId);
+    const event = await createCalendarEvent(account, {
+      accountId,
+      calendarId,
+      title,
+      allDay,
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+      location,
+      description,
+    });
+    res.status(201).json({ event });
+  } catch (err) {
+    handleCalendarRouteError(res, err, "Failed to create calendar event");
+  }
+});
+
+router.patch("/events/:eventId", async (req, res) => {
+  const { eventId } = req.params;
+  const { accountId, calendarId, etag, title, allDay, startDate, endDate, startTime, endTime, location, description } = req.body || {};
+  try {
+    const account = await loadCalendarAccount(accountId);
+    const event = await updateCalendarEvent(account, eventId, {
+      calendarId,
+      etag,
+      title,
+      allDay,
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+      location,
+      description,
+    });
+    res.json({ event });
+  } catch (err) {
+    handleCalendarRouteError(res, err, "Failed to update calendar event");
+  }
+});
+
+router.delete("/events/:eventId", async (req, res) => {
+  const { eventId } = req.params;
+  const { accountId, calendarId, etag } = req.body || {};
+  try {
+    const account = await loadCalendarAccount(accountId);
+    await deleteCalendarEvent(account, eventId, { calendarId, etag });
+    res.json({ ok: true });
+  } catch (err) {
+    handleCalendarRouteError(res, err, "Failed to delete calendar event");
   }
 });
 

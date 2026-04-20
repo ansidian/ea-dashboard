@@ -16,6 +16,7 @@ export default function CalendarDateTimeView({
   confirmLabel = "Confirm",
   mode = "date-time",
   allowPastDates = false,
+  submitOnDateSelect = false,
 }) {
   const confirmButtonRef = useRef(null);
   const advanceFocusToConfirmRef = useRef(false);
@@ -70,7 +71,7 @@ export default function CalendarDateTimeView({
     if (!allowPastDates && compareDay(cell, today) < 0) return;
     const isSameDay =
       cell.year === draft.year && cell.month === draft.month && cell.day === draft.day;
-    if (!showTime && isSameDay) {
+    if (!showTime && (submitOnDateSelect || isSameDay)) {
       onSelect(epochFromLa(cell.year, cell.month, cell.day, 12, 0));
       return;
     }
@@ -378,73 +379,109 @@ export default function CalendarDateTimeView({
         </div>
       ) : null}
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "8px 10px",
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onBack}
-          onMouseEnter={(event) => { event.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-          onMouseLeave={(event) => { event.currentTarget.style.background = "transparent"; }}
+      {submitOnDateSelect && !showTime ? (
+        <div
           style={{
-            display: "inline-flex",
+            display: "flex",
+            justifyContent: "flex-start",
+            padding: "8px 10px",
+            borderTop: "1px solid rgba(255,255,255,0.06)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onBack}
+            onMouseEnter={(event) => { event.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+            onMouseLeave={(event) => { event.currentTarget.style.background = "transparent"; }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "6px 10px",
+              borderRadius: 8,
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "rgba(205,214,244,0.75)",
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: "pointer",
+              transition: "background 120ms",
+            }}
+          >
+            <ChevronLeft size={12} />
+            Back
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
             alignItems: "center",
-            gap: 4,
-            padding: "6px 10px",
-            borderRadius: 8,
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.08)",
-            color: "rgba(205,214,244,0.75)",
-            fontSize: 11,
-            fontWeight: 600,
-            fontFamily: "inherit",
-            cursor: "pointer",
-            transition: "background 120ms",
+            justifyContent: "space-between",
+            padding: "8px 10px",
+            borderTop: "1px solid rgba(255,255,255,0.06)",
           }}
         >
-          <ChevronLeft size={12} />
-          Back
-        </button>
-        <button
-          ref={confirmButtonRef}
-          type="button"
-          disabled={confirmDisabled}
-          onClick={() => onSelect(draftEpoch)}
-          style={{
-            padding: "6px 14px",
-            borderRadius: 8,
-            background: confirmDisabled
-              ? `color-mix(in srgb, ${accent} 20%, transparent)`
-              : accent,
-            border: confirmDisabled
-              ? `1px solid color-mix(in srgb, ${accent} 25%, transparent)`
-              : `1px solid ${accent}`,
-            color: confirmDisabled ? "rgba(255,255,255,0.5)" : "#ffffff",
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 0.3,
-            fontFamily: "inherit",
-            cursor: confirmDisabled ? "not-allowed" : "pointer",
-            transition: "background 120ms, transform 120ms",
-          }}
-          onMouseEnter={(event) => {
-            if (confirmDisabled) return;
-            event.currentTarget.style.background = `color-mix(in srgb, ${accent} 82%, white)`;
-          }}
-          onMouseLeave={(event) => {
-            if (confirmDisabled) return;
-            event.currentTarget.style.background = accent;
-          }}
-        >
-          {confirmLabel}
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={onBack}
+            onMouseEnter={(event) => { event.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+            onMouseLeave={(event) => { event.currentTarget.style.background = "transparent"; }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "6px 10px",
+              borderRadius: 8,
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "rgba(205,214,244,0.75)",
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: "pointer",
+              transition: "background 120ms",
+            }}
+          >
+            <ChevronLeft size={12} />
+            Back
+          </button>
+          <button
+            ref={confirmButtonRef}
+            type="button"
+            disabled={confirmDisabled}
+            onClick={() => onSelect(draftEpoch)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              background: confirmDisabled
+                ? `color-mix(in srgb, ${accent} 20%, transparent)`
+                : accent,
+              border: confirmDisabled
+                ? `1px solid color-mix(in srgb, ${accent} 25%, transparent)`
+                : `1px solid ${accent}`,
+              color: confirmDisabled ? "rgba(255,255,255,0.5)" : "#ffffff",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              fontFamily: "inherit",
+              cursor: confirmDisabled ? "not-allowed" : "pointer",
+              transition: "background 120ms, transform 120ms",
+            }}
+            onMouseEnter={(event) => {
+              if (confirmDisabled) return;
+              event.currentTarget.style.background = `color-mix(in srgb, ${accent} 82%, white)`;
+            }}
+            onMouseLeave={(event) => {
+              if (confirmDisabled) return;
+              event.currentTarget.style.background = accent;
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

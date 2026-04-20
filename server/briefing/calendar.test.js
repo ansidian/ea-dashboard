@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { getNextWeekRange } from "./calendar.js";
+import { getNextWeekRange, normalizeGoogleCalendarLink } from "./calendar.js";
 
 describe("getNextWeekRange", () => {
   afterEach(() => {
@@ -48,5 +48,20 @@ describe("getNextWeekRange", () => {
     // ISO string must show midnight Pacific as 07:00Z (UTC-7 offset)
     expect(startDate.toISOString()).toBe("2026-04-05T07:00:00.000Z");
     expect(endDate.toISOString()).toBe("2026-04-12T06:59:59.999Z");
+  });
+});
+
+describe("normalizeGoogleCalendarLink", () => {
+  it("adds authuser for Google Calendar links", () => {
+    const result = normalizeGoogleCalendarLink(
+      "https://calendar.google.com/calendar/u/0/r/eventedit/abc123",
+      "me@example.com",
+    );
+    expect(result).toContain("authuser=me%40example.com");
+  });
+
+  it("leaves non-Google links untouched", () => {
+    expect(normalizeGoogleCalendarLink("https://example.com/event/123", "me@example.com"))
+      .toBe("https://example.com/event/123");
   });
 });

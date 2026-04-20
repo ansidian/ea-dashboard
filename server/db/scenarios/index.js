@@ -13,6 +13,7 @@ import tomorrowEvents from "./tomorrow-events.js";
 import noBills from "./no-bills.js";
 import slotInsights from "./slot-insights.js";
 import recurringTombstone from "./recurring-tombstone.js";
+import calendarCrud from "./calendar-crud.js";
 
 const scenarios = {
   "urgent-flags": urgentFlags,
@@ -24,6 +25,7 @@ const scenarios = {
   "no-bills": noBills,
   "slot-insights": slotInsights,
   "recurring-tombstone": recurringTombstone,
+  "calendar-crud": calendarCrud,
 };
 
 // Returns list of available scenario names + descriptions

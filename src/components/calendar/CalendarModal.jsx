@@ -6,6 +6,8 @@ import billsView from "./views/billsView.jsx";
 import { getCalendarLayoutMetrics } from "./calendarLayout.js";
 import deadlinesView from "./views/deadlinesView.jsx";
 import eventsView from "./views/eventsView.jsx";
+import CalendarEventEditorRail from "./events/CalendarEventEditorRail.jsx";
+import useCalendarEventEditor from "./events/useCalendarEventEditor.js";
 
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const GRID_ROWS = 6;
@@ -118,7 +120,7 @@ function CalendarCell({
         minWidth: 0, overflow: "hidden", borderRadius: 8,
         padding: "7px 9px",
         background: cellBg, border: cellBorder, boxShadow: cellShadow,
-        cursor: hasItems ? "pointer" : "default",
+        cursor: "pointer",
         transition: "box-shadow 150ms, border-color 150ms, background 150ms",
         display: "flex", flexDirection: "column", gap: 3,
       }}
@@ -227,13 +229,81 @@ function CalendarSummary({ view, viewYear, viewMonth, currentYear, currentMonth,
         </div>
       ) : (
         <div style={{ fontSize: 12, color: "rgba(205,214,244,0.55)", lineHeight: 1.5 }}>
-          Click any day with activity to drill in. Items are color-coded by source on the rail.
+          Click any day to drill in. Items are color-coded by source on the rail.
         </div>
       )}
       <span style={{ flex: 1 }} />
       {/* The view's existing footer renderer becomes the per-month summary
           card now that it lives in the rail instead of below the grid. */}
       {activeView.renderFooter?.({ viewYear, viewMonth, currentYear, currentMonth, todayDate, itemsByDay, computed, data })}
+    </div>
+  );
+}
+
+function formatFullDate(year, month, day) {
+  return new Date(year, month, day).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function isEditableTarget(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tagName = target.tagName;
+  return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+}
+
+function CalendarSelectedDayEmptyState({ view, selectedDay, viewYear, viewMonth }) {
+  const description = view === "events"
+    ? "No events on this day yet. Creating a new event will prefill this date."
+    : view === "bills"
+      ? "No scheduled bills land on this date."
+      : "No deadlines are due on this date.";
+
+  return (
+    <div style={{ flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div style={{ fontSize: 14, color: "#cba6da", fontWeight: 500 }}>
+          {formatFullDate(viewYear, viewMonth, selectedDay)}
+        </div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+          No items
+        </div>
+      </div>
+      <div
+        style={{
+          padding: "14px 14px 16px",
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.05)",
+          background: "rgba(255,255,255,0.02)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontSize: 12, color: "rgba(205,214,244,0.72)", lineHeight: 1.55 }}>
+          {description}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnimatedRailContent({ contentKey, children }) {
+  return (
+    <div
+      key={contentKey}
+      className="animate-in fade-in duration-150"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {children}
     </div>
   );
 }
@@ -338,9 +408,29 @@ export default function CalendarModal({
     return billsData;
   }, [view, eventsData, viewYear, viewMonth, deadlinesData, billsData]);
 
+  const focusEditorDate = useCallback((ymd) => {
+    const focus = parseFocusDate(ymd);
+    if (!focus) return;
+    setViewDate({ month: focus.getMonth(), year: focus.getFullYear() });
+    setSelectedDay(focus.getDate());
+  }, []);
+
+  const eventEditor = useCalendarEventEditor({
+    open,
+    view,
+    editable: !!eventsData?.editable,
+    selectedDay,
+    viewYear,
+    viewMonth,
+    refreshRange: eventsData?.refreshRange,
+    onFocusDate: focusEditorDate,
+  });
+  const closeEventEditor = eventEditor.closeEditor;
+
   const navigateMonthRef = useRef(null);
   useEffect(() => {
     navigateMonthRef.current = (dir) => {
+      closeEventEditor();
       setSelectedDay(null);
       setViewDate((prev) => {
         const next = prev.month + dir;
@@ -377,13 +467,14 @@ export default function CalendarModal({
 
   // Reset selectedDay when view changes (preserve month/year)
   const [prevView, setPrevView] = useState(view);
-  if (prevView !== view) {
-    setPrevView(view);
-    const pendingFocus = openingWithFocus || parseFocusDate(pendingFocusDate);
-    if (pendingFocus) {
-      setViewDate({ month: pendingFocus.getMonth(), year: pendingFocus.getFullYear() });
-      setSelectedDay(pendingFocus.getDate());
-      setPendingFocusDate(null);
+    if (prevView !== view) {
+      setPrevView(view);
+      closeEventEditor();
+      const pendingFocus = openingWithFocus || parseFocusDate(pendingFocusDate);
+      if (pendingFocus) {
+        setViewDate({ month: pendingFocus.getMonth(), year: pendingFocus.getFullYear() });
+        setSelectedDay(pendingFocus.getDate());
+        setPendingFocusDate(null);
     } else {
       setSelectedDay(null);
     }
@@ -460,6 +551,17 @@ export default function CalendarModal({
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
+      if (isEditableTarget(e.target)) {
+        if (e.key === "Escape") {
+          onClose();
+          e.preventDefault();
+          e.stopPropagation();
+        } else {
+          e.stopPropagation();
+        }
+        return;
+      }
+
       switch (e.key) {
         case "Escape":
           onClose();
@@ -481,6 +583,7 @@ export default function CalendarModal({
           break;
         case "t":
         case "T":
+          closeEventEditor();
           setViewDate({ month: currentMonth, year: currentYear });
           setSelectedDay(null);
           e.preventDefault();
@@ -512,7 +615,7 @@ export default function CalendarModal({
     }
     document.addEventListener("keydown", handleKey, true);
     return () => document.removeEventListener("keydown", handleKey, true);
-  }, [open, onClose, currentMonth, currentYear, canGoPrev, view, onViewChange]);
+  }, [open, onClose, currentMonth, currentYear, canGoPrev, view, onViewChange, closeEventEditor]);
 
   useEffect(() => {
     if (!open || view !== "events" || !eventsData?.ensureRange) return;
@@ -533,8 +636,10 @@ export default function CalendarModal({
 
   if (!open) return null;
 
-  const selectedItems = selectedDay ? itemsByDay[selectedDay] || [] : [];
-  const showDetail = selectedDay && selectedItems.length > 0;
+  const selectedItems = selectedDay != null ? itemsByDay[selectedDay] || [] : [];
+  const hasSelectedDay = selectedDay != null;
+  const showDetail = hasSelectedDay && selectedItems.length > 0;
+  const showEmptySelection = hasSelectedDay && selectedItems.length === 0;
 
   const HeaderExtras = activeView.HeaderExtras;
 
@@ -586,6 +691,17 @@ export default function CalendarModal({
                   <button
                     onClick={() => canGoPrev && navigateMonth(-1)}
                     aria-label="Previous month"
+                    onMouseEnter={(event) => {
+                      if (!canGoPrev) return;
+                      event.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                      event.currentTarget.style.borderColor = "rgba(255,255,255,0.14)";
+                      event.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(event) => {
+                      event.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                      event.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+                      event.currentTarget.style.transform = "translateY(0)";
+                    }}
                     style={{
                       color: canGoPrev ? "rgba(205,214,244,0.7)" : "rgba(205,214,244,0.18)",
                       cursor: canGoPrev ? "pointer" : "default",
@@ -595,7 +711,8 @@ export default function CalendarModal({
                       background: "rgba(255,255,255,0.03)",
                       border: "1px solid rgba(255,255,255,0.06)",
                       fontFamily: "inherit",
-                      transition: "all 120ms",
+                      transform: "translateY(0)",
+                      transition: "transform 140ms, background 140ms, border-color 140ms",
                       flexShrink: 0,
                     }}
                   >
@@ -604,6 +721,16 @@ export default function CalendarModal({
                   <button
                     onClick={() => navigateMonth(1)}
                     aria-label="Next month"
+                    onMouseEnter={(event) => {
+                      event.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                      event.currentTarget.style.borderColor = "rgba(255,255,255,0.14)";
+                      event.currentTarget.style.transform = "translateY(-1px)";
+                    }}
+                    onMouseLeave={(event) => {
+                      event.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                      event.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+                      event.currentTarget.style.transform = "translateY(0)";
+                    }}
                     style={{
                       color: "rgba(205,214,244,0.7)",
                       cursor: "pointer",
@@ -613,7 +740,8 @@ export default function CalendarModal({
                       background: "rgba(255,255,255,0.03)",
                       border: "1px solid rgba(255,255,255,0.06)",
                       fontFamily: "inherit",
-                      transition: "all 120ms",
+                      transform: "translateY(0)",
+                      transition: "transform 140ms, background 140ms, border-color 140ms",
                       flexShrink: 0,
                     }}
                   >
@@ -667,6 +795,18 @@ export default function CalendarModal({
                     <button
                       key={opt.key}
                       onClick={() => !active && onViewChange?.(opt.key)}
+                      onMouseEnter={(event) => {
+                        if (active) return;
+                        event.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                        event.currentTarget.style.color = "rgba(205,214,244,0.82)";
+                        event.currentTarget.style.transform = "translateY(-1px)";
+                      }}
+                      onMouseLeave={(event) => {
+                        if (active) return;
+                        event.currentTarget.style.background = "transparent";
+                        event.currentTarget.style.color = "rgba(205,214,244,0.55)";
+                        event.currentTarget.style.transform = "translateY(0)";
+                      }}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -681,7 +821,8 @@ export default function CalendarModal({
                         fontFamily: "inherit",
                         background: active ? "rgba(203,166,218,0.12)" : "transparent",
                         color: active ? "#cba6da" : "rgba(205,214,244,0.55)",
-                        transition: "background 150ms, color 150ms",
+                        transform: "translateY(0)",
+                        transition: "transform 140ms, background 150ms, color 150ms",
                       }}
                     >
                       <Icon size={11} strokeWidth={1.8} />
@@ -711,11 +852,22 @@ export default function CalendarModal({
                     data={viewData}
                     computed={computed}
                     suppressOutsideClick={suppressOutsideClick}
+                    editor={eventEditor}
                   />
                 ) : null}
                 <button
                   onClick={onClose}
                   aria-label="Close"
+                  onMouseEnter={(event) => {
+                    event.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                    event.currentTarget.style.borderColor = "rgba(255,255,255,0.14)";
+                    event.currentTarget.style.transform = "translateY(-1px)";
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                    event.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+                    event.currentTarget.style.transform = "translateY(0)";
+                  }}
                   style={{
                     color: "rgba(205,214,244,0.7)",
                     cursor: "pointer",
@@ -725,7 +877,8 @@ export default function CalendarModal({
                     background: "rgba(255,255,255,0.03)",
                     border: "1px solid rgba(255,255,255,0.06)",
                     fontFamily: "inherit",
-                    transition: "all 120ms",
+                    transform: "translateY(0)",
+                    transition: "transform 140ms, background 140ms, border-color 140ms",
                   }}
                 >
                   <X size={16} />
@@ -795,7 +948,10 @@ export default function CalendarModal({
                           hasOverdue={hasOverdue}
                           allComplete={allComplete}
                           loading={viewData?.isLoading}
-                          onClick={() => hasItems && setSelectedDay(isSelected ? null : day)}
+                          onClick={() => {
+                            closeEventEditor();
+                            setSelectedDay(isSelected ? null : day);
+                          }}
                           renderCellContents={activeView.renderCellContents}
                         />
                       );
@@ -832,35 +988,53 @@ export default function CalendarModal({
                   overflow: "hidden",
                 }}
               >
-                {activeView.renderSidebar ? (
-                  <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                    {activeView.renderSidebar({ selectedDay, itemsByDay, viewYear, viewMonth, data: viewData })}
-                  </div>
-                ) : showDetail ? (
-                  <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                    {activeView.renderDetail?.({
+                <AnimatedRailContent
+                  contentKey={
+                    view === "events" && eventEditor.isEditorOpen
+                      ? `editor-${eventEditor.isEditing ? eventEditor.editingEvent?.id || "edit" : "new"}`
+                      : showDetail
+                        ? `detail-${view}-${viewYear}-${viewMonth}-${selectedDay}-${selectedItems.length}`
+                        : showEmptySelection
+                          ? `empty-${view}-${viewYear}-${viewMonth}-${selectedDay}`
+                          : `summary-${view}-${viewYear}-${viewMonth}`
+                  }
+                >
+                  {view === "events" && eventEditor.isEditorOpen ? (
+                    <CalendarEventEditorRail editor={eventEditor} />
+                  ) : activeView.renderSidebar ? (
+                    activeView.renderSidebar({ selectedDay, itemsByDay, viewYear, viewMonth, data: viewData })
+                  ) : showDetail ? (
+                    activeView.renderDetail?.({
                       selectedDay,
                       viewYear,
                       viewMonth,
                       items: selectedItems,
                       data: viewData,
                       computed,
-                    })}
-                  </div>
-                ) : (
-                  <CalendarSummary
-                    view={view}
-                    viewYear={viewYear}
-                    viewMonth={viewMonth}
-                    currentYear={currentYear}
-                    currentMonth={currentMonth}
-                    todayDate={todayDate}
-                    itemsByDay={itemsByDay}
-                    computed={computed}
-                    data={viewData}
-                    activeView={activeView}
-                  />
-                )}
+                      onSelectEvent: eventEditor.openEdit,
+                    })
+                  ) : showEmptySelection ? (
+                    <CalendarSelectedDayEmptyState
+                      view={view}
+                      selectedDay={selectedDay}
+                      viewYear={viewYear}
+                      viewMonth={viewMonth}
+                    />
+                  ) : (
+                    <CalendarSummary
+                      view={view}
+                      viewYear={viewYear}
+                      viewMonth={viewMonth}
+                      currentYear={currentYear}
+                      currentMonth={currentMonth}
+                      todayDate={todayDate}
+                      itemsByDay={itemsByDay}
+                      computed={computed}
+                      data={viewData}
+                      activeView={activeView}
+                    />
+                  )}
+                </AnimatedRailContent>
               </aside>
             </div>
           </div>

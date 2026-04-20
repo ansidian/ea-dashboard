@@ -45,12 +45,18 @@ export default function Dashboard() {
   const calendarRange = useCalendarRange({ disabled: isMock });
   useNotifications(liveData);
   const bd = useBriefingData({ liveData, isMock });
-  const refreshHold = useHoldGesture({ onShortPress: bd.handleQuickRefresh });
+  const invalidateCalendarRange = calendarRange.invalidate;
+  const quickRefreshBriefing = bd.handleQuickRefresh;
+  const handleCalendarAwareQuickRefresh = useCallback(() => {
+    invalidateCalendarRange();
+    return quickRefreshBriefing();
+  }, [invalidateCalendarRange, quickRefreshBriefing]);
+  const refreshHold = useHoldGesture({ onShortPress: handleCalendarAwareQuickRefresh });
 
   useAutoRefresh({
     disabled: isMock,
     lastQuickRefreshAt: bd.lastQuickRefreshAt,
-    onQuickRefresh: bd.handleQuickRefresh,
+    onQuickRefresh: handleCalendarAwareQuickRefresh,
   });
 
   const handleFullGeneration = useCallback(async () => {
@@ -164,8 +170,10 @@ export default function Dashboard() {
         bd={bd}
         liveData={liveData}
         calendarRange={calendarRange}
+        isMock={isMock}
         refreshHold={refreshHold}
         handleFullGeneration={handleFullGeneration}
+        onQuickRefresh={handleCalendarAwareQuickRefresh}
         historyOpen={historyOpen}
         setHistoryOpen={setHistoryOpen}
         historyTriggerRef={historyTriggerRef}
@@ -185,7 +193,8 @@ export default function Dashboard() {
  * REDESIGN SHELL — tabs + palette + customize + routed body
  * ====================================================================== */
 export function RedesignShell({
-  bd, liveData, calendarRange, refreshHold, handleFullGeneration,
+  bd, liveData, calendarRange, isMock = false, refreshHold, handleFullGeneration,
+  onQuickRefresh,
   historyOpen, setHistoryOpen, historyTriggerRef,
   calendarDeadlines, loadCalendarDeadlines,
 }) {
@@ -282,26 +291,32 @@ export function RedesignShell({
     else if (item.kind === "calendar") openCalendar();
     else if (item.kind === "history") setHistoryOpen(true);
     else if (item.kind === "customize") setCustomizeOpen(true);
-    else if (item.kind === "refresh") bd.handleQuickRefresh();
+    else if (item.kind === "refresh") onQuickRefresh?.();
     else if (item.kind === "regenerate") handleFullGeneration();
     else if (item.kind === "settings") window.location.href = "/settings";
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jumpToSection, bd.handleQuickRefresh, handleFullGeneration]);
+  }, [jumpToSection, onQuickRefresh, handleFullGeneration]);
 
   const eventsData = useMemo(() => ({
     ensureRange: calendarRange.ensureRange,
+    refreshRange: calendarRange.refreshRange,
     getEvents: calendarRange.getEvents,
     hasMonth: calendarRange.hasMonth,
     isMonthLoading: calendarRange.isMonthLoading,
     loading: calendarRange.loading,
     error: calendarRange.error,
+    revision: calendarRange.revision,
+    editable: !isMock,
   }), [
     calendarRange.ensureRange,
+    calendarRange.refreshRange,
     calendarRange.getEvents,
     calendarRange.hasMonth,
     calendarRange.isMonthLoading,
     calendarRange.loading,
     calendarRange.error,
+    calendarRange.revision,
+    isMock,
   ]);
 
   const nextBriefingLabel = formatNextBriefingLabel(bd.schedules);
@@ -382,7 +397,7 @@ export function RedesignShell({
         refreshHold={refreshHold}
         refreshing={bd.refreshing}
         generating={bd.generating}
-        onQuickRefresh={bd.handleQuickRefresh}
+        onQuickRefresh={onQuickRefresh}
         onFullGenerate={handleFullGeneration}
       />
 
@@ -428,7 +443,7 @@ export function RedesignShell({
             snoozedEntries={liveData.snoozedEntries}
             resurfacedEntries={liveData.resurfacedEntries}
             onOpenDashboard={() => setTab("dashboard")}
-            onRefresh={() => { bd.handleQuickRefresh?.(); liveData.refreshNow?.(); }}
+            onRefresh={onQuickRefresh}
             seedSelectedId={inboxSeedId}
             isMobile={isMobile}
           />
@@ -513,6 +528,7 @@ export function DashboardBody({
     [],
   );
   const ensureCalendarRange = calendarRange.ensureRange;
+  const calendarRevision = calendarRange.revision;
 
   useEffect(() => {
     const endDate = new Date(`${today}T12:00:00Z`);
@@ -533,7 +549,7 @@ export function DashboardBody({
         }
       });
     return () => { cancelled = true; };
-  }, [ensureCalendarRange, today, seededEvents]);
+  }, [ensureCalendarRange, today, seededEvents, calendarRevision]);
   const ctm = useMemo(() => briefing?.ctm?.upcoming || [], [briefing?.ctm?.upcoming]);
   const todoist = useMemo(() => briefing?.todoist?.upcoming || [], [briefing?.todoist?.upcoming]);
   const deadlines = useMemo(() => [...ctm, ...todoist], [ctm, todoist]);

@@ -15,7 +15,10 @@ async function apiFetch(path, options = {}) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message || `API error: ${res.status}`);
+    const error = new Error(body?.message || `API error: ${res.status}`);
+    error.code = body?.code || null;
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }
@@ -110,6 +113,13 @@ export const getCalendarDeadlines = () => apiFetch("/api/calendar/deadlines");
 // Calendar range fetch — used by useCalendarRange hook
 export const getCalendarRange = (start, end) =>
   apiFetch(`/api/calendar/range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+export const getCalendarSources = () => apiFetch("/api/calendar/calendars");
+export const createCalendarEvent = (data) =>
+  apiFetch("/api/calendar/events", { method: "POST", body: JSON.stringify(data) });
+export const updateCalendarEvent = (eventId, data) =>
+  apiFetch(`/api/calendar/events/${encodeURIComponent(eventId)}`, { method: "PATCH", body: JSON.stringify(data) });
+export const deleteCalendarEvent = (eventId, data) =>
+  apiFetch(`/api/calendar/events/${encodeURIComponent(eventId)}`, { method: "DELETE", body: JSON.stringify(data) });
 
 // Todoist
 export const getTodoistProjects = () => apiFetch("/api/briefing/todoist/projects");

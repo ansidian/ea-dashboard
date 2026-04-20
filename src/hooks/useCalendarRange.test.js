@@ -85,6 +85,23 @@ describe("useCalendarRange", () => {
     expect(getCalendarRange).toHaveBeenCalledTimes(2);
   });
 
+  it("refreshRange() refetches cached months and increments revision", async () => {
+    getCalendarRange.mockResolvedValue({ events: [] });
+    const { result } = renderHook(() => useCalendarRange({ disabled: false }));
+
+    await act(async () => {
+      await result.current.ensureRange("2026-04-18", "2026-04-25");
+    });
+    expect(result.current.revision).toBe(0);
+
+    await act(async () => {
+      await result.current.refreshRange("2026-04-18", "2026-04-25");
+    });
+
+    expect(getCalendarRange).toHaveBeenCalledTimes(2);
+    expect(result.current.revision).toBe(1);
+  });
+
   it("reports per-month cache and loading state", async () => {
     let resolve;
     getCalendarRange.mockReturnValue(new Promise((r) => { resolve = r; }));

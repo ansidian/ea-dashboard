@@ -45,6 +45,7 @@ function renderDashboardBody({ briefing, ensureRange, onOpenDeadlinesCalendar = 
           isMonthLoading: vi.fn(),
           loading: false,
           error: null,
+          revision: 0,
         }}
         customize={{
           dashboardLayout: "focus",
@@ -110,5 +111,81 @@ describe("Dashboard event loading", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /deadline soon/i }));
     expect(onOpenDeadlinesCalendar).toHaveBeenCalledWith("2026-04-20");
+  });
+
+  it("refetches the live event window when calendar revision changes", async () => {
+    const now = new Date("2026-04-19T16:00:00.000Z").getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const ensureRange = vi.fn().mockResolvedValue([]);
+    const briefing = makeBriefing([]);
+    const { rerender } = render(
+      <DashboardProvider briefing={briefing} setBriefing={() => {}} setCalendarDeadlines={() => {}}>
+        <DashboardBody
+          briefing={briefing}
+          liveData={{ liveBills: [], liveWeather: briefing.weather, liveEmails: [] }}
+          calendarRange={{
+            ensureRange,
+            getEvents: vi.fn(),
+            hasMonth: vi.fn(),
+            isMonthLoading: vi.fn(),
+            loading: false,
+            error: null,
+            revision: 0,
+          }}
+          customize={{
+            dashboardLayout: "focus",
+            density: "comfortable",
+            showInsights: true,
+            showInboxPeek: false,
+          }}
+          accent="#cba6da"
+          isMobile={false}
+          onOpenEmail={() => {}}
+          onOpenDeadline={() => {}}
+          onOpenBillsCalendar={() => {}}
+          onOpenEventsCalendar={() => {}}
+          onOpenDeadlinesCalendar={() => {}}
+          onJumpSection={() => {}}
+        />
+      </DashboardProvider>,
+    );
+
+    expect(ensureRange).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <DashboardProvider briefing={briefing} setBriefing={() => {}} setCalendarDeadlines={() => {}}>
+        <DashboardBody
+          briefing={briefing}
+          liveData={{ liveBills: [], liveWeather: briefing.weather, liveEmails: [] }}
+          calendarRange={{
+            ensureRange,
+            getEvents: vi.fn(),
+            hasMonth: vi.fn(),
+            isMonthLoading: vi.fn(),
+            loading: false,
+            error: null,
+            revision: 1,
+          }}
+          customize={{
+            dashboardLayout: "focus",
+            density: "comfortable",
+            showInsights: true,
+            showInboxPeek: false,
+          }}
+          accent="#cba6da"
+          isMobile={false}
+          onOpenEmail={() => {}}
+          onOpenDeadline={() => {}}
+          onOpenBillsCalendar={() => {}}
+          onOpenEventsCalendar={() => {}}
+          onOpenDeadlinesCalendar={() => {}}
+          onJumpSection={() => {}}
+        />
+      </DashboardProvider>,
+    );
+
+    expect(ensureRange).toHaveBeenCalledTimes(2);
   });
 });

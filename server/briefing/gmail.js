@@ -10,7 +10,8 @@ const GOOGLE_REDIRECT_URI = process.env.NODE_ENV === "production"
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
 
 // --- OAuth flow ---
@@ -51,6 +52,7 @@ export async function handleCallback(code, accountId, userId) {
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
     expires_at: Date.now() + tokens.expires_in * 1000,
+    scopes: tokens.scope ? tokens.scope.split(" ").filter(Boolean) : SCOPES,
   };
 
   // Fetch the user's email address for the label
@@ -116,6 +118,7 @@ async function getValidToken(account) {
     credentials.expires_at = Date.now() + data.expires_in * 1000;
     // refresh_token is not always returned on refresh
     if (data.refresh_token) credentials.refresh_token = data.refresh_token;
+    if (data.scope) credentials.scopes = data.scope.split(" ").filter(Boolean);
 
     await db.execute({
       sql: `UPDATE ea_accounts SET credentials_encrypted = ?, updated_at = datetime('now') WHERE id = ?`,

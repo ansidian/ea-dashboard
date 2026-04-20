@@ -1,6 +1,7 @@
 import { ExternalLink, Calendar as CalendarIcon } from "lucide-react";
 import TimelineDetailRail from "../TimelineDetailRail.jsx";
 import { formatEventDuration } from "../../../lib/redesign-helpers";
+import EventsHeaderExtras from "./EventsHeaderExtras.jsx";
 
 const EVENT_ROW_HEIGHT = 12;
 const STACK_GAP = 2;
@@ -166,17 +167,29 @@ function eventMeta(ev) {
   return formatEventDuration(ev.startMs, ev.endMs) || ev.duration || "";
 }
 
-function toRailItem(ev, index) {
+function isEditableEvent(ev) {
+  return !!(ev?.writable && !ev?.isRecurring);
+}
+
+function toRailItem(ev, index, onSelectEvent) {
+  const editable = isEditableEvent(ev);
+  const meta = [
+    eventMeta(ev),
+    ev.isRecurring ? "Recurring" : null,
+    ev.writable === false ? "Read-only" : null,
+  ].filter(Boolean).join(" · ");
+
   return {
     id: `${ev.id || ev.htmlLink || ev.title || "event"}-${index}`,
     timeLabel: ev.allDay ? "All day" : pacificTime(ev.startMs),
     title: ev.title || "(No title)",
     subtitle: eventSubtitle(ev),
-    meta: eventMeta(ev),
+    meta,
     dotColor: ev.color || ev.sourceColor || "#4285f4",
-    trailing: ev.htmlLink ? (
+    onClick: editable ? () => onSelectEvent?.(ev) : undefined,
+    trailing: (ev.openUrl || ev.htmlLink) ? (
       <a
-        href={ev.htmlLink}
+        href={ev.openUrl || ev.htmlLink}
         target="_blank"
         rel="noreferrer"
         aria-label="Open in Google Calendar"
@@ -186,6 +199,20 @@ function toRailItem(ev, index) {
           padding: 4,
           display: "inline-flex",
           alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 6,
+          transform: "translateY(0)",
+          transition: "transform 140ms, color 140ms, background 140ms",
+        }}
+        onMouseEnter={(event) => {
+          event.currentTarget.style.color = "#cba6da";
+          event.currentTarget.style.background = "rgba(203,166,218,0.12)";
+          event.currentTarget.style.transform = "translateY(-1px)";
+        }}
+        onMouseLeave={(event) => {
+          event.currentTarget.style.color = "rgba(205,214,244,0.4)";
+          event.currentTarget.style.background = "transparent";
+          event.currentTarget.style.transform = "translateY(0)";
         }}
       >
         <ExternalLink size={12} />
@@ -194,7 +221,7 @@ function toRailItem(ev, index) {
   };
 }
 
-function renderDetail({ selectedDay, viewYear, viewMonth, items }) {
+function renderDetail({ selectedDay, viewYear, viewMonth, items, onSelectEvent }) {
   const ordered = [...items].sort((a, b) => {
     if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
     return (a.startMs || 0) - (b.startMs || 0);
@@ -210,12 +237,12 @@ function renderDetail({ selectedDay, viewYear, viewMonth, items }) {
         {
           id: "all-day",
           label: "All day",
-          items: allDayItems.map(toRailItem),
+          items: allDayItems.map((item, index) => toRailItem(item, index, onSelectEvent)),
         },
         {
           id: "timed",
           label: "By time",
-          items: timedItems.map(toRailItem),
+          items: timedItems.map((item, index) => toRailItem(item, index, onSelectEvent)),
         },
       ]}
     />
@@ -300,6 +327,7 @@ const eventsView = {
   renderCellContents,
   renderDetail,
   renderFooter,
+  HeaderExtras: EventsHeaderExtras,
   icon: CalendarIcon,
   label: "Events",
 };

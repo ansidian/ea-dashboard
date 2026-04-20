@@ -31,6 +31,7 @@ export default function useCalendarRange({ disabled = false } = {}) {
   const inFlightRef = useRef(new Map()); // monthKey -> Promise<void>
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [revision, setRevision] = useState(0);
   const [, forceUpdate] = useState(0);
 
   const hasMonth = useCallback((year, month) => {
@@ -93,19 +94,34 @@ export default function useCalendarRange({ disabled = false } = {}) {
     return all;
   }, [disabled, fetchMonth]);
 
+  const refreshRange = useCallback(async (start, end) => {
+    if (disabled) return [];
+    const keys = monthsInRange(start, end);
+    for (const key of keys) {
+      cacheRef.current.delete(key);
+      inFlightRef.current.delete(key);
+    }
+    const events = await ensureRange(start, end);
+    setRevision((value) => value + 1);
+    return events;
+  }, [disabled, ensureRange]);
+
   const invalidate = useCallback(() => {
     cacheRef.current.clear();
     inFlightRef.current.clear();
+    setRevision((value) => value + 1);
     forceUpdate((n) => n + 1);
   }, []);
 
   return {
     getEvents,
     ensureRange,
+    refreshRange,
     invalidate,
     hasMonth,
     isMonthLoading,
     loading,
     error,
+    revision,
   };
 }

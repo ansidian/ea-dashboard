@@ -1,9 +1,33 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import CalendarModal from "./CalendarModal.jsx";
+
+const mockGetCalendarSources = vi.fn();
+
+vi.mock("@/api", () => ({
+  getCalendarSources: (...args) => mockGetCalendarSources(...args),
+  createCalendarEvent: vi.fn(),
+  updateCalendarEvent: vi.fn(),
+  deleteCalendarEvent: vi.fn(),
+  getGmailAuthUrl: vi.fn(),
+}));
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  mockGetCalendarSources.mockResolvedValue({
+    accounts: [
+      {
+        accountId: "gmail-main",
+        accountLabel: "Google",
+        accountEmail: "me@example.com",
+        calendars: [{ id: "primary", summary: "Personal", writable: true, primary: true }],
+      },
+    ],
+  });
 });
 
 function renderCalendarModalAtWidth(viewportWidth) {
@@ -135,5 +159,108 @@ describe("CalendarModal responsive layout", () => {
 
     expect(screen.getByText("Monday, April 20")).toBeTruthy();
     expect(screen.getAllByText("Project due").length).toBeGreaterThan(0);
+  });
+
+  it("allows selecting empty days and shows a date-specific empty rail", async () => {
+    window.innerWidth = 1900;
+
+    render(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="events"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        eventsData={{ getEvents: () => [] }}
+        billsData={{}}
+        deadlinesData={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("20"));
+
+    expect(await screen.findByText("Monday, April 20")).toBeTruthy();
+    expect(screen.getByText(/no events on this day yet/i)).toBeTruthy();
+  });
+
+  it("blocks modal hotkeys while typing in the editor", async () => {
+    window.innerWidth = 1900;
+    const onClose = vi.fn();
+
+    render(
+      <CalendarModal
+        open
+        onClose={onClose}
+        view="events"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        eventsData={{
+          editable: true,
+          getEvents: () => [],
+        }}
+        billsData={{}}
+        deadlinesData={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /new event/i }));
+    const title = await screen.findByTestId("calendar-event-title");
+    title.focus();
+
+    fireEvent.keyDown(title, { key: "ArrowRight" });
+    fireEvent.keyDown(title, { key: "r" });
+    fireEvent.keyDown(title, { key: "t" });
+
+    expect(screen.getByTestId("calendar-event-editor-rail")).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("refetches the visible events month when the open modal gets a refreshed eventsData object", async () => {
+    window.innerWidth = 1900;
+    const ensureRange = vi.fn().mockResolvedValue([]);
+
+    const { rerender } = render(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="events"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        eventsData={{
+          editable: true,
+          ensureRange,
+          getEvents: () => [],
+          revision: 0,
+        }}
+        billsData={{}}
+        deadlinesData={{}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(ensureRange).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="events"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        eventsData={{
+          editable: true,
+          ensureRange,
+          getEvents: () => [],
+          revision: 1,
+        }}
+        billsData={{}}
+        deadlinesData={{}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(ensureRange).toHaveBeenCalledTimes(2);
+    });
   });
 });
