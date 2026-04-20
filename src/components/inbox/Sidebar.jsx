@@ -43,7 +43,12 @@ export function AccountRow({ acc, all, accent, accountId, setAccountId, totalUnr
         <>
           <span
             style={{
-              flex: 1, fontSize: 12, fontWeight: 500,
+              flex: "1 1 auto",
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              fontSize: 12, fontWeight: 500,
               color: isActive ? "#fff" : "rgba(205,214,244,0.8)",
             }}
           >
@@ -52,6 +57,7 @@ export function AccountRow({ acc, all, accent, accountId, setAccountId, totalUnr
           {count > 0 && (
             <span
               style={{
+                flexShrink: 0,
                 fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999,
                 background: `${color}18`, color,
                 fontVariantNumeric: "tabular-nums",
