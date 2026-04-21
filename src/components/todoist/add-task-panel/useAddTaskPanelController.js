@@ -6,6 +6,7 @@ import {
   getTodoistProjects,
   updateTodoistTask,
 } from "../../../api";
+import useIsMobile from "../../../hooks/useIsMobile";
 import { formatResolvedDate, parseTokens } from "./parsing";
 import { buildManualDue, getInitialDueEpoch } from "./due";
 
@@ -70,6 +71,8 @@ export default function useAddTaskPanelController({
   const [saveHover, setSaveHover] = useState(false);
   const [deleteHover, setDeleteHover] = useState(false);
   const [pos, setPos] = useState(null);
+  const isMobile = useIsMobile();
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [autocompleteType, setAutocompleteType] = useState(null);
   const [cursorPos, setCursorPos] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -252,6 +255,10 @@ export default function useAddTaskPanelController({
   }, [input]);
 
   const updatePos = useCallback(() => {
+    if (isMobile) {
+      setPos({ mobile: true });
+      return;
+    }
     if (!anchorRef?.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
     const panelWidth = 360;
@@ -273,7 +280,7 @@ export default function useAddTaskPanelController({
     }
 
     setPos({ top, left, width: panelWidth });
-  }, [anchorRef]);
+  }, [anchorRef, isMobile]);
 
   useEffect(() => {
     updatePos();
@@ -284,6 +291,26 @@ export default function useAddTaskPanelController({
       window.removeEventListener("scroll", updatePos, true);
     };
   }, [updatePos]);
+
+  // Track virtual-keyboard height on mobile so the bottom-sheet sits above it.
+  useEffect(() => {
+    if (!isMobile || typeof window === "undefined" || !window.visualViewport) {
+      setKeyboardOffset(0);
+      return undefined;
+    }
+    const vv = window.visualViewport;
+    const onResize = () => {
+      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardOffset(offset);
+    };
+    vv.addEventListener("resize", onResize);
+    vv.addEventListener("scroll", onResize);
+    onResize();
+    return () => {
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onResize);
+    };
+  }, [isMobile]);
 
   useEffect(() => {
     const element = panelRef.current;
@@ -344,6 +371,7 @@ export default function useAddTaskPanelController({
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
+    inputRef.current?.blur();
     setSubmitting(true);
     setError(null);
     try {
@@ -416,6 +444,8 @@ export default function useAddTaskPanelController({
     deleteHover,
     setDeleteHover,
     pos,
+    isMobile,
+    keyboardOffset,
     autocompleteType,
     cursorPos,
     panelRef,

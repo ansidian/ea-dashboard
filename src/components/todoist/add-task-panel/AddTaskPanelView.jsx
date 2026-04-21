@@ -2,6 +2,12 @@ import { createPortal } from "react-dom";
 import { CalendarClock, ChevronDown, CornerDownLeft, Trash2, X } from "lucide-react";
 import { Dropdown, LabelPicker, PriorityIndicator, RemoveLabelButton, TokenAutocomplete } from "./controls";
 import TodoistDuePicker from "./TodoistDuePicker";
+import {
+  buildContainerStyle,
+  buildDropdownRowStyle,
+  buildTextareaStyle,
+  DRAG_HANDLE_STYLE,
+} from "./styles";
 
 export default function AddTaskPanelView({
   controller,
@@ -27,6 +33,8 @@ export default function AddTaskPanelView({
     deleteHover,
     setDeleteHover,
     pos,
+    isMobile,
+    keyboardOffset,
     autocompleteType,
     cursorPos,
     panelRef,
@@ -59,28 +67,9 @@ export default function AddTaskPanelView({
   return createPortal(
     <div
       ref={panelRef}
-      style={{
-        position: "fixed",
-        top: pos.top,
-        left: pos.left,
-        width: pos.width,
-        maxHeight: "calc(100vh - 24px)",
-        overflowY: "auto",
-        background: "radial-gradient(ellipse at top left, #1a1a2a, #0d0d15 70%)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 12,
-        padding: 0,
-        zIndex: 9999,
-        boxShadow: "0 30px 80px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.04)",
-        isolation: "isolate",
-        overscrollBehavior: "contain",
-        fontFamily: "inherit",
-        opacity: active ? 1 : 0,
-        transform: active ? "translateY(0)" : "translateY(-6px)",
-        transition: "opacity 180ms ease, transform 180ms cubic-bezier(0.16, 1, 0.3, 1)",
-        transformOrigin: "top left",
-      }}
+      style={buildContainerStyle({ isMobile, pos, active, keyboardOffset })}
     >
+      {isMobile && <div style={DRAG_HANDLE_STYLE} />}
       <div
         style={{
           padding: "12px 16px 10px",
@@ -151,6 +140,8 @@ export default function AddTaskPanelView({
           <input
             ref={inputRef}
             type="text"
+            inputMode="text"
+            enterKeyHint="done"
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
@@ -221,24 +212,11 @@ export default function AddTaskPanelView({
             onChange={(event) => setDescription(event.target.value)}
             placeholder="Optional"
             rows={2}
-            style={{
-              width: "100%",
-              background: "rgba(205,214,244,0.04)",
-              border: "1px solid rgba(205,214,244,0.08)",
-              borderRadius: 8,
-              padding: "10px 12px",
-              color: "#cdd6f4",
-              fontSize: 12,
-              outline: "none",
-              resize: "vertical",
-              minHeight: 40,
-              boxSizing: "border-box",
-              fontFamily: "inherit",
-            }}
+            style={buildTextareaStyle(isMobile)}
           />
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <div style={buildDropdownRowStyle(isMobile)}>
           <Dropdown
             label="Project"
             value={resolvedProject}
