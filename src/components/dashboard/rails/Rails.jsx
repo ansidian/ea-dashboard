@@ -5,9 +5,11 @@ import {
 } from "lucide-react";
 import { daysUntil, formatAmount } from "../../../lib/bill-utils";
 import { daysLabel, urgencyForDays, deriveLane } from "../../../lib/redesign-helpers";
+import { formatFullDate } from "../../../lib/dashboard-helpers";
 import { resolveInsight } from "../../../lib/insight-resolver";
 import { Icon } from "@/lib/icons.jsx";
 import AddTaskPanel from "../../todoist/AddTaskPanel";
+import Tooltip from "../../shared/Tooltip";
 import { useDashboard } from "../../../context/DashboardContext";
 
 function SectionHeader({ title, subtitle, right, isMobile = false }) {
@@ -374,24 +376,50 @@ export function DeadlinesRail({ accent, deadlines = [], onJump, isMobile = false
                   key={d.id}
                   role="button"
                   tabIndex={0}
-                  onClick={(e) => onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget); }}
+                  onClick={(e) =>
+                    onJump?.(
+                      { kind: "deadline", id: d.id, data: d },
+                      e.currentTarget,
+                    )
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      onJump?.(
+                        { kind: "deadline", id: d.id, data: d },
+                        e.currentTarget,
+                      );
+                  }}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: isMobile ? "16px minmax(0, 1fr)" : showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
-                    gap: 10, alignItems: isMobile ? "start" : "center",
-                    padding: isMobile ? "10px 2px" : "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
-                    cursor: "pointer", transition: "background 150ms",
+                    gridTemplateColumns: isMobile
+                      ? "16px minmax(0, 1fr)"
+                      : showPriority
+                        ? "16px 1fr auto auto"
+                        : "16px 1fr auto",
+                    gap: 10,
+                    alignItems: isMobile ? "start" : "center",
+                    padding: isMobile ? "10px 2px" : "9px 2px",
+                    borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    cursor: "pointer",
+                    transition: "background 150ms",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
                 >
                   <DeadlineStatusIcon status={d.status} />
                   <div style={{ minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
+                        fontSize: 12,
+                        color: "#cdd6f4",
+                        fontWeight: 500,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: isMobile ? "normal" : "nowrap",
                         marginBottom: 2,
                       }}
                     >
@@ -399,21 +427,49 @@ export function DeadlinesRail({ accent, deadlines = [], onJump, isMobile = false
                     </div>
                     <div
                       style={{
-                        fontSize: 10.5, color: "rgba(205,214,244,0.45)",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
+                        fontSize: 10.5,
+                        color: "rgba(205,214,244,0.45)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: isMobile ? "normal" : "nowrap",
                       }}
                     >
                       {d.class_name || d.source}
                     </div>
                     {isMobile && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          marginTop: 6,
+                        }}
+                      >
                         {showPriority && <PriorityFlag level={d.priority} />}
-                        <UrgencyPill days={days} accent={accent} verbose />
+                        <Tooltip
+                          text={formatFullDate(d.due_date)}
+                          sideOffset={12}
+                          side="right"
+                        >
+                          <UrgencyPill days={days} accent={accent} verbose />
+                        </Tooltip>
                       </div>
                     )}
                   </div>
-                  {!isMobile && showPriority && <PriorityFlag level={d.priority} />}
-                  {!isMobile && <UrgencyPill days={days} accent={accent} verbose />}
+                  {!isMobile && showPriority && (
+                    <PriorityFlag level={d.priority} />
+                  )}
+                  {!isMobile && (
+                    <Tooltip
+                      text={formatFullDate(d.due_date)}
+                      side="right"
+                      sideOffset={12}
+                      collisionAvoidance={{ side: "shift" }}
+                    >
+                      <UrgencyPill days={days} accent={accent} verbose />
+                    </Tooltip>
+                  )}
                 </div>
               );
             })}
@@ -430,25 +486,51 @@ export function DeadlinesRail({ accent, deadlines = [], onJump, isMobile = false
                   key={d.id}
                   role="button"
                   tabIndex={0}
-                  onClick={(e) => onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "deadline", id: d.id, data: d }, e.currentTarget); }}
+                  onClick={(e) =>
+                    onJump?.(
+                      { kind: "deadline", id: d.id, data: d },
+                      e.currentTarget,
+                    )
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      onJump?.(
+                        { kind: "deadline", id: d.id, data: d },
+                        e.currentTarget,
+                      );
+                  }}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: isMobile ? "16px minmax(0, 1fr)" : showPriority ? "16px 1fr auto auto" : "16px 1fr auto",
-                    gap: 10, alignItems: isMobile ? "start" : "center",
-                    padding: isMobile ? "10px 2px" : "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
-                    cursor: "pointer", transition: "background 150ms",
+                    gridTemplateColumns: isMobile
+                      ? "16px minmax(0, 1fr)"
+                      : showPriority
+                        ? "16px 1fr auto auto"
+                        : "16px 1fr auto",
+                    gap: 10,
+                    alignItems: isMobile ? "start" : "center",
+                    padding: isMobile ? "10px 2px" : "9px 2px",
+                    borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    cursor: "pointer",
+                    transition: "background 150ms",
                     opacity: 0.55,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
                 >
                   <DeadlineStatusIcon status={d.status} />
                   <div style={{ minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
+                        fontSize: 12,
+                        color: "#cdd6f4",
+                        fontWeight: 500,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: isMobile ? "normal" : "nowrap",
                         marginBottom: 2,
                         textDecoration: "line-through",
                         textDecorationColor: "rgba(205,214,244,0.35)",
@@ -458,21 +540,48 @@ export function DeadlinesRail({ accent, deadlines = [], onJump, isMobile = false
                     </div>
                     <div
                       style={{
-                        fontSize: 10.5, color: "rgba(205,214,244,0.45)",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isMobile ? "normal" : "nowrap",
+                        fontSize: 10.5,
+                        color: "rgba(205,214,244,0.45)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: isMobile ? "normal" : "nowrap",
                       }}
                     >
                       {d.class_name || d.source}
                     </div>
                     {isMobile && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          marginTop: 6,
+                        }}
+                      >
                         {showPriority && <PriorityFlag level={d.priority} />}
-                        <UrgencyPill days={days} accent={accent} verbose />
+                        <Tooltip
+                          text={formatFullDate(d.due_date)}
+                          sideOffset={12}
+                        >
+                          <UrgencyPill days={days} accent={accent} verbose />
+                        </Tooltip>
                       </div>
                     )}
                   </div>
-                  {!isMobile && showPriority && <PriorityFlag level={d.priority} />}
-                  {!isMobile && <UrgencyPill days={days} accent={accent} verbose />}
+                  {!isMobile && showPriority && (
+                    <PriorityFlag level={d.priority} />
+                  )}
+                  {!isMobile && (
+                    <Tooltip
+                      text={formatFullDate(d.due_date)}
+                      side="right"
+                      sideOffset={12}
+                      collisionAvoidance={{ side: "shift" }}
+                    >
+                      <UrgencyPill days={days} accent={accent} verbose />
+                    </Tooltip>
+                  )}
                 </div>
               );
             })}
@@ -547,62 +656,133 @@ export function BillsRail({ accent, bills = [], onJump, isMobile = false }) {
               key={b.id}
               role="button"
               tabIndex={0}
-              onClick={(e) => onJump?.({ kind: "bill", id: b.id, data: b }, e.currentTarget)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onJump?.({ kind: "bill", id: b.id, data: b }, e.currentTarget); }}
+              onClick={(e) =>
+                onJump?.({ kind: "bill", id: b.id, data: b }, e.currentTarget)
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ")
+                  onJump?.(
+                    { kind: "bill", id: b.id, data: b },
+                    e.currentTarget,
+                  );
+              }}
               style={{
-                display: "grid", gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "1fr auto auto", gap: 10, alignItems: isMobile ? "start" : "center",
-                padding: isMobile ? "10px 2px" : "9px 2px", borderBottom: "1px solid rgba(255,255,255,0.04)",
-                cursor: "pointer", transition: "background 150ms",
+                display: "grid",
+                gridTemplateColumns: isMobile
+                  ? "minmax(0, 1fr)"
+                  : "1fr auto auto",
+                gap: 10,
+                alignItems: isMobile ? "start" : "center",
+                padding: isMobile ? "10px 2px" : "9px 2px",
+                borderBottom: "1px solid rgba(255,255,255,0.04)",
+                cursor: "pointer",
+                transition: "background 150ms",
                 opacity: paid ? 0.72 : 1,
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
             >
               <div style={{ minWidth: 0 }}>
                 <div
-                style={{
-                  fontSize: 12, color: "#cdd6f4", fontWeight: 500,
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  style={{
+                    fontSize: 12,
+                    color: "#cdd6f4",
+                    fontWeight: 500,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                     textDecoration: paid ? "line-through" : "none",
                     textDecorationColor: "rgba(205,214,244,0.35)",
                   }}
                 >
                   {b.name}
                 </div>
-                <div style={{ fontSize: 10.5, color: "rgba(205,214,244,0.45)", marginTop: 2 }}>
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    color: "rgba(205,214,244,0.45)",
+                    marginTop: 2,
+                  }}
+                >
                   {b.payee || ""}
                 </div>
                 {isMobile && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      marginTop: 6,
+                    }}
+                  >
                     <div
                       style={{
-                        fontSize: 11.5, fontWeight: 500,
+                        fontSize: 11.5,
+                        fontWeight: 500,
                         color: paid ? "#a6e3a1" : "#cdd6f4",
                         fontVariantNumeric: "tabular-nums",
                         textDecoration: paid ? "line-through" : "none",
-                        textDecorationColor: paid ? "rgba(166,227,161,0.5)" : "transparent",
+                        textDecorationColor: paid
+                          ? "rgba(166,227,161,0.5)"
+                          : "transparent",
                       }}
                     >
                       {formatAmount(b.amount)}
                     </div>
-                    {paid ? <PaidChip /> : <UrgencyPill days={days} accent={accent} compact verbose />}
+                    {paid ? (
+                      <PaidChip />
+                    ) : (
+                      <Tooltip
+                        text={formatFullDate(b.next_date)}
+                        side="right"
+                        sideOffset={12}
+                        collisionAvoidance={{ side: "shift" }}
+                      >
+                        <UrgencyPill
+                          days={days}
+                          accent={accent}
+                          compact
+                          verbose
+                        />
+                      </Tooltip>
+                    )}
                   </div>
                 )}
               </div>
               {!isMobile && (
                 <div
                   style={{
-                    fontSize: 11.5, fontWeight: 500,
+                    fontSize: 11.5,
+                    fontWeight: 500,
                     color: paid ? "#a6e3a1" : "#cdd6f4",
                     fontVariantNumeric: "tabular-nums",
                     textDecoration: paid ? "line-through" : "none",
-                    textDecorationColor: paid ? "rgba(166,227,161,0.5)" : "transparent",
+                    textDecorationColor: paid
+                      ? "rgba(166,227,161,0.5)"
+                      : "transparent",
                   }}
                 >
                   {formatAmount(b.amount)}
                 </div>
               )}
-              {!isMobile && (paid ? <PaidChip /> : <UrgencyPill days={days} accent={accent} compact verbose />)}
+              {!isMobile &&
+                (paid ? (
+                  <PaidChip />
+                ) : (
+                  <Tooltip
+                    text={formatFullDate(b.next_date)}
+                    side="right"
+                    sideOffset={12}
+                    collisionAvoidance={{ side: "shift" }}
+                  >
+                    <UrgencyPill days={days} accent={accent} compact verbose />
+                  </Tooltip>
+                ))}
             </div>
           );
         })}
