@@ -465,21 +465,21 @@ export default function CalendarModal({
         setSelectedDay(focus.getDate());
       } else {
         setViewDate({ month: currentMonth, year: currentYear });
-        setSelectedDay(null);
+        setSelectedDay(now.getDate());
       }
     }
   }
 
   // Reset selectedDay when view changes (preserve month/year)
   const [prevView, setPrevView] = useState(view);
-    if (prevView !== view) {
-      setPrevView(view);
-      closeEventEditor();
-      const pendingFocus = openingWithFocus || parseFocusDate(pendingFocusDate);
-      if (pendingFocus) {
-        setViewDate({ month: pendingFocus.getMonth(), year: pendingFocus.getFullYear() });
-        setSelectedDay(pendingFocus.getDate());
-        setPendingFocusDate(null);
+  if (prevView !== view) {
+    setPrevView(view);
+    closeEventEditor();
+    const pendingFocus = openingWithFocus || parseFocusDate(pendingFocusDate);
+    if (pendingFocus) {
+      setViewDate({ month: pendingFocus.getMonth(), year: pendingFocus.getFullYear() });
+      setSelectedDay(pendingFocus.getDate());
+      setPendingFocusDate(null);
     } else {
       setSelectedDay(null);
     }
