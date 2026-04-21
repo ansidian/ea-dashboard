@@ -1,4 +1,4 @@
-import { dayBucket, dueDateToMs } from "./redesign-helpers";
+import { dayBucket, dueDateToMs, formatDuration } from "./redesign-helpers";
 
 const BUFFER_MS = 5 * 60 * 1000;
 const MIN_PROTECTED_MS = 25 * 60 * 1000;
@@ -28,13 +28,6 @@ function formatClock(ms) {
 
 function formatRange(startMs, endMs) {
   return `${formatClock(startMs)}-${formatClock(endMs)}`;
-}
-
-function formatDuration(durationMin) {
-  if (durationMin < 60) return `${durationMin} min`;
-  const hours = Math.floor(durationMin / 60);
-  const mins = durationMin % 60;
-  return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
 }
 
 function summarizePressure(deadlines, now) {

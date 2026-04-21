@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sparkles, Sun, Cloud, CloudSun, CloudRain, Snowflake, CloudFog, Moon, Calendar, Video, Plane, AlertCircle, CreditCard, Mail } from "lucide-react";
-import { greetingFor, pacificClock, pacificDate, urgencyForDays, daysLabel } from "../../lib/redesign-helpers";
+import { greetingFor, pacificClock, pacificDate, urgencyForDays, daysLabel, formatDuration } from "../../lib/redesign-helpers";
 import { daysUntil } from "../../lib/bill-utils";
 import { resolveInsight } from "../../lib/insight-resolver";
 import { deriveFocusWindows } from "../../lib/focus-windows";
@@ -21,7 +21,7 @@ function callouts({ events, deadlines, bills, now }) {
       icon: nextEvent.hangoutLink || /zoom/i.test(nextEvent.location || "") ? Video
            : /flight|airport/i.test(nextEvent.title || "") ? Plane
            : Calendar,
-      lead: mins < 60 ? `In ${mins} min` : `In ${Math.round(mins / 60 * 10) / 10}h`,
+      lead: `In ${formatDuration(mins)}`,
       title: nextEvent.title,
       sub: (nextEvent.attendees && nextEvent.attendees.length)
         ? `with ${nextEvent.attendees.slice(0, 2).join(", ")}${nextEvent.attendees.length > 2 ? ` +${nextEvent.attendees.length - 2}` : ""}`

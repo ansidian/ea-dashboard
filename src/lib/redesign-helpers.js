@@ -111,6 +111,13 @@ export function formatEventDuration(startMs, endMs) {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
+export function formatDuration(durationMin) {
+  if (durationMin < 60) return `${durationMin} min`;
+  const hours = Math.floor(durationMin / 60);
+  const mins = durationMin % 60;
+  return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
+}
+
 // Classify an event relative to now: past | live | future
 export function eventState(ev, now = Date.now()) {
   if (!ev) return "future";
