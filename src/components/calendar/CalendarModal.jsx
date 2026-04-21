@@ -470,7 +470,9 @@ export default function CalendarModal({
     }
   }
 
-  // Reset selectedDay when view changes (preserve month/year)
+  // On view change: honor pending focus drill-in; otherwise preserve the
+  // user's current month/year and day selection verbatim — switching views
+  // is not an intent to reset navigation state.
   const [prevView, setPrevView] = useState(view);
   if (prevView !== view) {
     setPrevView(view);
@@ -480,8 +482,6 @@ export default function CalendarModal({
       setViewDate({ month: pendingFocus.getMonth(), year: pendingFocus.getFullYear() });
       setSelectedDay(pendingFocus.getDate());
       setPendingFocusDate(null);
-    } else {
-      setSelectedDay(null);
     }
   }
 
