@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { NumberField } from "@/components/inbox/primitives";
 import {
@@ -18,8 +18,6 @@ export default function CalendarDateTimeView({
   allowPastDates = false,
   submitOnDateSelect = false,
 }) {
-  const confirmButtonRef = useRef(null);
-  const advanceFocusToConfirmRef = useRef(false);
   const monthWheelDeltaRef = useRef(0);
   const today = useMemo(() => laComponents(nowTick), [nowTick]);
   const showTime = mode !== "date-only";
@@ -101,41 +99,36 @@ export default function CalendarDateTimeView({
     setDraft((prev) => ({ ...prev, hour: nextHour24 }));
   };
 
+  const handleAmPmHotkey = (key, event) => {
+    const normalized = key.toLowerCase();
+    if (normalized !== "a" && normalized !== "p") return false;
+    event.preventDefault();
+    event.stopPropagation();
+    setAmPm(normalized === "p");
+    return true;
+  };
+
   const handleAmPmKeyDown = (event) => {
     const key = event.key.toLowerCase();
-    if (key === "a") {
-      event.preventDefault();
-      advanceFocusToConfirmRef.current = true;
-      setAmPm(false);
-      return;
-    }
-    if (key === "p") {
-      event.preventDefault();
-      advanceFocusToConfirmRef.current = true;
-      setAmPm(true);
-      return;
-    }
+    if (handleAmPmHotkey(key, event)) return;
     if (key === "arrowleft" || key === "arrowdown") {
       event.preventDefault();
+      event.stopPropagation();
       setAmPm(false);
       return;
     }
     if (key === "arrowright" || key === "arrowup") {
       event.preventDefault();
+      event.stopPropagation();
       setAmPm(true);
       return;
     }
     if (key === " " || key === "enter") {
       event.preventDefault();
+      event.stopPropagation();
       setAmPm(!isPm);
     }
   };
-
-  useEffect(() => {
-    if (!advanceFocusToConfirmRef.current) return;
-    advanceFocusToConfirmRef.current = false;
-    confirmButtonRef.current?.focus();
-  }, [draft.hour]);
 
   const draftEpoch = showTime
     ? epochFromLa(draft.year, draft.month, draft.day, draft.hour, draft.minute)
@@ -178,8 +171,26 @@ export default function CalendarDateTimeView({
     transition: "background 120ms, color 120ms",
   });
 
+  const submitCurrentDraft = (event) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (confirmDisabled) return;
+    onSelect(draftEpoch);
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div
+      data-suspend-calendar-hotkeys="true"
+      style={{ display: "flex", flexDirection: "column" }}
+      onKeyDownCapture={(event) => {
+        if (!showTime) return;
+        if (event.key === "Enter") {
+          submitCurrentDraft(event);
+          return;
+        }
+        handleAmPmHotkey(event.key, event);
+      }}
+    >
       <div
         role="group"
         aria-label="Calendar month view"
@@ -448,10 +459,9 @@ export default function CalendarDateTimeView({
             Back
           </button>
           <button
-            ref={confirmButtonRef}
             type="button"
             disabled={confirmDisabled}
-            onClick={() => onSelect(draftEpoch)}
+            onClick={submitCurrentDraft}
             style={{
               padding: "6px 14px",
               borderRadius: 8,

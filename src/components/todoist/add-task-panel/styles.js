@@ -44,6 +44,23 @@ export function buildContainerStyle({ isMobile, pos, active, keyboardOffset }) {
   };
 }
 
+export function buildInlineContainerStyle({ active }) {
+  return {
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    minHeight: "100%",
+    background: "transparent",
+    border: "none",
+    boxShadow: "none",
+    overflowY: "auto",
+    fontFamily: "inherit",
+    opacity: active ? 1 : 0,
+    transition: "opacity 180ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1)",
+    transform: active ? "translateY(0)" : "translateY(6px)",
+  };
+}
+
 export const DRAG_HANDLE_STYLE = {
   width: 36,
   height: 4,

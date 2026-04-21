@@ -15,8 +15,16 @@ vi.mock("../hooks/useCustomize", () => ({
 }));
 
 vi.mock("../components/calendar/CalendarModal", () => ({
-  default: function CalendarModalMock({ open }) {
-    return <div data-testid="calendar-modal">{open ? "open" : "closed"}</div>;
+  default: function CalendarModalMock({ open, focusDate = null, focusItemId = null }) {
+    return (
+      <div
+        data-testid="calendar-modal"
+        data-focus-date={focusDate || ""}
+        data-focus-item-id={focusItemId || ""}
+      >
+        {open ? "open" : "closed"}
+      </div>
+    );
   },
 }));
 
@@ -200,6 +208,39 @@ describe("RedesignShell mobile behavior", () => {
 
     fireEvent.keyDown(window, { key: "c" });
     expect(screen.getByTestId("calendar-modal").textContent).toBe("open");
+  });
+
+  it("routes desktop deadline clicks into the calendar modal with focused item state", async () => {
+    mockIsMobile = false;
+    const props = makeProps();
+    props.bd.briefing.todoist.upcoming = [
+      {
+        id: "todo-42",
+        title: "Ship report",
+        due_date: "2026-04-20",
+        due_time: "9:00 AM",
+        source: "todoist",
+        class_name: "Inbox",
+        status: "open",
+      },
+    ];
+
+    render(
+      <BrowserRouter>
+        <DashboardProvider briefing={props.bd.briefing} setBriefing={() => {}} setCalendarDeadlines={() => {}}>
+          <RedesignShell {...props} />
+        </DashboardProvider>
+      </BrowserRouter>,
+    );
+
+    fireEvent.click(screen.getAllByText("Ship report")[0]);
+
+    await waitFor(() => {
+      const modal = screen.getByTestId("calendar-modal");
+      expect(modal.textContent).toBe("open");
+      expect(modal.getAttribute("data-focus-date")).toBe("2026-04-20");
+      expect(modal.getAttribute("data-focus-item-id")).toBe("todo-42");
+    });
   });
 
   it("uses browser back to close the desktop calendar modal", async () => {

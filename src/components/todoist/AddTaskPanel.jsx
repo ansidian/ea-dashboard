@@ -3,5 +3,5 @@ import AddTaskPanelView from "./add-task-panel/AddTaskPanelView";
 
 export default function AddTaskPanel(props) {
   const controller = useAddTaskPanelController(props);
-  return <AddTaskPanelView controller={controller} />;
+  return <AddTaskPanelView controller={controller} host={props.host || "anchored"} />;
 }

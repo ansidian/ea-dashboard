@@ -30,6 +30,7 @@ function CalendarCell({
   hasItems,
   isToday,
   isSelected,
+  pastTone,
   hasOverdue,
   allComplete,
   loading,
@@ -66,6 +67,17 @@ function CalendarCell({
   } else if (hasItems) {
     dateColor = "#cdd6f4";
     dateWeight = 500;
+  }
+
+  if (!isSelected && !isToday && pastTone) {
+    cellBg = pastTone === "items" ? "rgba(255,255,255,0.01)" : "rgba(255,255,255,0.006)";
+    cellBorder = pastTone === "items"
+      ? "1px solid rgba(255,255,255,0.028)"
+      : "1px solid rgba(255,255,255,0.022)";
+    dateColor = pastTone === "items" ? "rgba(205,214,244,0.48)" : "rgba(205,214,244,0.33)";
+    if (!hasItems) {
+      dateWeight = 400;
+    }
   }
 
   if (isToday) {
@@ -115,6 +127,8 @@ function CalendarCell({
     <div
       onClick={onClick}
       aria-current={isToday ? "date" : undefined}
+      data-testid={`calendar-cell-${day}`}
+      data-past-tone={pastTone || "none"}
       style={{
         position: "relative",
         minWidth: 0, overflow: "hidden", borderRadius: 8,
@@ -177,7 +191,7 @@ function CalendarCell({
           overflow: "hidden",
         }}
       >
-        {renderCellContents?.({ items, hasOverdue, contentHeight, isToday, loading })}
+        {renderCellContents?.({ items, hasOverdue, contentHeight, isToday, loading, pastTone })}
       </div>
     </div>
   );
@@ -320,6 +334,18 @@ function parseFocusDate(focusDate) {
   return d;
 }
 
+function buildFallbackDayState(rawItems) {
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  return {
+    items,
+    activeItems: items,
+    completedItems: [],
+    activeCount: items.length,
+    completedCount: 0,
+    totalCount: items.length,
+  };
+}
+
 function CalendarEventsGridSkeleton({
   firstDay,
   daysInMonth,
@@ -386,13 +412,25 @@ export default function CalendarModal({
   billsData,
   deadlinesData,
   focusDate,
+  focusItemId,
 }) {
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
+  const initialFocus = open ? parseFocusDate(focusDate) : null;
 
-  const [viewDate, setViewDate] = useState({ month: currentMonth, year: currentYear });
-  const [selectedDay, setSelectedDay] = useState(null);
+  const [viewDate, setViewDate] = useState(() => (
+    initialFocus
+      ? { month: initialFocus.getMonth(), year: initialFocus.getFullYear() }
+      : { month: currentMonth, year: currentYear }
+  ));
+  const [selectedDay, setSelectedDay] = useState(() => (
+    initialFocus ? initialFocus.getDate() : null
+  ));
+  const [selectedItemId, setSelectedItemId] = useState(() => (
+    open && focusItemId ? String(focusItemId) : null
+  ));
+  const [deadlineEditor, setDeadlineEditor] = useState(null);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const panelRef = useRef(null);
   const scrollRef = useRef(null);
@@ -413,12 +451,12 @@ export default function CalendarModal({
     return billsData;
   }, [view, eventsData, viewYear, viewMonth, deadlinesData, billsData]);
 
-  const focusEditorDate = useCallback((ymd) => {
+  function focusEditorDate(ymd) {
     const focus = parseFocusDate(ymd);
     if (!focus) return;
     setViewDate({ month: focus.getMonth(), year: focus.getFullYear() });
     setSelectedDay(focus.getDate());
-  }, []);
+  }
 
   const eventEditor = useCalendarEventEditor({
     open,
@@ -437,6 +475,8 @@ export default function CalendarModal({
     navigateMonthRef.current = (dir) => {
       closeEventEditor();
       setSelectedDay(null);
+      setSelectedItemId(null);
+      setDeadlineEditor(null);
       setViewDate((prev) => {
         const next = prev.month + dir;
         if (next > 11) return { month: 0, year: prev.year + 1 };
@@ -447,6 +487,17 @@ export default function CalendarModal({
   });
   const navigateMonth = (dir) => navigateMonthRef.current?.(dir);
   const [pendingFocusDate, setPendingFocusDate] = useState(null);
+  const [pendingFocusItemId, setPendingFocusItemId] = useState(null);
+
+  function focusDeadlineTask(task) {
+    const focus = parseFocusDate(task?.due_date);
+    if (focus) {
+      setViewDate({ month: focus.getMonth(), year: focus.getFullYear() });
+      setSelectedDay(focus.getDate());
+    }
+    setSelectedItemId(task?.id != null ? String(task.id) : null);
+    setDeadlineEditor(null);
+  }
 
   // Reset state when modal opens. If a focusDate is supplied, jump to that
   // month and auto-select the day cell (e.g. clicking a bill drills straight
@@ -460,12 +511,16 @@ export default function CalendarModal({
     if (open) {
       const focus = parseFocusDate(focusDate);
       setPendingFocusDate(focusDate || null);
+      setPendingFocusItemId(focusItemId ? String(focusItemId) : null);
+      setDeadlineEditor(null);
       if (focus) {
         setViewDate({ month: focus.getMonth(), year: focus.getFullYear() });
         setSelectedDay(focus.getDate());
+        setSelectedItemId(focusItemId ? String(focusItemId) : null);
       } else {
         setViewDate({ month: currentMonth, year: currentYear });
         setSelectedDay(now.getDate());
+        setSelectedItemId(null);
       }
     }
   }
@@ -477,11 +532,14 @@ export default function CalendarModal({
   if (prevView !== view) {
     setPrevView(view);
     closeEventEditor();
+    setDeadlineEditor(null);
     const pendingFocus = openingWithFocus || parseFocusDate(pendingFocusDate);
     if (pendingFocus) {
       setViewDate({ month: pendingFocus.getMonth(), year: pendingFocus.getFullYear() });
       setSelectedDay(pendingFocus.getDate());
+      setSelectedItemId(pendingFocusItemId ? String(pendingFocusItemId) : null);
       setPendingFocusDate(null);
+      setPendingFocusItemId(null);
     }
   }
 
@@ -534,7 +592,7 @@ export default function CalendarModal({
     [activeView, viewData, viewYear, viewMonth],
   );
 
-  const itemsByDay = computed.itemsByDay || {};
+  const itemsByDay = useMemo(() => computed.itemsByDay || {}, [computed.itemsByDay]);
 
   const { firstDay, daysInMonth } = getMonthData(viewYear, viewMonth);
   const isCurrentMonth = viewYear === currentYear && viewMonth === currentMonth;
@@ -598,6 +656,11 @@ export default function CalendarModal({
         case "C":
           if (view === "events" && eventEditor.editable) {
             eventEditor.openCreate();
+          } else if (view === "deadlines") {
+            setDeadlineEditor({
+              mode: "create",
+              seedDate: null,
+            });
           }
           e.preventDefault();
           e.stopPropagation();
@@ -649,10 +712,28 @@ export default function CalendarModal({
 
   if (!open) return null;
 
-  const selectedItems = selectedDay != null ? itemsByDay[selectedDay] || [] : [];
+  const selectedDayState = selectedDay != null
+    ? (activeView.getDayState?.(itemsByDay[selectedDay]) ?? buildFallbackDayState(itemsByDay[selectedDay]))
+    : buildFallbackDayState([]);
+  const selectedItems = activeView.getDayState ? selectedDayState : selectedDayState.items;
+  const effectiveSelectedItemId = view === "deadlines"
+    ? (() => {
+        if (selectedDay == null || selectedDayState.totalCount === 0) return null;
+        const combinedItems = [...selectedDayState.activeItems, ...selectedDayState.completedItems];
+        const hasSelectedItem = combinedItems.some((item) => String(item.id) === String(selectedItemId));
+        if (hasSelectedItem) return String(selectedItemId);
+        const fallbackId = activeView.getDefaultSelectedItemId?.(selectedDayState);
+        return fallbackId ? String(fallbackId) : null;
+      })()
+    : selectedItemId;
   const hasSelectedDay = selectedDay != null;
-  const showDetail = hasSelectedDay && selectedItems.length > 0;
-  const showEmptySelection = hasSelectedDay && selectedItems.length === 0;
+  const showDeadlineEditor = view === "deadlines" && !!deadlineEditor;
+  const showDetail = view === "deadlines"
+    ? showDeadlineEditor || (hasSelectedDay && selectedDayState.totalCount > 0)
+    : hasSelectedDay && selectedDayState.totalCount > 0;
+  const showEmptySelection = view === "deadlines"
+    ? hasSelectedDay && selectedDayState.totalCount === 0 && !showDeadlineEditor
+    : hasSelectedDay && selectedDayState.totalCount === 0;
 
   const HeaderExtras = activeView.HeaderExtras;
 
@@ -866,6 +947,15 @@ export default function CalendarModal({
                     computed={computed}
                     suppressOutsideClick={suppressOutsideClick}
                     editor={eventEditor}
+                    selectedDay={selectedDay}
+                    viewYear={viewYear}
+                    viewMonth={viewMonth}
+                    onCreateTask={(seedDate) => {
+                      setDeadlineEditor({
+                        mode: "create",
+                        seedDate: seedDate || null,
+                      });
+                    }}
                   />
                 ) : null}
                 <button
@@ -943,27 +1033,44 @@ export default function CalendarModal({
 
                     {Array.from({ length: daysInMonth }, (_, i) => {
                       const day = i + 1;
-                      const items = itemsByDay[day] || [];
-                      const hasItems = items.length > 0;
+                      const rawItems = Array.isArray(itemsByDay[day]) ? itemsByDay[day] : [];
+                      const dayState = activeView.getDayState?.(itemsByDay[day]) ?? buildFallbackDayState(itemsByDay[day]);
+                      const cellItems = activeView.getDayState ? dayState : rawItems;
+                      const hasItems = dayState.totalCount > 0;
                       const isToday = isCurrentMonth && day === todayDate;
                       const isSelected = selectedDay === day;
-                      const hasOverdue = activeView.hasOverdue?.(items) || false;
-                      const allComplete = activeView.allComplete?.(items) || false;
+                      const hasOverdue = activeView.hasOverdue?.(dayState) || false;
+                      const allComplete = activeView.allComplete?.(dayState) || false;
+                      const isPastDay = view === "events"
+                        && new Date(viewYear, viewMonth, day) < new Date(currentYear, currentMonth, todayDate);
+                      const pastTone = isPastDay ? (hasItems ? "items" : "empty") : null;
 
                       return (
                         <CalendarCell
                           key={day}
                           day={day}
-                          items={items}
+                          items={cellItems}
                           hasItems={hasItems}
                           isToday={isToday}
                           isSelected={isSelected}
+                          pastTone={pastTone}
                           hasOverdue={hasOverdue}
                           allComplete={allComplete}
                           loading={viewData?.isLoading}
                           onClick={() => {
                             closeEventEditor();
-                            setSelectedDay(isSelected ? null : day);
+                            if (isSelected) {
+                              setSelectedDay(null);
+                              setSelectedItemId(null);
+                              setDeadlineEditor(null);
+                              return;
+                            }
+                            setSelectedDay(day);
+                            if (view === "deadlines") {
+                              setDeadlineEditor(null);
+                              const nextId = activeView.getDefaultSelectedItemId?.(dayState);
+                              setSelectedItemId(nextId ? String(nextId) : null);
+                            }
                           }}
                           renderCellContents={activeView.renderCellContents}
                         />
@@ -1005,8 +1112,10 @@ export default function CalendarModal({
                   contentKey={
                     view === "events" && eventEditor.isEditorOpen
                       ? `editor-${eventEditor.isEditing ? eventEditor.editingEvent?.id || "edit" : "new"}`
+                      : view === "deadlines" && deadlineEditor?.mode
+                        ? `deadline-editor-${deadlineEditor.mode}-${deadlineEditor.taskId || deadlineEditor.seedDate || "new"}`
                       : showDetail
-                        ? `detail-${view}-${viewYear}-${viewMonth}-${selectedDay}-${selectedItems.length}`
+                        ? `detail-${view}-${viewYear}-${viewMonth}-${selectedDay}-${effectiveSelectedItemId || "none"}-${selectedDayState.totalCount}`
                         : showEmptySelection
                           ? `empty-${view}-${viewYear}-${viewMonth}-${selectedDay}`
                           : `summary-${view}-${viewYear}-${viewMonth}`
@@ -1025,6 +1134,24 @@ export default function CalendarModal({
                       data: viewData,
                       computed,
                       onSelectEvent: eventEditor.openEdit,
+                      selectedItemId: effectiveSelectedItemId,
+                      onSelectItem: (itemId) => {
+                        setSelectedItemId(String(itemId));
+                        setDeadlineEditor(null);
+                      },
+                      editorState: deadlineEditor,
+                      onStartEdit: (task) => {
+                        setSelectedItemId(String(task.id));
+                        setDeadlineEditor({ mode: "edit", taskId: String(task.id) });
+                      },
+                      onCloseEditor: () => setDeadlineEditor(null),
+                      onTaskSaved: focusDeadlineTask,
+                      onTaskDeleted: (taskId) => {
+                        setDeadlineEditor(null);
+                        if (String(effectiveSelectedItemId) === String(taskId)) {
+                          setSelectedItemId(null);
+                        }
+                      },
                     })
                   ) : showEmptySelection ? (
                     <CalendarSelectedDayEmptyState

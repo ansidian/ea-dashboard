@@ -244,17 +244,19 @@ export function RedesignShell({
   });
   const showBills = !!liveData.actualConfigured;
   const [calendarFocus, setCalendarFocus] = useState(null);
+  const [calendarFocusItemId, setCalendarFocusItemId] = useState(null);
   const dismissCalendar = useBrowserBackDismiss({
     enabled: !isMobile && calendarOpen,
     historyKey: "eaDashboardCalendarModal",
     onDismiss: () => setCalendarOpen(false),
   });
-  const openCalendar = (viewKey, focusDate = null) => {
+  const openCalendar = (viewKey, focusDate = null, focusItemId = null) => {
     if (isMobile) return;
     const resolved = viewKey === "bills" && !showBills ? "deadlines" : viewKey || calendarView;
     setCalendarView(resolved);
     try { localStorage.setItem("calendar:lastView", resolved); } catch { /* ignore */ }
     setCalendarFocus(focusDate || null);
+    setCalendarFocusItemId(focusItemId ? String(focusItemId) : null);
     setCalendarOpen(true);
     if (resolved === "deadlines") loadCalendarDeadlines();
   };
@@ -441,6 +443,10 @@ export function RedesignShell({
             viewingPast={bd.viewingPast}
             onOpenEmail={openEmailInInbox}
             onOpenDeadline={(task, anchor) => {
+              if (!isMobile) {
+                openCalendar("deadlines", task?.due_date || null, task?.id || null);
+                return;
+              }
               setDeadlinePopover((prev) => {
                 if (prev && String(prev.task?.id) === String(task?.id)) return null;
                 return { task, anchor };
@@ -473,7 +479,7 @@ export function RedesignShell({
         )}
       </div>
 
-      {deadlinePopover && (
+      {isMobile && deadlinePopover && (
         <DeadlineDetailPopover
           task={deadlinePopover.task}
           anchor={deadlinePopover.anchor}
@@ -514,6 +520,7 @@ export function RedesignShell({
           view={calendarView}
           onViewChange={changeCalendarView}
           focusDate={calendarFocus}
+          focusItemId={calendarFocusItemId}
           eventsData={eventsData}
           billsData={{
             schedules: liveData.allSchedules,

@@ -1,4 +1,62 @@
-function SectionLabel({ children }) {
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+
+function SectionLabel({
+  children,
+  collapsible = false,
+  expanded = false,
+  onToggle,
+  itemCount = 0,
+  sectionId,
+}) {
+  if (collapsible) {
+    return (
+      <button
+        type="button"
+        data-testid={`timeline-detail-section-toggle-${sectionId}`}
+        onClick={onToggle}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          padding: 0,
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: 2.2,
+            textTransform: "uppercase",
+            color: "rgba(205,214,244,0.5)",
+          }}
+        >
+          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          {children}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: 1.2,
+            color: "rgba(205,214,244,0.34)",
+          }}
+        >
+          {itemCount}
+        </span>
+      </button>
+    );
+  }
+
   return (
     <div
       style={{
@@ -15,6 +73,7 @@ function SectionLabel({ children }) {
 }
 
 function TimelineRow({ item }) {
+  const [hovered, setHovered] = useState(false);
   const interactive = typeof item.onClick === "function";
   const sharedHandlers = interactive
     ? {
@@ -38,25 +97,25 @@ function TimelineRow({ item }) {
       style={{
         position: "relative",
         display: "grid",
-        gridTemplateColumns: "60px 18px minmax(0, 1fr) auto",
-        gap: 10,
+        gridTemplateColumns: "72px 18px minmax(0, 1fr)",
+        gap: 12,
         alignItems: "start",
-        padding: "9px 10px 9px 0",
+        padding: "4px 0",
         borderRadius: 8,
         cursor: interactive ? "pointer" : "default",
         opacity: item.complete ? 0.52 : 1,
-        transition: "background 130ms",
+        transition: "opacity 130ms",
       }}
-      onMouseEnter={(event) => {
-        if (interactive) event.currentTarget.style.background = "rgba(255,255,255,0.02)";
+      onMouseEnter={() => {
+        if (interactive) setHovered(true);
       }}
-      onMouseLeave={(event) => {
-        if (interactive) event.currentTarget.style.background = "transparent";
+      onMouseLeave={() => {
+        if (interactive) setHovered(false);
       }}
     >
       <div
         style={{
-          paddingTop: 1,
+          paddingTop: 12,
           fontSize: 11,
           fontWeight: 500,
           fontVariantNumeric: "tabular-nums",
@@ -67,14 +126,14 @@ function TimelineRow({ item }) {
         {item.timeLabel}
       </div>
 
-      <div style={{ position: "relative", minHeight: 42 }}>
+      <div style={{ position: "relative", minHeight: 68 }}>
         <div
           aria-hidden
           style={{
             position: "absolute",
             left: 8,
-            top: -10,
-            bottom: -10,
+            top: 0,
+            bottom: 0,
             width: 1,
             background: "rgba(255,255,255,0.06)",
           }}
@@ -106,47 +165,67 @@ function TimelineRow({ item }) {
         </div>
       </div>
 
-      <div style={{ minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 12.5,
-            color: "#e2e8f0",
-            fontWeight: 500,
-            lineHeight: 1.35,
-            textDecoration: item.complete ? "line-through" : "none",
-            textDecorationColor: "rgba(205,214,244,0.3)",
-          }}
-        >
-          {item.title}
+      <div
+        style={{
+          minWidth: 0,
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) auto",
+          gap: 8,
+          alignItems: "start",
+          padding: "10px 14px",
+          borderRadius: 12,
+          border: item.selected ? "1px solid rgba(203,166,218,0.32)" : "1px solid transparent",
+          background: item.selected
+            ? "rgba(203,166,218,0.08)"
+            : hovered
+              ? "rgba(255,255,255,0.025)"
+              : "transparent",
+          boxShadow: item.selected ? "0 0 0 1px rgba(203,166,218,0.06)" : "none",
+          transition: "background 130ms, border-color 130ms, box-shadow 130ms",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            className={item.titleClassName}
+            style={{
+              fontSize: 12.5,
+              color: "#e2e8f0",
+              fontWeight: 500,
+              lineHeight: 1.35,
+              textDecoration: item.complete ? "line-through" : "none",
+              textDecorationColor: "rgba(205,214,244,0.3)",
+            }}
+          >
+            {item.title}
+          </div>
+          {item.subtitle && (
+            <div
+              style={{
+                marginTop: 2,
+                fontSize: 10.5,
+                color: "rgba(205,214,244,0.55)",
+                lineHeight: 1.4,
+              }}
+            >
+              {item.subtitle}
+            </div>
+          )}
+          {item.meta && (
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 10,
+                color: "rgba(205,214,244,0.4)",
+                lineHeight: 1.4,
+              }}
+            >
+              {item.meta}
+            </div>
+          )}
         </div>
-        {item.subtitle && (
-          <div
-            style={{
-              marginTop: 2,
-              fontSize: 10.5,
-              color: "rgba(205,214,244,0.55)",
-              lineHeight: 1.4,
-            }}
-          >
-            {item.subtitle}
-          </div>
-        )}
-        {item.meta && (
-          <div
-            style={{
-              marginTop: 4,
-              fontSize: 10,
-              color: "rgba(205,214,244,0.4)",
-              lineHeight: 1.4,
-            }}
-          >
-            {item.meta}
-          </div>
-        )}
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", alignSelf: "center", gap: 6 }}>
-        {item.trailing}
+        <div style={{ display: "flex", alignItems: "center", alignSelf: "center", gap: 6 }}>
+          {item.trailing}
+        </div>
       </div>
     </div>
   );
@@ -155,9 +234,13 @@ function TimelineRow({ item }) {
 export default function TimelineDetailRail({
   title,
   summary,
+  headerContent = null,
   sections = [],
 }) {
-  const visibleSections = sections.filter((section) => section.items?.length);
+  const visibleSections = sections.filter((section) => {
+    if (section.collapsible) return (section.itemCount || section.items?.length || 0) > 0;
+    return section.items?.length;
+  });
 
   return (
     <div style={{ padding: "16px 20px", overflow: "auto", flex: 1 }}>
@@ -179,14 +262,25 @@ export default function TimelineDetailRail({
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {headerContent}
         {visibleSections.map((section) => (
           <div key={section.id} data-testid={`timeline-detail-section-${section.id}`}>
-            <SectionLabel>{section.label}</SectionLabel>
-            <div style={{ marginTop: 8, display: "flex", flexDirection: "column" }}>
-              {section.items.map((item) => (
-                <TimelineRow key={item.id} item={item} />
-              ))}
-            </div>
+            <SectionLabel
+              collapsible={section.collapsible}
+              expanded={section.expanded}
+              onToggle={section.onToggle}
+              itemCount={section.itemCount}
+              sectionId={section.id}
+            >
+              {section.label}
+            </SectionLabel>
+            {(!section.collapsible || section.expanded) && (
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column" }}>
+                {section.items.map((item) => (
+                  <TimelineRow key={item.id} item={item} />
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>

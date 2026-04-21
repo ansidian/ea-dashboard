@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DashboardProvider } from "../../context/DashboardContext.jsx";
 import CalendarModal from "./CalendarModal.jsx";
 
 const mockGetCalendarSources = vi.fn();
@@ -12,6 +13,11 @@ vi.mock("@/api", () => ({
   updateCalendarEvent: vi.fn(),
   deleteCalendarEvent: vi.fn(),
   getGmailAuthUrl: vi.fn(),
+  getTodoistProjects: vi.fn().mockResolvedValue([]),
+  getTodoistLabels: vi.fn().mockResolvedValue([]),
+  createTodoistTask: vi.fn(),
+  updateTodoistTask: vi.fn(),
+  deleteTodoistTask: vi.fn(),
 }));
 
 afterEach(() => {
@@ -33,10 +39,22 @@ beforeEach(() => {
   });
 });
 
+function wrapWithDashboard(node) {
+  return (
+    <DashboardProvider
+      briefing={{ emails: { accounts: [] }, ctm: { upcoming: [] }, todoist: { upcoming: [] } }}
+      setBriefing={() => {}}
+      setCalendarDeadlines={() => {}}
+    >
+      {node}
+    </DashboardProvider>
+  );
+}
+
 function renderCalendarModalAtWidth(viewportWidth) {
   window.innerWidth = viewportWidth;
 
-  return render(
+  return render(wrapWithDashboard(
     <CalendarModal
       open
       onClose={() => {}}
@@ -48,7 +66,7 @@ function renderCalendarModalAtWidth(viewportWidth) {
       billsData={{}}
       deadlinesData={{}}
     />,
-  );
+  ));
 }
 
 describe("CalendarModal responsive layout", () => {
@@ -101,7 +119,7 @@ describe("CalendarModal responsive layout", () => {
   it("shows skeleton loaders while the events month is loading", () => {
     window.innerWidth = 1900;
 
-    render(
+    render(wrapWithDashboard(
       <CalendarModal
         open
         onClose={() => {}}
@@ -114,16 +132,121 @@ describe("CalendarModal responsive layout", () => {
         billsData={{}}
         deadlinesData={{}}
       />,
-    );
+    ));
 
     expect(screen.getByTestId("calendar-events-grid-skeleton")).toBeTruthy();
     expect(screen.getByTestId("calendar-events-rail-skeleton")).toBeTruthy();
   });
 
-  it("preserves a focused deadline day when the modal opens straight into a different view", () => {
+  it("renders event rows into the month grid when events exist", () => {
     window.innerWidth = 1900;
 
-    const { rerender } = render(
+    render(wrapWithDashboard(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="events"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        eventsData={{
+          getEvents: () => ([
+            {
+              id: "event-1",
+              title: "Design review",
+              startMs: new Date("2026-04-20T17:00:00.000Z").getTime(),
+              endMs: new Date("2026-04-20T18:00:00.000Z").getTime(),
+              allDay: false,
+              color: "#4285f4",
+            },
+          ]),
+        }}
+        billsData={{}}
+        deadlinesData={{}}
+      />,
+    ));
+
+    expect(screen.getAllByText("Design review").length).toBeGreaterThan(0);
+  });
+
+  it("dims past event days more than future days without dimming today", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T19:00:00.000Z"));
+
+    try {
+      window.innerWidth = 1900;
+
+      render(wrapWithDashboard(
+        <CalendarModal
+          open
+          onClose={() => {}}
+          view="events"
+          onViewChange={() => {}}
+          focusDate="2026-04-20"
+          eventsData={{
+            getEvents: () => ([
+              {
+                id: "event-1",
+                title: "Past review",
+                startMs: new Date("2026-04-10T17:00:00.000Z").getTime(),
+                endMs: new Date("2026-04-10T18:00:00.000Z").getTime(),
+                allDay: false,
+                color: "#4285f4",
+              },
+            ]),
+          }}
+          billsData={{}}
+          deadlinesData={{}}
+        />,
+      ));
+
+      expect(screen.getByTestId("calendar-cell-10").getAttribute("data-past-tone")).toBe("items");
+      expect(screen.getByTestId("calendar-cell-15").getAttribute("data-past-tone")).toBe("empty");
+      expect(screen.getByTestId("calendar-cell-20").getAttribute("data-past-tone")).toBe("none");
+      expect(screen.getByTestId("calendar-cell-24").getAttribute("data-past-tone")).toBe("none");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses cancel as the only top-level exit action in the event editor", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-20T19:00:00.000Z"));
+
+    try {
+      window.innerWidth = 1900;
+
+      render(wrapWithDashboard(
+        <CalendarModal
+          open
+          onClose={() => {}}
+          view="events"
+          onViewChange={() => {}}
+          focusDate="2026-04-23"
+          eventsData={{
+            editable: true,
+            getEvents: () => [],
+          }}
+          billsData={{}}
+          deadlinesData={{}}
+        />,
+      ));
+
+      fireEvent.keyDown(document, { key: "c" });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole("button", { name: /cancel/i })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /^back$/i })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves a focused deadline day and item when the modal opens into deadlines", () => {
+    window.innerWidth = 1900;
+
+    const { rerender } = render(wrapWithDashboard(
       <CalendarModal
         open={false}
         onClose={() => {}}
@@ -139,15 +262,16 @@ describe("CalendarModal responsive layout", () => {
           },
         }}
       />,
-    );
+    ));
 
-    rerender(
+    rerender(wrapWithDashboard(
       <CalendarModal
         open
         onClose={() => {}}
         view="deadlines"
         onViewChange={() => {}}
         focusDate="2026-04-20"
+        focusItemId="deadline-1"
         eventsData={{ getEvents: () => [] }}
         billsData={{}}
         deadlinesData={{
@@ -158,16 +282,45 @@ describe("CalendarModal responsive layout", () => {
           },
         }}
       />,
-    );
+    ));
 
     expect(screen.getByText("Monday, April 20")).toBeTruthy();
     expect(screen.getAllByText("Project due").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /mark complete/i })).toBeTruthy();
+  });
+
+  it("falls back to a completed deadline when a day has no active items", () => {
+    window.innerWidth = 1900;
+
+    render(wrapWithDashboard(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="deadlines"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        focusItemId="deadline-1"
+        eventsData={{ getEvents: () => [] }}
+        billsData={{}}
+        deadlinesData={{
+          ctm: {
+            upcoming: [
+              { id: "deadline-1", title: "Project due", due_date: "2026-04-20", status: "complete" },
+            ],
+          },
+        }}
+      />,
+    ));
+
+    expect(screen.getAllByText("Project due").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("timeline-detail-section-toggle-completed-deadlines")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /mark complete/i })).toBeNull();
   });
 
   it("allows selecting empty days and shows a date-specific empty rail", async () => {
     window.innerWidth = 1900;
 
-    render(
+    render(wrapWithDashboard(
       <CalendarModal
         open
         onClose={() => {}}
@@ -178,9 +331,7 @@ describe("CalendarModal responsive layout", () => {
         billsData={{}}
         deadlinesData={{}}
       />,
-    );
-
-    fireEvent.click(screen.getByText("20"));
+    ));
 
     expect(await screen.findByText("Monday, April 20")).toBeTruthy();
     expect(screen.getByText(/no events on this day yet/i)).toBeTruthy();
@@ -190,7 +341,7 @@ describe("CalendarModal responsive layout", () => {
     window.innerWidth = 1900;
     const onClose = vi.fn();
 
-    render(
+    render(wrapWithDashboard(
       <CalendarModal
         open
         onClose={onClose}
@@ -204,7 +355,7 @@ describe("CalendarModal responsive layout", () => {
         billsData={{}}
         deadlinesData={{}}
       />,
-    );
+    ));
 
     fireEvent.click(screen.getByRole("button", { name: /new event/i }));
     const title = await screen.findByTestId("calendar-event-title");
@@ -225,7 +376,7 @@ describe("CalendarModal responsive layout", () => {
     try {
       window.innerWidth = 1900;
 
-      render(
+      render(wrapWithDashboard(
         <CalendarModal
           open
           onClose={() => {}}
@@ -236,7 +387,7 @@ describe("CalendarModal responsive layout", () => {
           billsData={{}}
           deadlinesData={{}}
         />,
-      );
+      ));
 
       fireEvent.keyDown(document, { key: "t" });
 
@@ -253,7 +404,7 @@ describe("CalendarModal responsive layout", () => {
     try {
       window.innerWidth = 1900;
 
-      render(
+      render(wrapWithDashboard(
         <CalendarModal
           open
           onClose={() => {}}
@@ -267,9 +418,8 @@ describe("CalendarModal responsive layout", () => {
           billsData={{}}
           deadlinesData={{}}
         />,
-      );
+      ));
 
-      fireEvent.click(screen.getByText("23"));
       fireEvent.keyDown(document, { key: "c" });
       await act(async () => {
         await Promise.resolve();
@@ -286,7 +436,7 @@ describe("CalendarModal responsive layout", () => {
     window.innerWidth = 1900;
     const ensureRange = vi.fn().mockResolvedValue([]);
 
-    const { rerender } = render(
+    const { rerender } = render(wrapWithDashboard(
       <CalendarModal
         open
         onClose={() => {}}
@@ -302,13 +452,13 @@ describe("CalendarModal responsive layout", () => {
         billsData={{}}
         deadlinesData={{}}
       />,
-    );
+    ));
 
     await waitFor(() => {
       expect(ensureRange).toHaveBeenCalledTimes(1);
     });
 
-    rerender(
+    rerender(wrapWithDashboard(
       <CalendarModal
         open
         onClose={() => {}}
@@ -324,10 +474,122 @@ describe("CalendarModal responsive layout", () => {
         billsData={{}}
         deadlinesData={{}}
       />,
-    );
+    ));
 
     await waitFor(() => {
       expect(ensureRange).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("switches the selected deadline in-place when a different row is clicked", () => {
+    window.innerWidth = 1900;
+
+    render(wrapWithDashboard(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="deadlines"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        focusItemId="todo-1"
+        eventsData={{ getEvents: () => [] }}
+        billsData={{}}
+        deadlinesData={{
+          todoist: {
+            upcoming: [
+              { id: "todo-1", title: "First task", due_date: "2026-04-20", due_time: "9:00 AM", source: "todoist", class_name: "Inbox", status: "open" },
+              { id: "todo-2", title: "Second task", due_date: "2026-04-20", due_time: "11:00 AM", source: "todoist", class_name: "Inbox", status: "open" },
+            ],
+          },
+        }}
+      />,
+    ));
+
+    expect(screen.getAllByText("First task").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByTestId("timeline-detail-row")[1]);
+    expect(screen.getAllByText("Second task").length).toBeGreaterThan(0);
+  });
+
+  it("opens a blank inline Todoist editor from the deadlines header", async () => {
+    window.innerWidth = 1900;
+
+    render(wrapWithDashboard(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="deadlines"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        eventsData={{ getEvents: () => [] }}
+        billsData={{}}
+        deadlinesData={{
+          todoist: {
+            upcoming: [
+              { id: "todo-1", title: "First task", due_date: "2026-04-20", due_time: "9:00 AM", source: "todoist", class_name: "Inbox", status: "open" },
+            ],
+          },
+        }}
+      />,
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: /new todoist/i }));
+    expect(await screen.findByTestId("todoist-inline-editor")).toBeTruthy();
+    expect(screen.getByText("Pick a due date and time")).toBeTruthy();
+  });
+
+  it("opens a blank inline Todoist editor from c in deadlines view", async () => {
+    window.innerWidth = 1900;
+
+    render(wrapWithDashboard(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="deadlines"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        eventsData={{ getEvents: () => [] }}
+        billsData={{}}
+        deadlinesData={{
+          todoist: {
+            upcoming: [
+              { id: "todo-1", title: "First task", due_date: "2026-04-20", due_time: "9:00 AM", source: "todoist", class_name: "Inbox", status: "open" },
+            ],
+          },
+        }}
+      />,
+    ));
+
+    fireEvent.keyDown(document, { key: "c" });
+
+    expect(await screen.findByTestId("todoist-inline-editor")).toBeTruthy();
+    expect(screen.getByText("Pick a due date and time")).toBeTruthy();
+  });
+
+  it("opens the inline Todoist editor from the selected deadline detail", async () => {
+    window.innerWidth = 1900;
+
+    render(wrapWithDashboard(
+      <CalendarModal
+        open
+        onClose={() => {}}
+        view="deadlines"
+        onViewChange={() => {}}
+        focusDate="2026-04-20"
+        focusItemId="todo-1"
+        eventsData={{ getEvents: () => [] }}
+        billsData={{}}
+        deadlinesData={{
+          todoist: {
+            upcoming: [
+              { id: "todo-1", title: "First task", due_date: "2026-04-20", due_time: "9:00 AM", source: "todoist", class_name: "Inbox", status: "open" },
+            ],
+          },
+        }}
+      />,
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    expect(await screen.findByTestId("todoist-inline-editor")).toBeTruthy();
+    expect(screen.getByDisplayValue("First task")).toBeTruthy();
   });
 });

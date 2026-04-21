@@ -7,8 +7,16 @@ import {
   updateTodoistTask,
 } from "../../../api";
 import useIsMobile from "../../../hooks/useIsMobile";
+import { epochFromLa } from "../../inbox/helpers";
 import { formatResolvedDate, parseTokens } from "./parsing";
 import { buildManualDue, getInitialDueEpoch } from "./due";
+
+function buildSeededDue(initialDueDate) {
+  if (!initialDueDate) return null;
+  const [year, month, day] = String(initialDueDate).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return buildManualDue(epochFromLa(year, month - 1, day, 9, 0));
+}
 
 export default function useAddTaskPanelController({
   anchorRef,
@@ -17,7 +25,10 @@ export default function useAddTaskPanelController({
   editingTask,
   onTaskUpdated,
   onTaskDeleted,
+  host = "anchored",
+  initialDueDate = null,
 }) {
+  const isInline = host === "inline";
   const isEdit = !!editingTask;
   const [input, setInput] = useState(() => editingTask?.title || "");
   const [description, setDescription] = useState(() => editingTask?.description || "");
@@ -30,7 +41,14 @@ export default function useAddTaskPanelController({
       ? editingTask.labels.map((name) => ({ id: `name:${name}`, name, color: "#cba6da" }))
       : null,
   );
-  const seededDueEpoch = useMemo(() => getInitialDueEpoch(editingTask), [editingTask]);
+  const seededCreateDue = useMemo(
+    () => (!editingTask ? buildSeededDue(initialDueDate) : null),
+    [editingTask, initialDueDate],
+  );
+  const seededDueEpoch = useMemo(
+    () => getInitialDueEpoch(editingTask) ?? seededCreateDue?.epochMs ?? null,
+    [editingTask, seededCreateDue],
+  );
   const [manualDue, setManualDue] = useState(null);
   const [overrides, setOverrides] = useState(
     editingTask
@@ -43,24 +61,26 @@ export default function useAddTaskPanelController({
       : {},
   );
   const seededDueDisplay = useMemo(() => {
-    if (!editingTask?.due_date) return null;
-    const [year, month, day] = editingTask.due_date.split("-").map(Number);
-    if (!year || !month || !day) return null;
-    const date = new Date(year, month - 1, day);
-    let time = null;
-    if (editingTask.due_time) {
-      const match = editingTask.due_time.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
-      if (match) {
-        let hour = parseInt(match[1], 10);
-        const minute = match[2] ? parseInt(match[2], 10) : 0;
-        const ampm = match[3].toLowerCase();
-        if (ampm === "pm" && hour < 12) hour += 12;
-        if (ampm === "am" && hour === 12) hour = 0;
-        time = { hour, minute };
+    if (editingTask?.due_date) {
+      const [year, month, day] = editingTask.due_date.split("-").map(Number);
+      if (!year || !month || !day) return null;
+      const date = new Date(year, month - 1, day);
+      let time = null;
+      if (editingTask.due_time) {
+        const match = editingTask.due_time.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+        if (match) {
+          let hour = parseInt(match[1], 10);
+          const minute = match[2] ? parseInt(match[2], 10) : 0;
+          const ampm = match[3].toLowerCase();
+          if (ampm === "pm" && hour < 12) hour += 12;
+          if (ampm === "am" && hour === 12) hour = 0;
+          time = { hour, minute };
+        }
       }
+      return formatResolvedDate({ date, time });
     }
-    return formatResolvedDate({ date, time });
-  }, [editingTask?.due_date, editingTask?.due_time]);
+    return seededCreateDue?.display || null;
+  }, [editingTask?.due_date, editingTask?.due_time, seededCreateDue]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [deleteProgress, setDeleteProgress] = useState(0);
@@ -185,7 +205,9 @@ export default function useAddTaskPanelController({
     : parsed.labels.length
       ? parsed.labels
       : [];
-  const resolvedDue = overrides.due ? manualDue?.dueString || null : parsed.datePhrase || null;
+  const resolvedDue = overrides.due
+    ? manualDue?.dueString || null
+    : parsed.datePhrase || seededCreateDue?.dueString || null;
   const dueDisplay = manualDue?.display || parsed.dateFormatted || seededDueDisplay || "";
   const pickerDueEpoch = manualDue?.epochMs ?? seededDueEpoch;
 
@@ -255,6 +277,10 @@ export default function useAddTaskPanelController({
   }, [input]);
 
   const updatePos = useCallback(() => {
+    if (isInline) {
+      setPos({ inline: true });
+      return;
+    }
     if (isMobile) {
       setPos({ mobile: true });
       return;
@@ -280,9 +306,10 @@ export default function useAddTaskPanelController({
     }
 
     setPos({ top, left, width: panelWidth });
-  }, [anchorRef, isMobile]);
+  }, [anchorRef, isInline, isMobile]);
 
   useEffect(() => {
+    if (isInline) return undefined;
     updatePos();
     window.addEventListener("resize", updatePos);
     window.addEventListener("scroll", updatePos, true);
@@ -290,10 +317,11 @@ export default function useAddTaskPanelController({
       window.removeEventListener("resize", updatePos);
       window.removeEventListener("scroll", updatePos, true);
     };
-  }, [updatePos]);
+  }, [isInline, updatePos]);
 
   // Track virtual-keyboard height on mobile so the bottom-sheet sits above it.
   useEffect(() => {
+    if (isInline) return undefined;
     if (!isMobile || typeof window === "undefined" || !window.visualViewport) {
       setKeyboardOffset(0);
       return undefined;
@@ -310,15 +338,16 @@ export default function useAddTaskPanelController({
       vv.removeEventListener("resize", onResize);
       vv.removeEventListener("scroll", onResize);
     };
-  }, [isMobile]);
+  }, [isInline, isMobile]);
 
   useEffect(() => {
+    if (isInline) return undefined;
     const element = panelRef.current;
     if (!element || typeof ResizeObserver === "undefined") return undefined;
     const observer = new ResizeObserver(() => updatePos());
     observer.observe(element);
     return () => observer.disconnect();
-  }, [updatePos]);
+  }, [isInline, updatePos]);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setVisible(true));
@@ -330,6 +359,7 @@ export default function useAddTaskPanelController({
   }, []);
 
   useEffect(() => {
+    if (isInline) return undefined;
     function handleClick(event) {
       if (anchorRef?.current?.contains(event.target)) return;
       if (panelRef.current?.contains(event.target)) return;
@@ -338,7 +368,7 @@ export default function useAddTaskPanelController({
     }
     document.addEventListener("pointerdown", handleClick);
     return () => document.removeEventListener("pointerdown", handleClick);
-  }, [anchorRef, requestClose]);
+  }, [anchorRef, isInline, requestClose]);
 
   useEffect(() => {
     function handleKey(event) {
@@ -353,6 +383,18 @@ export default function useAddTaskPanelController({
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [duePickerOpen, requestClose]);
+
+  useEffect(() => {
+    if (!isMobile || isInline) return undefined;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, [isInline, isMobile]);
 
   useEffect(() => {
     const element = panelRef.current;
@@ -473,5 +515,7 @@ export default function useAddTaskPanelController({
     requestClose,
     cancelDelete,
     startDelete,
+    host,
+    isInline,
   };
 }

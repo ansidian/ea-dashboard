@@ -1,8 +1,9 @@
 import { createPortal } from "react-dom";
-import { CalendarClock, ChevronDown, CornerDownLeft, Trash2, X } from "lucide-react";
+import { CalendarClock, ChevronDown, Trash2, X } from "lucide-react";
 import { Dropdown, LabelPicker, PriorityIndicator, RemoveLabelButton, TokenAutocomplete } from "./controls";
 import TodoistDuePicker from "./TodoistDuePicker";
 import {
+  buildInlineContainerStyle,
   buildContainerStyle,
   buildDropdownRowStyle,
   buildTextareaStyle,
@@ -60,16 +61,20 @@ export default function AddTaskPanelView({
     requestClose,
     cancelDelete,
     startDelete,
+    isInline,
   } = controller;
 
-  if (!pos) return null;
+  if (!isInline && !pos) return null;
 
-  return createPortal(
+  const content = (
     <div
       ref={panelRef}
-      style={buildContainerStyle({ isMobile, pos, active, keyboardOffset })}
+      data-testid={isInline ? "todoist-inline-editor" : "todoist-floating-editor"}
+      style={isInline
+        ? buildInlineContainerStyle({ active })
+        : buildContainerStyle({ isMobile, pos, active, keyboardOffset })}
     >
-      {isMobile && <div style={DRAG_HANDLE_STYLE} />}
+      {isMobile && !isInline && <div style={DRAG_HANDLE_STYLE} />}
       <div
         style={{
           padding: "12px 16px 10px",
@@ -77,21 +82,9 @@ export default function AddTaskPanelView({
           background: "linear-gradient(135deg, rgba(203,166,218,0.06), transparent 70%)",
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 10,
         }}
       >
-        <div
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            background: "rgba(203,166,218,0.15)",
-            display: "grid",
-            placeItems: "center",
-          }}
-        >
-          <CornerDownLeft size={11} color="#cba6da" />
-        </div>
         <div
           style={{
             fontSize: 9.5,
@@ -104,23 +97,25 @@ export default function AddTaskPanelView({
           {isEdit ? "Edit Todoist task" : "New Todoist task"}
         </div>
         <span style={{ flex: 1 }} />
-        <button
-          type="button"
-          onClick={requestClose}
-          aria-label="Close"
-          style={{
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            color: "rgba(205,214,244,0.5)",
-            padding: 4,
-            borderRadius: 4,
-            display: "inline-flex",
-            fontFamily: "inherit",
-          }}
-        >
-          <X size={12} />
-        </button>
+        {!isInline && (
+          <button
+            type="button"
+            onClick={requestClose}
+            aria-label="Close"
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              color: "rgba(205,214,244,0.5)",
+              padding: 4,
+              borderRadius: 4,
+              display: "inline-flex",
+              fontFamily: "inherit",
+            }}
+          >
+            <X size={12} />
+          </button>
+        )}
       </div>
 
       <div style={{ padding: 16 }}>
@@ -451,8 +446,41 @@ export default function AddTaskPanelView({
             borderTop: "1px solid rgba(255,255,255,0.04)",
           }}
         >
-          <div style={{ color: "rgba(205,214,244,0.4)", fontSize: 10.5, display: "flex", alignItems: "center", gap: 4 }}>
-            <CornerDownLeft size={10} /> Enter to {isEdit ? "save" : "add"} · Esc to cancel
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {isInline && (
+              <button
+                type="button"
+                onClick={requestClose}
+                onMouseEnter={(event) => {
+                  event.currentTarget.style.background = "rgba(255,255,255,0.055)";
+                  event.currentTarget.style.borderColor = "rgba(255,255,255,0.14)";
+                  event.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(event) => {
+                  event.currentTarget.style.background = "rgba(255,255,255,0.025)";
+                  event.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                  event.currentTarget.style.transform = "translateY(0)";
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  padding: "7px 14px",
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  letterSpacing: 0.2,
+                  cursor: "pointer",
+                  background: "rgba(255,255,255,0.025)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "rgba(205,214,244,0.74)",
+                  transition: "background 0.2s, border-color 0.2s, transform 0.2s",
+                }}
+              >
+                Cancel
+              </button>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {isEdit && (
@@ -564,7 +592,28 @@ export default function AddTaskPanelView({
           onClose={closeDuePicker}
         />
       )}
-    </div>,
+    </div>
+  );
+
+  if (isInline) return content;
+
+  return createPortal(
+    <>
+      {isMobile && (
+        <div
+          aria-hidden="true"
+          onClick={requestClose}
+          onTouchMove={(event) => event.preventDefault()}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            zIndex: 9998,
+          }}
+        />
+      )}
+      {content}
+    </>,
     document.body,
   );
 }

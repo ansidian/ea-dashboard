@@ -83,10 +83,15 @@ function canNavigateBack() {
   return true;
 }
 
-function renderCellContents({ items, contentHeight }) {
+function renderCellContents({ items, contentHeight, pastTone }) {
   if (!items?.length) return null;
   const maxVisible = getVisibleEventCount(items.length, contentHeight);
   const extra = items.length > maxVisible ? items.length - maxVisible : 0;
+  const isPast = pastTone === "items";
+  const contentOpacity = isPast ? 0.86 : 1;
+  const dotOpacity = isPast ? 0.62 : 1;
+  const textColor = isPast ? "rgba(205,214,244,0.43)" : "rgba(205,214,244,0.55)";
+  const moreColor = isPast ? "rgba(205,214,244,0.36)" : "rgba(205,214,244,0.5)";
   return (
     <div
       style={{
@@ -94,6 +99,9 @@ function renderCellContents({ items, contentHeight }) {
         flexDirection: "column",
         gap: 2,
         minWidth: 0,
+        opacity: contentOpacity,
+        filter: isPast ? "saturate(0.9)" : "none",
+        transition: "opacity 150ms, filter 150ms",
       }}
     >
       {items.slice(0, maxVisible).map((ev, i) => (
@@ -115,7 +123,8 @@ function renderCellContents({ items, contentHeight }) {
               height: 6,
               borderRadius: "50%",
               background: ev.color || "rgba(205,214,244,0.45)",
-              boxShadow: ev.color ? `0 0 4px ${ev.color}60` : "none",
+              boxShadow: ev.color ? `0 0 4px ${ev.color}${isPast ? "34" : "60"}` : "none",
+              opacity: dotOpacity,
             }}
           />
           <span
@@ -124,7 +133,7 @@ function renderCellContents({ items, contentHeight }) {
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               minWidth: 0,
-              color: "rgba(205,214,244,0.55)",
+              color: textColor,
             }}
           >
             {ev.title || "(No title)"}
@@ -136,7 +145,7 @@ function renderCellContents({ items, contentHeight }) {
           style={{
             fontSize: 9,
             lineHeight: 1,
-            color: "rgba(205,214,244,0.5)",
+            color: moreColor,
             paddingLeft: 11,
           }}
         >

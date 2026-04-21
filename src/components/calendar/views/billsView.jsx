@@ -1,9 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createPortal } from "react-dom";
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Zap, Droplet, Wifi, Flame, Trash2, Check } from "lucide-react";
 import { formatAmount, daysUntil, daysLabel, urgencyColor } from "../../../lib/bill-utils";
 import Tooltip from "../../shared/Tooltip";
+import TimelineDetailRail from "../TimelineDetailRail.jsx";
 
 const MAX_PILLS = 2;
 
@@ -50,6 +51,105 @@ function scheduleToBill(schedule, payeeMap) {
     paid: !!schedule.paid,
     type: schedule.type || "bill",
   };
+}
+
+function orderBills(items = []) {
+  return [...items].sort((a, b) => {
+    if (a.paid !== b.paid) return a.paid ? 1 : -1;
+    const aName = (a.name || a.payee || "").toLowerCase();
+    const bName = (b.name || b.payee || "").toLowerCase();
+    return aName.localeCompare(bName);
+  });
+}
+
+function groupBills(items = []) {
+  const ordered = orderBills(items);
+  const activeItems = ordered.filter((item) => !item.paid);
+  const completedItems = ordered.filter((item) => item.paid);
+  return {
+    items: ordered,
+    activeItems,
+    completedItems,
+    activeCount: activeItems.length,
+    completedCount: completedItems.length,
+    totalCount: ordered.length,
+  };
+}
+
+function getDayState(rawItems) {
+  if (rawItems?.activeItems) return rawItems;
+  return groupBills(Array.isArray(rawItems) ? rawItems : []);
+}
+
+function CompletedCount({ count }) {
+  if (!count) return null;
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        fontSize: 10,
+        color: "rgba(166,227,161,0.55)",
+        letterSpacing: 0.2,
+      }}
+    >
+      <Check size={10} />
+      <span>{count}</span>
+    </div>
+  );
+}
+
+function CompletedPreview({ label, amount, count }) {
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        minWidth: 0,
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          flexShrink: 0,
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: "rgba(166,227,161,0.72)",
+          boxShadow: "0 0 4px rgba(166,227,161,0.22)",
+        }}
+      />
+      <span
+        style={{
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          color: "rgba(205,214,244,0.42)",
+          fontSize: 11,
+          textDecoration: "line-through",
+          textDecorationColor: "rgba(205,214,244,0.2)",
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          flexShrink: 0,
+          color: "rgba(166,227,161,0.58)",
+          fontSize: 10.5,
+          fontWeight: 500,
+        }}
+      >
+        {amount}
+      </span>
+      {count > 1 && <CompletedCount count={count} />}
+    </div>
+  );
 }
 
 function compute({ data, viewYear, viewMonth }) {
@@ -100,33 +200,41 @@ function compute({ data, viewYear, viewMonth }) {
     for (const b of bills) monthTotal += b.amount;
   }
 
+  for (const day of Object.keys(itemsByDay)) {
+    itemsByDay[day] = groupBills(itemsByDay[day]);
+  }
+
   return { itemsByDay, monthTotal };
 }
 
 function hasOverdue(items) {
-  return items.some((b) => !b.paid && daysUntil(b.next_date) < 0);
+  const state = getDayState(items);
+  return state.activeItems.some((b) => daysUntil(b.next_date) < 0);
 }
 
-function allComplete(items) {
-  return items.length > 0 && items.every((b) => b.paid);
+function allComplete(_items) {
+  return false;
 }
 
 function renderCellContents({ items, hasOverdue: overdue }) {
+  const state = getDayState(items);
+  const visibleItems = state.activeItems.slice(0, MAX_PILLS);
+  const hiddenActiveCount = Math.max(0, state.activeCount - visibleItems.length);
+  const completedPreview = state.activeCount === 0 ? state.completedItems[0] : null;
+
   return (
     <>
-      {items.slice(0, MAX_PILLS).map((b) => {
+      {visibleItems.map((b) => {
         const d = daysUntil(b.next_date);
         const uc = urgencyColor(d);
         const isTransfer = b.type === "transfer";
-        const amountColor = b.paid
-          ? "#a6e3a1"
-          : isTransfer
-            ? "#b4befe"
-            : overdue && d < 0
-              ? "#f38ba8"
-              : uc.text === "rgba(205,214,244,0.5)"
-                ? "#a6e3a1"
-                : uc.text;
+        const amountColor = isTransfer
+          ? "#b4befe"
+          : overdue && d < 0
+            ? "#f38ba8"
+            : uc.text === "rgba(205,214,244,0.5)"
+              ? "#a6e3a1"
+              : uc.text;
         return (
           <div
             key={b.id}
@@ -144,7 +252,6 @@ function renderCellContents({ items, hasOverdue: overdue }) {
                 whiteSpace: "nowrap",
                 minWidth: 0,
                 color: "rgba(205,214,244,0.45)",
-                textDecoration: b.paid ? "line-through" : "none",
               }}
             >
               {b.name}
@@ -154,7 +261,6 @@ function renderCellContents({ items, hasOverdue: overdue }) {
                 flexShrink: 0,
                 color: amountColor,
                 fontWeight: 500,
-                textDecoration: b.paid ? "line-through" : "none",
               }}
             >
               {formatAmount(b.amount).replace(".00", "")}
@@ -162,104 +268,121 @@ function renderCellContents({ items, hasOverdue: overdue }) {
           </div>
         );
       })}
-      {items.length > MAX_PILLS && (
+      {hiddenActiveCount > 0 && (
         <div style={{ fontSize: 10, color: "rgba(203,166,218,0.6)", marginTop: 2 }}>
-          +{items.length - MAX_PILLS} more
+          +{hiddenActiveCount} more
         </div>
+      )}
+      {completedPreview ? (
+        <CompletedPreview
+          label={completedPreview.name}
+          amount={formatAmount(completedPreview.amount).replace(".00", "")}
+          count={state.completedCount}
+        />
+      ) : (
+        <CompletedCount count={state.completedCount} />
       )}
     </>
   );
 }
 
-function renderDetail({ selectedDay, viewYear, viewMonth, items, data }) {
-  const actualBudgetUrl = data?.actualBudgetUrl;
-  return (
-    <div style={{ padding: "16px 20px", overflow: "auto", flex: 1 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontSize: 14, color: "#cba6da", fontWeight: 500 }}>
-          {formatFullDate(viewYear, viewMonth, selectedDay)}
-        </div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
-          {items.length} payment{items.length !== 1 ? "s" : ""}
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {items.map((b) => {
-          const days = daysUntil(b.next_date);
-          const uc = urgencyColor(days);
-          const isTransfer = b.type === "transfer";
-          const accent = b.paid ? "#a6e3a1" : isTransfer ? "#b4befe" : uc.accent;
-          const rowBg = b.paid
-            ? "rgba(166,227,161,0.06)"
-            : isTransfer
-              ? "rgba(180,190,254,0.06)"
-              : uc.bg;
-          const amountColor = b.paid ? "#a6e3a1" : isTransfer ? "#b4befe" : uc.text;
-          const scheduleUrl = actualBudgetUrl
-            ? `${actualBudgetUrl.replace(/\/+$/, "")}/schedules?highlight=${b.id}`
-            : null;
-          return (
-            <div
-              key={b.id}
+function toBillRailItem(b, actualBudgetUrl) {
+  const days = daysUntil(b.next_date);
+  const scheduleUrl = actualBudgetUrl
+    ? `${actualBudgetUrl.replace(/\/+$/, "")}/schedules?highlight=${b.id}`
+    : null;
+
+  return {
+    id: String(b.id),
+    timeLabel: b.paid ? "Paid" : daysLabel(days),
+    title: b.name,
+    subtitle: b.payee && b.payee !== b.name ? b.payee : null,
+    meta: b.type === "transfer" ? "Transfer" : null,
+    complete: b.paid,
+    dotColor: b.paid ? "#a6e3a1" : b.type === "transfer" ? "#b4befe" : urgencyColor(days).accent,
+    trailing: (
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: b.paid ? "#a6e3a1" : b.type === "transfer" ? "#b4befe" : urgencyColor(days).text,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {formatAmount(b.amount)}
+        </span>
+        {scheduleUrl && (
+          <Tooltip text="Edit Schedule in Actual">
+            <a
+              href={scheduleUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => event.stopPropagation()}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
+                color: "rgba(203,166,218,0.5)",
+                display: "inline-flex",
                 alignItems: "center",
-                padding: "10px 14px",
-                background: rowBg,
-                border: `1px solid ${accent}18`,
-                borderRadius: 8,
+                padding: 4,
+                borderRadius: 4,
+                transition: "color 150ms",
+              }}
+              onMouseEnter={(event) => {
+                event.currentTarget.style.color = "#cba6da";
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.color = "rgba(203,166,218,0.5)";
               }}
             >
-              <div>
-                <div style={{ fontSize: 14, color: "#cdd6f4" }}>{b.name}</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
-                  {b.paid && <Check size={11} style={{ color: "#a6e3a1" }} />}
-                  {b.paid ? "Paid" : daysLabel(days)}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ fontSize: 16, fontWeight: 600, color: amountColor }}>
-                  {formatAmount(b.amount)}
-                </div>
-                {scheduleUrl && (
-                  <Tooltip text="Edit Schedule in Actual">
-                    <a
-                      href={scheduleUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        color: "rgba(203,166,218,0.5)",
-                        display: "flex",
-                        alignItems: "center",
-                        padding: 4,
-                        borderRadius: 4,
-                        transition: "color 150ms",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = "#cba6da")}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(203,166,218,0.5)")}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                        <path d="M6 3H3.5A1.5 1.5 0 002 4.5v8A1.5 1.5 0 003.5 14h8a1.5 1.5 0 001.5-1.5V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        <path d="M9 2h5v5M14 2L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </a>
-                  </Tooltip>
-                )}
-              </div>
-            </div>
-          );
-        })}
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M6 3H3.5A1.5 1.5 0 002 4.5v8A1.5 1.5 0 003.5 14h8a1.5 1.5 0 001.5-1.5V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M9 2h5v5M14 2L7 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </a>
+          </Tooltip>
+        )}
       </div>
-      <div style={{ marginTop: 10, textAlign: "right", fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
-        Day total:{" "}
-        <span style={{ color: "#cdd6f4", fontWeight: 600 }}>
-          {formatAmount(items.reduce((sum, b) => sum + b.amount, 0))}
-        </span>
-      </div>
-    </div>
+    ),
+  };
+}
+
+function BillsDetail({ selectedDay, viewYear, viewMonth, items, data }) {
+  const actualBudgetUrl = data?.actualBudgetUrl;
+  const state = getDayState(items);
+  const [showCompleted, setShowCompleted] = useState(state.activeCount === 0 && state.completedCount > 0);
+  const summary = [
+    `${state.activeCount} unpaid`,
+    state.completedCount ? `${state.completedCount} paid` : null,
+    `${state.totalCount} total`,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <TimelineDetailRail
+      title={formatFullDate(viewYear, viewMonth, selectedDay)}
+      summary={summary}
+      sections={[
+        {
+          id: "active-bills",
+          label: "Unpaid",
+          items: state.activeItems.map((bill) => toBillRailItem(bill, actualBudgetUrl)),
+        },
+        {
+          id: "completed-bills",
+          label: "Paid",
+          collapsible: true,
+          expanded: showCompleted,
+          onToggle: () => setShowCompleted((prev) => !prev),
+          itemCount: state.completedCount,
+          items: state.completedItems.map((bill) => toBillRailItem(bill, actualBudgetUrl)),
+        },
+      ]}
+    />
   );
+}
+
+function renderDetail(props) {
+  const state = getDayState(props.items);
+  return <BillsDetail key={`${props.selectedDay}-${state.activeCount}-${state.completedCount}`} {...props} />;
 }
 
 function renderFooter({ viewYear, viewMonth, computed }) {
@@ -526,6 +649,7 @@ function UtilityStatusButton({ data, suppressOutsideClick }) {
 
 const billsView = {
   compute,
+  getDayState,
   hasOverdue,
   allComplete,
   renderCellContents,

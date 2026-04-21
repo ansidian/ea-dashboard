@@ -762,9 +762,6 @@ export default function CalendarEventEditorRail({ editor }) {
             Single events only. Recurring events still open in Google Calendar.
           </div>
         </div>
-        <ActionButton subtle onClick={closeEditor} disabled={disabled}>
-          Back
-        </ActionButton>
       </div>
 
       {error ? (

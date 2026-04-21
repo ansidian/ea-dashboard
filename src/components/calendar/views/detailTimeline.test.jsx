@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import eventsView from "./eventsView.jsx";
 import deadlinesView from "./deadlinesView.jsx";
+import billsView from "./billsView.jsx";
 import { DashboardProvider } from "../../../context/DashboardContext.jsx";
 
 afterEach(() => {
@@ -57,7 +58,8 @@ describe("calendar detail timeline", () => {
     expect(screen.queryByText("Work Calendar")).toBeNull();
   });
 
-  it("renders deadlines chronologically, uses End of day, de-emphasizes completed rows, and preserves popover opening", () => {
+  it("renders deadlines chronologically, uses End of day, and selects rows in-place", () => {
+    const onSelect = vi.fn();
     const briefing = {
       emails: { accounts: [] },
       ctm: { upcoming: [] },
@@ -77,17 +79,120 @@ describe("calendar detail timeline", () => {
           viewYear: 2026,
           viewMonth: 3,
           items: briefing.todoist.upcoming,
+          selectedItemId: "todo-1",
+          onSelectItem: onSelect,
         })}
       </DashboardProvider>,
     );
 
     const rows = screen.getAllByTestId("timeline-detail-row");
     expect(rows[0].textContent).toContain("Open early");
-    expect(rows[1].textContent).toContain("Complete early");
-    expect(rows[2].textContent).toContain("End of day");
-    expect(rows[1].getAttribute("data-complete")).toBe("true");
+    expect(rows[1].textContent).toContain("End of day");
+    expect(screen.getByRole("button", { name: /edit/i })).toBeTruthy();
+    expect(screen.queryByText("Complete early")).toBeNull();
+    expect(screen.getByTestId("timeline-detail-section-toggle-completed-deadlines").textContent).toContain("1");
 
-    fireEvent.click(rows[0]);
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("timeline-detail-section-toggle-completed-deadlines"));
+    expect(screen.getByText("Complete early")).toBeTruthy();
+
+    const completedRows = screen.getAllByTestId("timeline-detail-row");
+    expect(completedRows[2].getAttribute("data-complete")).toBe("true");
+
+    fireEvent.click(rows[1]);
+    expect(onSelect).toHaveBeenCalledWith("todo-3");
+  });
+
+  it("shows completed deadlines immediately when a day only has completed items", () => {
+    const briefing = {
+      emails: { accounts: [] },
+      ctm: { upcoming: [] },
+      todoist: {
+        upcoming: [
+          { id: "todo-2", title: "Complete early", due_date: "2026-04-19", due_time: "9:00 AM", source: "todoist", class_name: "Inbox", status: "complete" },
+        ],
+      },
+    };
+
+    render(
+      <DashboardProvider briefing={briefing} setBriefing={() => {}} setCalendarDeadlines={() => {}}>
+        {deadlinesView.renderDetail({
+          selectedDay: 19,
+          viewYear: 2026,
+          viewMonth: 3,
+          items: deadlinesView.getDayState(briefing.todoist.upcoming),
+          selectedItemId: "todo-2",
+          onSelectItem: () => {},
+        })}
+      </DashboardProvider>,
+    );
+
+    expect(screen.getAllByText("Complete early").length).toBeGreaterThan(1);
+  });
+
+  it("compresses completed items in deadline month cells into a subtle count", () => {
+    render(
+      <div>
+        {deadlinesView.renderCellContents({
+          items: deadlinesView.getDayState([
+            { id: "todo-1", title: "Open early", due_date: "2026-04-19", due_time: "9:00 AM", source: "todoist", class_name: "Inbox", status: "open" },
+            { id: "todo-2", title: "Complete early", due_date: "2026-04-19", due_time: "11:00 AM", source: "todoist", class_name: "Inbox", status: "complete" },
+          ]),
+        })}
+      </div>,
+    );
+
+    expect(screen.getByText("Open early")).toBeTruthy();
+    expect(screen.queryByText("Complete early")).toBeNull();
+    expect(screen.getByText("1")).toBeTruthy();
+  });
+
+  it("shows a completed deadline preview when a day has no active items", () => {
+    render(
+      <div>
+        {deadlinesView.renderCellContents({
+          items: deadlinesView.getDayState([
+            { id: "todo-2", title: "Complete early", due_date: "2026-04-19", due_time: "11:00 AM", source: "todoist", class_name: "Inbox", status: "complete" },
+          ]),
+        })}
+      </div>,
+    );
+
+    expect(screen.getByText("Complete early")).toBeTruthy();
+  });
+
+  it("shows unpaid bills first and hides paid bills behind a collapsed section", () => {
+    render(
+      billsView.renderDetail({
+        selectedDay: 19,
+        viewYear: 2026,
+        viewMonth: 3,
+        data: {},
+        items: billsView.getDayState([
+          { id: "bill-1", name: "Rent", payee: "Rent", amount: 2000, next_date: "2026-04-19", paid: false, type: "bill" },
+          { id: "bill-2", name: "Internet", payee: "Internet", amount: 80, next_date: "2026-04-19", paid: true, type: "bill" },
+        ]),
+      }),
+    );
+
+    expect(screen.getByText("Rent")).toBeTruthy();
+    expect(screen.queryByText("Internet")).toBeNull();
+    expect(screen.getByTestId("timeline-detail-section-toggle-completed-bills").textContent).toContain("1");
+
+    fireEvent.click(screen.getByTestId("timeline-detail-section-toggle-completed-bills"));
+    expect(screen.getByText("Internet")).toBeTruthy();
+  });
+
+  it("shows a paid bill preview when a day has no unpaid bills", () => {
+    render(
+      <div>
+        {billsView.renderCellContents({
+          items: billsView.getDayState([
+            { id: "bill-2", name: "Internet", payee: "Internet", amount: 80, next_date: "2026-04-19", paid: true, type: "bill" },
+          ]),
+        })}
+      </div>,
+    );
+
+    expect(screen.getByText("Internet")).toBeTruthy();
   });
 });

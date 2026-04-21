@@ -33,8 +33,32 @@ describe("CustomDateTimeView", () => {
 
     ampmGroup.focus();
     fireEvent.keyDown(ampmGroup, { key: "p" });
-    expect(document.activeElement).toBe(confirmButton);
+    expect(document.activeElement).toBe(ampmGroup);
+    expect(pmButton.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(confirmButton);
+
+    expect(onSelect).toHaveBeenCalledWith(epochFromLa(2026, 3, 19, 21, 15));
+  });
+
+  it("supports repeated a/p toggles before enter commits", () => {
+    const onSelect = vi.fn();
+    const initialEpoch = epochFromLa(2026, 3, 19, 9, 15);
+    const nowTick = epochFromLa(2026, 3, 19, 9, 14);
+
+    render(
+      <CustomDateTimeView
+        nowTick={nowTick}
+        initialEpoch={initialEpoch}
+        onSelect={onSelect}
+        onBack={() => {}}
+      />,
+    );
+
+    const hourInput = screen.getByLabelText("hour");
+    fireEvent.keyDown(hourInput, { key: "p" });
+    fireEvent.keyDown(hourInput, { key: "a" });
+    fireEvent.keyDown(hourInput, { key: "p" });
+    fireEvent.keyDown(hourInput, { key: "Enter" });
 
     expect(onSelect).toHaveBeenCalledWith(epochFromLa(2026, 3, 19, 21, 15));
   });

@@ -77,7 +77,7 @@ describe("AddTaskPanel due picker", () => {
     vi.runOnlyPendingTimers();
     const picker = screen.getByRole("dialog", { name: "Todoist due date picker" });
     fireEvent.click(within(picker).getByRole("button", { name: "Set due date" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add task" }));
+    fireEvent.click(screen.getByText("Add task"));
     await vi.runAllTimersAsync();
 
     expect(mockCreateTodoistTask).toHaveBeenCalledWith(
@@ -134,5 +134,59 @@ describe("AddTaskPanel due picker", () => {
         due_string: "2026-04-21 at 2:30 PM",
       }),
     );
+  });
+
+  it("supports the inline host and seeds a selected calendar day for new tasks", async () => {
+    render(
+      <AddTaskPanel
+        host="inline"
+        initialDueDate="2026-04-22"
+        onClose={() => {}}
+        onTaskAdded={() => {}}
+        onTaskUpdated={() => {}}
+        onTaskDeleted={() => {}}
+      />,
+    );
+    vi.runOnlyPendingTimers();
+
+    fireEvent.change(screen.getByPlaceholderText(/Buy groceries tomorrow/i), {
+      target: { value: "Plan sprint" },
+    });
+    fireEvent.click(screen.getByText("Add task"));
+    await vi.runAllTimersAsync();
+
+    expect(mockCreateTodoistTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "Plan sprint",
+        due_string: "2026-04-22 at 9:00 AM",
+      }),
+    );
+  });
+
+  it("uses inline cancel actions instead of the floating close chrome", () => {
+    render(
+      <AddTaskPanel
+        host="inline"
+        editingTask={{
+          id: "todo-1",
+          title: "Follow up",
+          description: "",
+          class_name: "Inbox",
+          priority: 4,
+          labels: [],
+          due_date: "2026-04-21",
+          due_time: "2:30 PM",
+        }}
+        onClose={() => {}}
+        onTaskAdded={() => {}}
+        onTaskUpdated={() => {}}
+        onTaskDeleted={() => {}}
+      />,
+    );
+    vi.runOnlyPendingTimers();
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.queryByLabelText("Close")).toBeNull();
+    expect(screen.queryByText(/Esc to cancel/i)).toBeNull();
   });
 });
